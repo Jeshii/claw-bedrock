@@ -31,9 +31,9 @@ pipenv install
 Add the following to your `~/.zshrc` (or `~/.bashrc`):
 
 ```bash
-export AWS_PROFILE="bedrock-openai20b"         # Your AWS profile name
-export AWS_REGION="ap-northeast-1"             # Your AWS region
-export BEDROCK_MANTLE_API_BASE="https://bedrock-mantle.ap-northeast-1.api.aws/v1"  # Update region if needed
+export AWS_PROFILE="<your-aws-profile-name>"
+export AWS_REGION="<your-aws-region>"
+export BEDROCK_MANTLE_API_BASE="https://bedrock-mantle.<your-aws-region>.api.aws/v1"
 ```
 
 Then reload your shell:
@@ -44,12 +44,7 @@ source ~/.zshrc
 
 ### 3. Configure your AWS profile
 
-Ensure `~/.aws/config` has a profile matching `AWS_PROFILE`. Example:
-
-```ini
-[profile bedrock-openai20b]
-login_session = arn:aws:iam::<account-id>:user/<username>
-```
+Ensure `~/.aws/config` has a profile matching the `AWS_PROFILE` value you set above. Your Bedrock Mantle account provider will supply the exact profile configuration.
 
 ### 4. (Optional) Attach the IAM policy
 
@@ -67,10 +62,10 @@ pipenv run litellm --config config.yaml --port 4000
 If your AWS session has expired, you will see:
 
 ```
-[TokenRefresher] AWS session expired. Launching login for profile 'bedrock-openai20b'...
+[TokenRefresher] AWS session expired. Launching login for profile '<your-profile>'...
 A URL will be printed — open it in any browser, then paste the authorization code back into this terminal.
 
-Using a browser, open: https://device.sso.ap-northeast-1.amazonaws.com/?user_code=XXXX-XXXX
+Using a browser, open: https://device.sso.<region>.amazonaws.com/?user_code=XXXX-XXXX
 Authorization code: _
 ```
 
