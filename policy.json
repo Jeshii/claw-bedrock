@@ -1,0 +1,45 @@
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "AllowAwsLoginWithConsoleCredentials",
+			"Effect": "Allow",
+			"Action": [
+				"signin:AuthorizeOAuth2Access",
+				"signin:CreateOAuth2Token"
+			],
+			"Resource": "arn:aws:signin:*:*:oauth2/public-client/*"
+		},
+		{
+			"Sid": "AllowShortTermBearerUse",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:CallWithBearerToken",
+				"bedrock-mantle:CallWithBearerToken"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringEquals": {
+					"bedrock-mantle:BearerTokenType": "SHORT_TERM"
+				}
+			}
+		},
+		{
+			"Sid": "AllowModelDiscovery",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock-mantle:ListModels",
+				"bedrock-mantle:GetModel"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowInference",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock-mantle:CreateInference"
+			],
+			"Resource": "*"
+		}
+	]
+}
