@@ -18,46 +18,52 @@ class BedrockTokenRefresher(CustomLogger):
         self._profile = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
         self._refresh()
 
-    def _ensure_sso_login(self):
-        """Trigger aws sso login --no-browser if the session appears expired."""
+    def _ensure_login(self):
+        """Trigger aws login --remote for SSH-safe authentication.
+
+        Prints a URL to open in any browser, then prompts for the
+        authorization code displayed after approving in the browser.
+        Works over SSH with no display forwarding required.
+        """
         print(
             f"[TokenRefresher] AWS session expired or missing. "
-            f"Launching SSO login for profile '{self._profile}'...\n"
-            f"Open the printed URL in any browser to authenticate."
+            f"Launching login for profile '{self._profile}'...\n"
+            f"A URL will be printed — open it in any browser, "
+            f"then paste the authorization code back into this terminal."
         )
         try:
             subprocess.run(
-                ["aws", "sso", "login", "--profile", self._profile, "--no-browser"],
+                ["aws", "login", "--profile", self._profile, "--region", self._region, "--remote"],
                 check=True,
             )
         except FileNotFoundError:
             print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
             raise
         except subprocess.CalledProcessError as e:
-            print(f"[TokenRefresher] ERROR: aws sso login failed (exit {e.returncode}).", file=sys.stderr)
+            print(f"[TokenRefresher] ERROR: aws login failed (exit {e.returncode}).", file=sys.stderr)
             raise
 
     def _get_valid_session(self) -> boto3.Session:
-        """Return a boto3 Session with valid credentials, triggering SSO login if needed."""
+        """Return a boto3 Session with valid credentials, triggering login if needed."""
         session = boto3.Session(profile_name=self._profile, region_name=self._region)
         credentials = session.get_credentials()
 
         if credentials is None:
-            self._ensure_sso_login()
+            self._ensure_login()
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
             credentials = session.get_credentials()
             if credentials is None:
                 raise RuntimeError(
-                    "Could not obtain AWS credentials even after SSO login. "
+                    "Could not obtain AWS credentials even after login. "
                     "Check your AWS config and profile name."
                 )
             return session
 
-        # Attempt to resolve credentials to catch expired SSO tokens early
+        # Attempt to resolve credentials to catch expired tokens early
         try:
             credentials.get_frozen_credentials()
         except Exception:
-            self._ensure_sso_login()
+            self._ensure_login()
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
 
         return session

@@ -1,11 +1,11 @@
 # claw-bedrock
 
-A [LiteLLM](https://docs.litellm.ai/docs/) proxy server for [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/), exposing models via an OpenAI-compatible API. Handles AWS SSO authentication and automatic token refresh automatically.
+A [LiteLLM](https://docs.litellm.ai/docs/) proxy server for [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/), exposing models via an OpenAI-compatible API. Handles AWS authentication and automatic token refresh automatically.
 
 ## How It Works
 
 1. On startup, LiteLLM loads `config.yaml` and initializes the `BedrockTokenRefresher` callback.
-2. The refresher checks your AWS SSO session. If expired, it triggers `aws sso login --no-browser` and prints a URL for you to authenticate in any browser (including over SSH).
+2. The refresher checks your AWS session. If expired, it triggers `aws login --remote`, which prints a URL and waits for you to paste back the authorization code shown in the browser.
 3. Once authenticated, a short-lived Bedrock bearer token is fetched and injected as `BEDROCK_MANTLE_API_KEY`.
 4. Every 55 minutes the token is silently refreshed in the background before any request.
 
@@ -14,7 +14,7 @@ A [LiteLLM](https://docs.litellm.ai/docs/) proxy server for [AWS Bedrock Mantle]
 - Python 3.12+
 - [pipenv](https://pipenv.pypa.io/)
 - [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (`aws` on your PATH)
-- An AWS SSO profile configured in `~/.aws/config` with Bedrock Mantle access
+- An AWS profile configured in `~/.aws/config` with Bedrock Mantle access
 
 ## Setup
 
@@ -31,7 +31,7 @@ pipenv install
 Add the following to your `~/.zshrc` (or `~/.bashrc`):
 
 ```bash
-export AWS_PROFILE="bedrock-openai20b"         # Your AWS SSO profile name
+export AWS_PROFILE="bedrock-openai20b"         # Your AWS profile name
 export AWS_REGION="ap-northeast-1"             # Your AWS region
 export BEDROCK_MANTLE_API_BASE="https://bedrock-mantle.ap-northeast-1.api.aws/v1"  # Update region if needed
 ```
@@ -42,17 +42,13 @@ Then reload your shell:
 source ~/.zshrc
 ```
 
-### 3. Configure your AWS SSO profile
+### 3. Configure your AWS profile
 
-Ensure `~/.aws/config` has an SSO profile matching `AWS_PROFILE`. Example:
+Ensure `~/.aws/config` has a profile matching `AWS_PROFILE`. Example:
 
 ```ini
 [profile bedrock-openai20b]
-sso_start_url = https://your-sso-portal.awsapps.com/start
-sso_region = ap-northeast-1
-sso_account_id = 123456789012
-sso_role_name = BedrockAccess
-region = ap-northeast-1
+login_session = arn:aws:iam::<account-id>:user/<username>
 ```
 
 ### 4. (Optional) Attach the IAM policy
@@ -68,16 +64,21 @@ A sample IAM policy is provided in [`policy.json`](./policy.json) granting the m
 pipenv run litellm --config config.yaml --port 4000
 ```
 
-If your AWS SSO session has expired, you will see:
+If your AWS session has expired, you will see:
 
 ```
-[TokenRefresher] AWS session expired. Launching SSO login for profile 'bedrock-openai20b'...
-Open the printed URL in any browser to authenticate.
+[TokenRefresher] AWS session expired. Launching login for profile 'bedrock-openai20b'...
+A URL will be printed — open it in any browser, then paste the authorization code back into this terminal.
 
 Using a browser, open: https://device.sso.ap-northeast-1.amazonaws.com/?user_code=XXXX-XXXX
+Authorization code: _
 ```
 
-Open the URL in any browser (works over SSH), approve the login, and the server will continue starting up automatically.
+Open the URL in any browser, approve the login, copy the code shown, paste it back into the terminal, and the server continues automatically.
+
+## SSH Usage
+
+This setup works fully over SSH. `aws login --remote` never opens a browser on the remote machine — it prints a URL you open locally, then prompts for a code you paste back. No display forwarding (`-X`/`-Y`) required.
 
 ## Available Models
 
@@ -105,16 +106,11 @@ curl http://localhost:4000/v1/chat/completions \
   }'
 ```
 
-## SSH Usage
-
-This setup works over SSH. The `--no-browser` flag means `aws sso login` prints a URL instead of opening a browser. Copy the URL from your terminal and open it locally.
-
 ## Files
 
 | File | Purpose |
 |---|---|
 | `config.yaml` | LiteLLM proxy config — model list and callback registration |
-| `token_refresher.py` | LiteLLM callback — handles SSO login and token auto-refresh |
-| `bedrock_login.py` | Standalone script to verify AWS auth and manually refresh token |
+| `token_refresher.py` | LiteLLM callback — handles login and token auto-refresh |
 | `policy.json` | Sample IAM policy for Bedrock Mantle access |
 | `Pipfile` | Python dependencies |
