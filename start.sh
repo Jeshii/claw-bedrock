@@ -24,7 +24,7 @@ start_server() {
     export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
     
     # Start the server and capture exit code
-    python3 -m litellm.proxy --config "${CONFIG_FILE}"
+    litellm --config "${CONFIG_FILE}"
     EXIT_CODE=$?
     
     # Exit code 42 means we need to re-authenticate
