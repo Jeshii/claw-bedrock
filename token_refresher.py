@@ -9,10 +9,11 @@ from litellm.integrations.custom_logger import CustomLogger
 
 
 class BedrockTokenRefresher(CustomLogger):
-    TOKEN_TTL = 3300  # 55 min
+    TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
 
     def __init__(self):
         self._fetched_at = 0
+        self._force_refresh = False
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
         self._profile = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
@@ -92,9 +93,10 @@ class BedrockTokenRefresher(CustomLogger):
         return "expired" in error_str or "invalid_api_key" in error_str or "security token" in error_str
 
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
-        if time.time() - self._fetched_at > self.TOKEN_TTL:
-            print("[TokenRefresher] TTL exceeded — refreshing token before call...")
+        if self._force_refresh or time.time() - self._fetched_at > self.TOKEN_TTL:
+            print("[TokenRefresher] Refreshing token before call...")
             self._refresh()
+            self._force_refresh = False
         return data
 
     async def async_post_call_failure_hook(self, request_data, original_exception, user_api_key_dict):
@@ -103,7 +105,9 @@ class BedrockTokenRefresher(CustomLogger):
                 f"[TokenRefresher] Detected expired/invalid token in error response — forcing refresh...\n"
                 f"  Error: {original_exception}"
             )
+            self._force_refresh = True
             self._refresh()
+            raise original_exception
 
 
 token_refresher = BedrockTokenRefresher()
