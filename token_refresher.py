@@ -65,6 +65,17 @@ class BedrockTokenRefresher(CustomLogger):
         except Exception:
             self._ensure_login()
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
+            # Verify credentials are now valid after login
+            credentials = session.get_credentials()
+            if credentials is None:
+                raise RuntimeError(
+                    "Could not obtain AWS credentials even after login. "
+                    "Check your AWS config and profile name."
+                )
+            try:
+                credentials.get_frozen_credentials()
+            except Exception as e:
+                raise RuntimeError(f"Credentials still invalid after login: {e}") from e
 
         return session
 
@@ -76,10 +87,23 @@ class BedrockTokenRefresher(CustomLogger):
         self._fetched_at = time.time()
         print(f"[TokenRefresher] Token refreshed at {time.strftime('%H:%M:%S')}")
 
+    def _is_expired_error(self, exception) -> bool:
+        error_str = str(exception).lower()
+        return "expired" in error_str or "invalid_api_key" in error_str or "security token" in error_str
+
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         if time.time() - self._fetched_at > self.TOKEN_TTL:
+            print("[TokenRefresher] TTL exceeded — refreshing token before call...")
             self._refresh()
         return data
+
+    async def async_post_call_failure_hook(self, request_data, original_exception, user_api_key_dict):
+        if self._is_expired_error(original_exception):
+            print(
+                f"[TokenRefresher] Detected expired/invalid token in error response — forcing refresh...\n"
+                f"  Error: {original_exception}"
+            )
+            self._refresh()
 
 
 token_refresher = BedrockTokenRefresher()
