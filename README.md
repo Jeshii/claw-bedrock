@@ -93,7 +93,7 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 
 | Model name | Underlying model | Input ($/1M tokens) | Output ($/1M tokens) | Tested |
 |---|---|---|---|---|
-| `nemotron-nano-12b` | `nvidia.nemotron-nano-12b-v2` | $0.06 | $0.23 | |
+| `nemotron-nano-12b` | `nvidia.nemotron-nano-12b-v2` | $0.06 | $0.23 | ❌ |
 | `nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 | |
 | `ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 | |
 | `ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 | |
