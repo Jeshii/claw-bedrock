@@ -9,7 +9,7 @@ cd "$(dirname "$0")"
 
 BASE_CONFIG="config.yaml"
 LOCAL_CONFIG="config.local.yaml"
-MERGED_CONFIG="/tmp/claw-bedrock-merged.yaml"
+MERGED_CONFIG="config.merged.yaml"  # written in repo dir so LiteLLM resolves callbacks correctly
 
 if [ -f "$LOCAL_CONFIG" ]; then
   echo "[start.sh] Found $LOCAL_CONFIG — merging with $BASE_CONFIG..."
