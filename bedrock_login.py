@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 
-PROFILE = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
+PROFILE = os.environ.get("AWS_PROFILE")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 ZSHRC = Path(os.environ.get("ZSHRC_PATH_OVERRIDE", str(Path.home() / ".zshrc")))
 
