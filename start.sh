@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Always run from the repo root so token_refresher.py is on the Python path
+cd "$(dirname "$0")"
+
 BASE_CONFIG="config.yaml"
 LOCAL_CONFIG="config.local.yaml"
 MERGED_CONFIG="/tmp/claw-bedrock-merged.yaml"
