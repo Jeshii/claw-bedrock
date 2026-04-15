@@ -21,12 +21,6 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  - model_name: qwen-coder
-    litellm_params:
-      model: bedrock_mantle/qwen.qwen3-coder-30b-a3b-instruct
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 32768
-
   - model_name: nemotron-nano-12b
     litellm_params:
       model: bedrock_mantle/nvidia.nemotron-nano-12b-v2
@@ -72,12 +66,6 @@ model_list:
   - model_name: qwen3-next-80b
     litellm_params:
       model: bedrock_mantle/qwen.qwen3-next-80b-a3b-instruct
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 32768
-
-  - model_name: qwen3-coder-next
-    litellm_params:
-      model: bedrock_mantle/qwen.qwen3-coder-next
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
