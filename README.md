@@ -102,7 +102,7 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 | `qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | † | † | ✅ |
 | `mistral-large-3` | `mistral.mistral-large-3-675b-instruct` | $0.50 | $1.50 | ⚠️ |
 | `deepseek-v3.1` | `deepseek.v3.1` | $0.60 ‡ | $1.73 ‡ | ⚠️ |
-| `deepseek-v3` | `deepseek.v3.2` | $0.62 | $1.85 | ⚠️ |
+| `deepseek-v3.2` | `deepseek.v3.2` | $0.62 | $1.85 | ⚠️ |
 | `kimi-k2.5` | `moonshotai.kimi-k2.5` | $0.60 | $3.00 | ✅ |
 
 † not yet listed on AWS Bedrock pricing page; assumed same tier as similar model.  

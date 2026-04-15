@@ -2,7 +2,7 @@ litellm_settings:
   callbacks: ["token_refresher.BedrockTokenRefresher"]
 
 model_list:
-  - model_name: deepseek-v3
+  - model_name: deepseek-v3.2
     litellm_params:
       model: bedrock_mantle/deepseek.v3.2
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
