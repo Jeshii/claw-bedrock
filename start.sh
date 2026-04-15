@@ -1,49 +1,63 @@
 #!/usr/bin/env bash
-# Starts LiteLLM, merging config.local.yaml into config.yaml if it exists.
-# config.local.yaml is gitignored — use it for local/network-specific models (e.g. Ollama).
+# Starts the LiteLLM proxy server with AWS token refresh capability
 
+# Exit on any error or undefined variable
 set -euo pipefail
 
-# Always run from the repo root so token_refresher.py is on the Python path
-cd "$(dirname "$0")"
+CONFIG_FILE="config.yaml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-BASE_CONFIG="config.yaml"
-LOCAL_CONFIG="config.local.yaml"
-MERGED_CONFIG="config.merged.yaml"  # written in repo dir so LiteLLM resolves callbacks correctly
-
-if [ -f "$LOCAL_CONFIG" ]; then
-  echo "[start.sh] Found $LOCAL_CONFIG — merging with $BASE_CONFIG..."
-  pipenv run python3 - <<EOF
-import yaml
-
-with open("$BASE_CONFIG") as f:
-    base = yaml.safe_load(f)
-
-with open("$LOCAL_CONFIG") as f:
-    local = yaml.safe_load(f)
-
-base.setdefault("model_list", []).extend(local.get("model_list", []))
-
-with open("$MERGED_CONFIG", "w") as f:
-    yaml.dump(base, f, default_flow_style=False, allow_unicode=True)
-EOF
-  echo "[start.sh] Merged config written to $MERGED_CONFIG"
-  CONFIG_TO_USE="$MERGED_CONFIG"
-else
-  echo "[start.sh] No $LOCAL_CONFIG found — using $BASE_CONFIG only"
-  CONFIG_TO_USE="$BASE_CONFIG"
+# Source environment if available
+if [[ -f "${SCRIPT_DIR}/.env" ]]; then
+    source "${SCRIPT_DIR}/.env"
 fi
 
-pipenv run litellm --config "$CONFIG_TO_USE" --port 4000
-EXIT_CODE=$?
+# Function to start the server
+start_server() {
+    echo "🚀 Starting LiteLLM proxy server..."
+    echo "   Configuration: ${CONFIG_FILE}"
+    echo "   AWS Profile: ${AWS_PROFILE:-default}"
+    echo "   Region: ${AWS_DEFAULT_REGION:-us-east-1}"
+    
+    # Export for Python access
+    export AWS_PROFILE="${AWS_PROFILE:-default}"
+    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+    
+    # Start the server and capture exit code
+    python3 -m litellm.proxy --config "${CONFIG_FILE}"
+    EXIT_CODE=$?
+    
+    # Exit code 42 means we need to re-authenticate
+    if [[ ${EXIT_CODE} -eq 42 ]]; then
+        echo -e "\n🔔 Authentication required"
+        echo "   Your AWS session has expired. Please authenticate:"
+        echo "   1. Open your browser"
+        echo "   2. Run: ./start.sh (this will prompt for authentication)"
+        echo "   3. Complete the AWS SSO login flow"
+        
+        # Wait a moment before exit to ensure user sees message
+        sleep 2
+        exit ${EXIT_CODE}
+    elif [[ ${EXIT_CODE} -ne 0 ]]; then
+        echo -e "\n❌ Server exited with error code: ${EXIT_CODE}"
+        exit ${EXIT_CODE}
+    fi
+}
 
-if [ $EXIT_CODE -eq 42 ]; then
-  echo "" >&2
-  echo "================================================================" >&2
-  echo "  LiteLLM stopped: AWS login required." >&2
-  echo "  Re-run this script in an interactive terminal to log in:" >&2
-  echo "    ./start.sh" >&2
-  echo "================================================================" >&2
-fi
+# Auto-restart on auth failure with exponential backoff
+MAX_RETRIES=3
+RETRY_COUNT=0
 
-exit $EXIT_CODE
+while [[ ${RETRY_COUNT} -le ${MAX_RETRIES} ]]; do
+    start_server
+    # If we get here, server exited with code 42
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    
+    if [[ ${RETRY_COUNT} -le ${MAX_RETRIES} ]]; then
+        echo -e "\n🔄 Attempt ${RETRY_COUNT}/${MAX_RETRIES}: Waiting for re-authentication..."
+        sleep 10
+    fi
+done
+
+echo -e "\n❌ Maximum retry attempts reached. Please run './start.sh' manually to re-authenticate."
+exit 42

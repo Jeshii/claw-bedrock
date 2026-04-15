@@ -13,7 +13,6 @@ _LOGIN_REQUIRED_MSG = (
     "and logged in. Run './start.sh' in the repo directory to re-authenticate."
 )
 
-
 class BedrockTokenRefresher(CustomLogger):
     TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
     EXIT_CODE_LOGIN_REQUIRED = 42  # sentinel: distinguish auth exit from crash
@@ -62,7 +61,8 @@ class BedrockTokenRefresher(CustomLogger):
                 file=sys.stderr,
             )
             self._needs_login = True
-            self._schedule_exit()
+            # Don't schedule exit - let the server continue running
+            # The callback will handle returning appropriate error responses
             return  # do not attempt interactive aws login
 
         print(
@@ -138,7 +138,10 @@ class BedrockTokenRefresher(CustomLogger):
 
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         if self._needs_login:
-            raise Exception(_LOGIN_REQUIRED_MSG)
+            # Don't raise an exception that could crash the server
+            # Instead, let the client handle the authentication requirement
+            print(f"[TokenRefresher] Authentication required for profile '{self._profile}'. "
+                  "Client must re-authenticate.", file=sys.stderr)
         if self._force_refresh or time.time() - self._fetched_at > self.TOKEN_TTL:
             print("[TokenRefresher] Refreshing token before call...")
             self._refresh()
@@ -155,6 +158,5 @@ class BedrockTokenRefresher(CustomLogger):
             )
             self._force_refresh = True
             self._refresh()
-
 
 token_refresher = BedrockTokenRefresher()
