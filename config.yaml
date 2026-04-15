@@ -2,30 +2,11 @@ litellm_settings:
   callbacks: ["token_refresher.BedrockTokenRefresher"]
 
 model_list:
-  # Existing models
-  - model_name: gpt-20b
-    litellm_params:
-      model: bedrock_mantle/openai.gpt-oss-20b
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 16384
-
-  - model_name: gpt-120b
-    litellm_params:
-      model: bedrock_mantle/openai.gpt-oss-120b
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 16384
-
   - model_name: deepseek-v3
     litellm_params:
       model: bedrock_mantle/deepseek.v3.2
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
-
-  - model_name: nemotron-nano-12b
-    litellm_params:
-      model: bedrock_mantle/nvidia.nemotron-nano-12b-v2
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 8192
 
   - model_name: nemotron-nano-30b
     litellm_params:
@@ -48,12 +29,6 @@ model_list:
   - model_name: ministral-14b
     litellm_params:
       model: bedrock_mantle/mistral.ministral-3-14b-instruct
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 8192
-
-  - model_name: qwen3-32b
-    litellm_params:
-      model: bedrock_mantle/qwen.qwen3-32b
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 8192
 
