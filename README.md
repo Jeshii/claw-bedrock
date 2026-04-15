@@ -31,9 +31,19 @@ pipenv install
 Add the following to your `~/.zshrc` (or `~/.bashrc`):
 
 ```bash
+# Prevent LiteLLM from routing to Anthropic instead of Bedrock
+unset ANTHROPIC_API_KEY
+unset ANTHROPIC_BASE_URL
+
+# AWS — used by token_refresher.py to authenticate and fetch a bearer token
 export AWS_PROFILE="<your-aws-profile-name>"
-export AWS_REGION="<your-aws-region>"
+export AWS_REGION="<your-aws-region>"          # e.g. ap-northeast-1
 export BEDROCK_MANTLE_API_BASE="https://bedrock-mantle.<your-aws-region>.api.aws/v1"
+# Note: BEDROCK_MANTLE_API_KEY is set automatically at runtime — do not set it here
+
+# Client-side — point any OpenAI-compatible tool at the local proxy
+export OPENAI_API_KEY="dummy"                  # LiteLLM requires a non-empty value
+export OPENAI_BASE_URL="http://127.0.0.1:4000/v1"
 ```
 
 Then reload your shell:
@@ -41,6 +51,8 @@ Then reload your shell:
 ```bash
 source ~/.zshrc
 ```
+
+> **`OPENAI_API_KEY` / `OPENAI_BASE_URL`** — Setting these globally means any OpenAI-compatible client (Cursor, Continue, shell scripts using the `openai` SDK) will automatically use the local proxy without additional configuration.
 
 ### 3. Configure your AWS profile
 
@@ -128,8 +140,8 @@ The server exposes an OpenAI-compatible API on port 4000. Point any OpenAI-compa
 curl http://localhost:4000/models
 
 # Example chat completion
-curl http://localhost:4000/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
+curl http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-120b",
     "messages": [{"role": "user", "content": "Hello!"}]
