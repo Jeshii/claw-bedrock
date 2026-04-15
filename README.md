@@ -93,8 +93,8 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 
 | Model name | Underlying model | Input ($/1M tokens) | Output ($/1M tokens) |
 |---|---|---|---|
+| `nemotron-nano-9b` | `nvidia.nemotron-nano-9b-v2` | † | † |
 | `nemotron-nano-12b` | `nvidia.nemotron-nano-12b-v2` | $0.06 | $0.23 |
-| `nemotron-nano-9b` | `nvidia.nemotron-nano-9b-v2` | $0.06 † | $0.23 † |
 | `nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 |
 | `ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 |
 | `ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 |
@@ -106,13 +106,13 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 | `qwen3-235b` | `qwen.qwen3-235b-a22b-2507` | $0.23 ‡ | $0.91 ‡ |
 | `qwen3-next-80b` | `qwen.qwen3-next-80b-a3b-instruct` | $0.15 | $1.20 |
 | `qwen3-coder-next` | `qwen.qwen3-coder-next` | $0.50 | $1.20 |
-| `qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | $0.50 † | $1.20 † |
+| `qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | † | † |
 | `mistral-large-3` | `mistral.mistral-large-3-675b-instruct` | $0.50 | $1.50 |
 | `deepseek-v3.1` | `deepseek.v3.1` | $0.60 ‡ | $1.73 ‡ |
 | `deepseek-v3` | `deepseek.v3.2` | $0.62 | $1.85 |
 | `kimi-k2.5` | `moonshotai.kimi-k2.5` | $0.60 | $3.00 |
 
-† Estimated pricing — not yet listed on AWS Bedrock pricing page; assumed same tier as similar model.  
+† not yet listed on AWS Bedrock pricing page; assumed same tier as similar model.  
 ‡ US on-demand pricing not yet listed for this region tier; price shown is AP Sydney standard.
 
 ## Using the API
