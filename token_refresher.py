@@ -99,15 +99,16 @@ class BedrockTokenRefresher(CustomLogger):
             self._force_refresh = False
         return data
 
-    async def async_post_call_failure_hook(self, request_data, original_exception, user_api_key_dict):
-        if self._is_expired_error(original_exception):
+    async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
+        """Fires on all LiteLLM failures, including auth errors mapped to APIConnectionError."""
+        exception = kwargs.get("exception")
+        if exception and self._is_expired_error(exception):
             print(
-                f"[TokenRefresher] Detected expired/invalid token in error response — forcing refresh...\n"
-                f"  Error: {original_exception}"
+                f"[TokenRefresher] Detected expired/invalid token via failure log — forcing refresh...\n"
+                f"  Error: {exception}"
             )
             self._force_refresh = True
             self._refresh()
-            raise original_exception
 
 
 token_refresher = BedrockTokenRefresher()
