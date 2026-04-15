@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 import sys
@@ -7,25 +8,63 @@ import boto3
 from aws_bedrock_token_generator import BedrockTokenGenerator
 from litellm.integrations.custom_logger import CustomLogger
 
+_LOGIN_REQUIRED_MSG = (
+    "AWS authentication required — the LiteLLM server needs to be restarted "
+    "and logged in. Run './start.sh' in the repo directory to re-authenticate."
+)
+
 
 class BedrockTokenRefresher(CustomLogger):
     TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
+    EXIT_CODE_LOGIN_REQUIRED = 42  # sentinel: distinguish auth exit from crash
+    EXIT_GRACE_SECONDS = 5  # give in-flight requests time to return the error
 
     def __init__(self):
         self._fetched_at = 0
         self._force_refresh = False
+        self._needs_login = False  # set True when login required in non-interactive mode
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
         self._profile = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
         self._refresh()
 
+    def _is_interactive(self) -> bool:
+        return sys.stdin.isatty()
+
+    def _schedule_exit(self):
+        """Exit after a grace period so in-flight requests can return their error first."""
+        def _do_exit():
+            time.sleep(self.EXIT_GRACE_SECONDS)
+            print(
+                f"[TokenRefresher] Exiting with code {self.EXIT_CODE_LOGIN_REQUIRED} "
+                f"— AWS login required. Restart start.sh to re-authenticate.",
+                file=sys.stderr,
+            )
+            os._exit(self.EXIT_CODE_LOGIN_REQUIRED)
+
+        import threading
+        t = threading.Thread(target=_do_exit, daemon=True)
+        t.start()
+
     def _ensure_login(self):
         """Trigger aws login --remote for SSH-safe authentication.
 
-        Prints a URL to open in any browser, then prompts for the
-        authorization code displayed after approving in the browser.
-        Works over SSH with no display forwarding required.
+        In interactive mode: prints a URL, prompts for authorization code.
+        In non-interactive mode: sets _needs_login flag and schedules a clean
+        exit so process managers and tools both get a clear signal.
         """
+        if not self._is_interactive():
+            print(
+                f"[TokenRefresher] AWS session expired or missing for profile '{self._profile}'. "
+                f"Non-interactive mode — cannot prompt for login.\n"
+                f"Flagging auth failure for callers, then exiting in {self.EXIT_GRACE_SECONDS}s.\n"
+                f"Run './start.sh' manually to re-authenticate.",
+                file=sys.stderr,
+            )
+            self._needs_login = True
+            self._schedule_exit()
+            return  # do not attempt interactive aws login
+
         print(
             f"[TokenRefresher] AWS session expired or missing. "
             f"Launching login for profile '{self._profile}'...\n"
@@ -51,6 +90,8 @@ class BedrockTokenRefresher(CustomLogger):
 
         if credentials is None:
             self._ensure_login()
+            if self._needs_login:
+                return session  # will be unusable; pre_call_hook will block callers
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
             credentials = session.get_credentials()
             if credentials is None:
@@ -65,8 +106,9 @@ class BedrockTokenRefresher(CustomLogger):
             credentials.get_frozen_credentials()
         except Exception:
             self._ensure_login()
+            if self._needs_login:
+                return session  # unusable; pre_call_hook will block callers
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
-            # Verify credentials are now valid after login
             credentials = session.get_credentials()
             if credentials is None:
                 raise RuntimeError(
@@ -82,6 +124,8 @@ class BedrockTokenRefresher(CustomLogger):
 
     def _refresh(self):
         session = self._get_valid_session()
+        if self._needs_login:
+            return  # don't attempt to generate a token with invalid credentials
         credentials = session.get_credentials()
         token = self._generator.get_token(credentials, self._region)
         os.environ["BEDROCK_MANTLE_API_KEY"] = token
@@ -93,6 +137,8 @@ class BedrockTokenRefresher(CustomLogger):
         return "expired" in error_str or "invalid_api_key" in error_str or "security token" in error_str
 
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
+        if self._needs_login:
+            raise Exception(_LOGIN_REQUIRED_MSG)
         if self._force_refresh or time.time() - self._fetched_at > self.TOKEN_TTL:
             print("[TokenRefresher] Refreshing token before call...")
             self._refresh()
