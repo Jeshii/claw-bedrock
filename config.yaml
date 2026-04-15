@@ -2,6 +2,7 @@ litellm_settings:
   callbacks: ["token_refresher.BedrockTokenRefresher"]
 
 model_list:
+  # Existing models
   - model_name: gpt-20b
     litellm_params:
       model: bedrock_mantle/openai.gpt-oss-20b
@@ -20,4 +21,150 @@ model_list:
   - model_name: qwen-coder
     litellm_params:
       model: bedrock_mantle/qwen.qwen3-coder-30b-a3b-instruct
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  # New models
+  - model_name: voxtral-mini
+    litellm_params:
+      model: bedrock_mantle/mistral.voxtral-mini-3b-2507
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: gemma-3-4b
+    litellm_params:
+      model: bedrock_mantle/google.gemma-3-4b-it
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: ministral-3b
+    litellm_params:
+      model: bedrock_mantle/mistral.ministral-3-3b-instruct
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: gpt-safeguard-20b
+    litellm_params:
+      model: bedrock_mantle/openai.gpt-oss-safeguard-20b
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: nemotron-nano-12b
+    litellm_params:
+      model: bedrock_mantle/nvidia.nemotron-nano-12b-v2
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: nemotron-nano-9b
+    litellm_params:
+      model: bedrock_mantle/nvidia.nemotron-nano-9b-v2
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: nemotron-nano-30b
+    litellm_params:
+      model: bedrock_mantle/nvidia.nemotron-nano-3-30b
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: ministral-8b
+    litellm_params:
+      model: bedrock_mantle/mistral.ministral-3-8b-instruct
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: gemma-3-12b
+    litellm_params:
+      model: bedrock_mantle/google.gemma-3-12b-it
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: voxtral-small
+    litellm_params:
+      model: bedrock_mantle/mistral.voxtral-small-24b-2507
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: ministral-14b
+    litellm_params:
+      model: bedrock_mantle/mistral.ministral-3-14b-instruct
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: glm-4.7-flash
+    litellm_params:
+      model: bedrock_mantle/zai.glm-4.7-flash
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: gemma-3-27b
+    litellm_params:
+      model: bedrock_mantle/google.gemma-3-27b-it
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: gpt-safeguard-120b
+    litellm_params:
+      model: bedrock_mantle/openai.gpt-oss-safeguard-120b
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: qwen3-32b
+    litellm_params:
+      model: bedrock_mantle/qwen.qwen3-32b
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: qwen3-235b
+    litellm_params:
+      model: bedrock_mantle/qwen.qwen3-235b-a22b-2507
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: qwen3-next-80b
+    litellm_params:
+      model: bedrock_mantle/qwen.qwen3-next-80b-a3b-instruct
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: minimax-m2
+    litellm_params:
+      model: bedrock_mantle/minimax.minimax-m2
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: minimax-m2.1
+    litellm_params:
+      model: bedrock_mantle/minimax.minimax-m2.1
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: qwen3-coder-next
+    litellm_params:
+      model: bedrock_mantle/qwen.qwen3-coder-next
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: qwen3-coder-480b
+    litellm_params:
+      model: bedrock_mantle/qwen.qwen3-coder-480b-a35b-instruct
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: magistral-small
+    litellm_params:
+      model: bedrock_mantle/mistral.magistral-small-2509
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: mistral-large-3
+    litellm_params:
+      model: bedrock_mantle/mistral.mistral-large-3-675b-instruct
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: deepseek-v3.1
+    litellm_params:
+      model: bedrock_mantle/deepseek.v3.1
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: glm-4.7
+    litellm_params:
+      model: bedrock_mantle/zai.glm-4.7
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: kimi-k2-thinking
+    litellm_params:
+      model: bedrock_mantle/moonshotai.kimi-k2-thinking
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: qwen3-vl-235b
+    litellm_params:
+      model: bedrock_mantle/qwen.qwen3-vl-235b-a22b-instruct
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: kimi-k2.5
+    litellm_params:
+      model: bedrock_mantle/moonshotai.kimi-k2.5
+      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
+
+  - model_name: glm-4.6
+    litellm_params:
+      model: bedrock_mantle/zai.glm-4.6
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"

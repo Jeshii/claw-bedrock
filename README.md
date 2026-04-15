@@ -77,12 +77,47 @@ This setup works fully over SSH. `aws login --remote` never opens a browser on t
 
 ## Available Models
 
-| Model name | Underlying model |
-|---|---|
-| `gpt-20b` | `openai.gpt-oss-20b` |
-| `gpt-120b` | `openai.gpt-oss-120b` |
-| `deepseek-v3` | `deepseek.v3.2` |
-| `qwen-coder` | `qwen.qwen3-coder-30b-a3b-instruct` |
+Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/pricing/), US East/West regions. Sorted cheapest to most expensive by combined input+output cost.
+
+| Model name | Underlying model | Input ($/1M tokens) | Output ($/1M tokens) |
+|---|---|---|---|
+| `voxtral-mini` | `mistral.voxtral-mini-3b-2507` | $0.04 | $0.04 |
+| `gemma-3-4b` | `google.gemma-3-4b-it` | $0.04 | $0.08 |
+| `nemotron-nano-12b` | `nvidia.nemotron-nano-12b-v2` | $0.06 | $0.23 |
+| `nemotron-nano-9b` | `nvidia.nemotron-nano-9b-v2` | $0.06 † | $0.23 † |
+| `nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 |
+| `gpt-safeguard-20b` | `openai.gpt-oss-safeguard-20b` | $0.07 | $0.20 |
+| `glm-4.7-flash` | `zai.glm-4.7-flash` | $0.07 | $0.40 |
+| `gpt-20b` | `openai.gpt-oss-20b` | $0.07 ‡ | $0.31 ‡ |
+| `gemma-3-12b` | `google.gemma-3-12b-it` | $0.09 | $0.29 |
+| `ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 |
+| `voxtral-small` | `mistral.voxtral-small-24b-2507` | $0.10 | $0.30 |
+| `ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 |
+| `gpt-safeguard-120b` | `openai.gpt-oss-safeguard-120b` | $0.15 | $0.60 |
+| `qwen-coder` | `qwen.qwen3-coder-30b-a3b-instruct` | $0.15 ‡ | $0.62 ‡ |
+| `qwen3-32b` | `qwen.qwen3-32b` | $0.15 ‡ | $0.62 ‡ |
+| `gpt-120b` | `openai.gpt-oss-120b` | $0.15 ‡ | $0.62 ‡ |
+| `ministral-14b` | `mistral.ministral-3-14b-instruct` | $0.20 | $0.20 |
+| `gemma-3-27b` | `google.gemma-3-27b-it` | $0.23 | $0.38 |
+| `qwen3-235b` | `qwen.qwen3-235b-a22b-2507` | $0.23 ‡ | $0.91 ‡ |
+| `qwen3-next-80b` | `qwen.qwen3-next-80b-a3b-instruct` | $0.15 | $1.20 |
+| `minimax-m2` | `minimax.minimax-m2` | $0.30 | $1.20 |
+| `minimax-m2.1` | `minimax.minimax-m2.1` | $0.30 | $1.20 |
+| `qwen3-coder-next` | `qwen.qwen3-coder-next` | $0.50 | $1.20 |
+| `qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | $0.50 † | $1.20 † |
+| `magistral-small` | `mistral.magistral-small-2509` | $0.50 | $1.50 |
+| `mistral-large-3` | `mistral.mistral-large-3-675b-instruct` | $0.50 | $1.50 |
+| `deepseek-v3.1` | `deepseek.v3.1` | $0.60 ‡ | $1.73 ‡ |
+| `deepseek-v3` | `deepseek.v3.2` | $0.62 | $1.85 |
+| `glm-4.7` | `zai.glm-4.7` | $0.60 | $2.20 |
+| `glm-4.6` | `zai.glm-4.6` | TBD * | TBD * |
+| `kimi-k2-thinking` | `moonshotai.kimi-k2-thinking` | $0.60 | $2.50 |
+| `qwen3-vl-235b` | `qwen.qwen3-vl-235b-a22b-instruct` | $0.53 | $2.66 |
+| `kimi-k2.5` | `moonshotai.kimi-k2.5` | $0.60 | $3.00 |
+
+† Estimated pricing — not yet listed on AWS Bedrock pricing page; assumed same tier as similar model.  
+‡ US on-demand pricing not yet listed for this region tier; price shown is AP Sydney standard.  
+\* Pricing not yet available.
 
 ## Using the API
 
@@ -93,8 +128,8 @@ The server exposes an OpenAI-compatible API on port 4000. Point any OpenAI-compa
 curl http://localhost:4000/models
 
 # Example chat completion
-curl http://localhost:4000/v1/chat/completions \
-  -H "Content-Type: application/json" \
+curl http://localhost:4000/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
   -d '{
     "model": "gpt-120b",
     "messages": [{"role": "user", "content": "Hello!"}]
