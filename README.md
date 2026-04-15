@@ -97,7 +97,7 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 | `nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 | ⚠️ |
 | `ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 | ⚠️ |
 | `ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 | ⚠️ |
-| `qwen-coder` | `qwen.qwen3-coder-30b-a3b-instruct` | $0.15 ‡ | $0.62 ‡ | |
+| `qwen-coder` | `qwen.qwen3-coder-30b-a3b-instruct` | $0.15 ‡ | $0.62 ‡ | ❌ |
 | `qwen3-32b` | `qwen.qwen3-32b` | $0.15 ‡ | $0.62 ‡ | |
 | `gpt-20b` | `openai.gpt-oss-20b` | $0.07 ‡ | $0.31 ‡ | |
 | `gpt-120b` | `openai.gpt-oss-120b` | $0.15 ‡ | $0.62 ‡ | |
