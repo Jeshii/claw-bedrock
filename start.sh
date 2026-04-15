@@ -34,4 +34,16 @@ else
   CONFIG_TO_USE="$BASE_CONFIG"
 fi
 
-exec pipenv run litellm --config "$CONFIG_TO_USE" --port 4000
+pipenv run litellm --config "$CONFIG_TO_USE" --port 4000
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 42 ]; then
+  echo "" >&2
+  echo "================================================================" >&2
+  echo "  LiteLLM stopped: AWS login required." >&2
+  echo "  Re-run this script in an interactive terminal to log in:" >&2
+  echo "    ./start.sh" >&2
+  echo "================================================================" >&2
+fi
+
+exit $EXIT_CODE
