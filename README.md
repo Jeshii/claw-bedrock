@@ -7,7 +7,7 @@ A [LiteLLM](https://docs.litellm.ai/docs/) proxy server for [AWS Bedrock Mantle]
 1. On startup, LiteLLM loads `config.yaml` and initializes the `BedrockTokenRefresher` callback.
 2. The refresher checks your AWS session. If expired, it triggers `aws login --remote`, which prints a URL and waits for you to paste back the authorization code shown in the browser.
 3. Once authenticated, a short-lived Bedrock bearer token is fetched and injected as `BEDROCK_MANTLE_API_KEY`.
-4. Every 55 minutes the token is silently refreshed in the background before any request.
+4. Every ?? minutes the token is silently refreshed in the background before any request. (Still working on this part)
 
 ## Prerequisites
 
@@ -97,8 +97,6 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 | `nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 | ⚠️ |
 | `ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 | ⚠️ |
 | `ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 | ⚠️ |
-| `qwen-coder` | `qwen.qwen3-coder-30b-a3b-instruct` | $0.15 ‡ | $0.62 ‡ | ❌ |
-| `qwen3-32b` | `qwen.qwen3-32b` | $0.15 ‡ | $0.62 ‡ | |
 | `gpt-20b` | `openai.gpt-oss-20b` | $0.07 ‡ | $0.31 ‡ | |
 | `gpt-120b` | `openai.gpt-oss-120b` | $0.15 ‡ | $0.62 ‡ | |
 | `ministral-14b` | `mistral.mistral-large-3-14b-instruct` | $0.20 | $0.20 | |
