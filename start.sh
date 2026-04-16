@@ -17,14 +17,14 @@ start_server() {
     echo "🚀 Starting LiteLLM proxy server..."
     echo "   Configuration: ${CONFIG_FILE}"
     echo "   AWS Profile: ${AWS_PROFILE:-default}"
-    echo "   Region: ${AWS_DEFAULT_REGION:-us-east-1}"
+    echo "   Region: ${AWS_REGION:-us-east-1}"
     
     # Export for Python access
     export AWS_PROFILE="${AWS_PROFILE:-default}"
-    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+    export AWS_REGION="${AWS_REGION:-us-east-1}"
     
     # Start the server and capture exit code
-    litellm --config "${CONFIG_FILE}"
+    pipenv run litellm --config "${CONFIG_FILE}"
     EXIT_CODE=$?
     
     # Exit code 42 means we need to re-authenticate
