@@ -73,5 +73,5 @@ model_list:
       model: openrouter/openrouter/elephant-alpha
       api_key: "os.environ/OPENROUTER_API_KEY"
       extra_headers:
-        HTTP-Referer: "https://github.com/Jeshii"
+        HTTP-Referer: "https://github.com/Jeshii/claw-bedrock"
         X-OpenRouter-Title: "claw-bedrock"
