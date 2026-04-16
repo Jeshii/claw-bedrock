@@ -119,7 +119,7 @@ These models are routed through third-party providers rather than AWS Bedrock. E
 
 | Model name | Provider | Underlying model | Context Window | Max Output | Requires | Tested |
 |---|---|---|---|---|---|---|
-| `elephant-alpha` | [OpenRouter](https://openrouter.ai/) | `openrouter/elephant-alpha` | 256K | 32K | `OPENROUTER_API_KEY` | ✅ |
+| `elephant-alpha` | [OpenRouter](https://openrouter.ai/) | `openrouter/elephant-alpha` | 256K | 32K | `OPENROUTER_API_KEY` | ⚠️ |
 
 ## Using the API
 
