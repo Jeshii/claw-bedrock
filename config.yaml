@@ -70,7 +70,7 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  # === New models — OpenAI gpt-oss (reasoning, need high max_tokens) ===
+  # === New models - OpenAI gpt-oss (reasoning) ===
 
   - model_name: gpt-oss-20b
     litellm_params:
@@ -84,19 +84,7 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  - model_name: gpt-oss-safeguard-20b
-    litellm_params:
-      model: bedrock_mantle/openai.gpt-oss-safeguard-20b
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 32768
-
-  - model_name: gpt-oss-safeguard-120b
-    litellm_params:
-      model: bedrock_mantle/openai.gpt-oss-safeguard-120b
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 32768
-
-  # === New models — Google Gemma 3 ===
+  # === New models - Google Gemma 3 ===
 
   - model_name: gemma-3-4b
     litellm_params:
@@ -116,7 +104,7 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 8192
 
-  # === New models — ZAI GLM ===
+  # === New models - ZAI GLM ===
 
   - model_name: glm-4.7
     litellm_params:
@@ -130,7 +118,7 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  # === New models — MiniMax (reasoning, need high max_tokens) ===
+  # === New models - MiniMax (reasoning) ===
 
   - model_name: minimax-m2
     litellm_params:
@@ -144,23 +132,11 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  # === New models — Mistral extras ===
+  # === New models - Mistral extras ===
 
   - model_name: magistral-small
     litellm_params:
       model: bedrock_mantle/mistral.magistral-small-2509
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 32768
-
-  - model_name: voxtral-mini-3b
-    litellm_params:
-      model: bedrock_mantle/mistral.voxtral-mini-3b-2507
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 8192
-
-  - model_name: voxtral-small-24b
-    litellm_params:
-      model: bedrock_mantle/mistral.voxtral-small-24b-2507
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
@@ -170,7 +146,7 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  # === New models — Moonshot Kimi (reasoning, need high max_tokens) ===
+  # === New models - Moonshot Kimi (reasoning) ===
 
   - model_name: kimi-k2-thinking
     litellm_params:
@@ -178,7 +154,7 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  # === New models — NVIDIA Nemotron extras ===
+  # === New models - NVIDIA Nemotron extras ===
 
   - model_name: nemotron-nano-9b
     litellm_params:
@@ -192,7 +168,7 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  # === New models — Qwen extras ===
+  # === New models - Qwen extras ===
 
   - model_name: qwen3-32b
     litellm_params:
@@ -211,20 +187,6 @@ model_list:
       model: bedrock_mantle/qwen.qwen3-coder-next
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
-
-  - model_name: qwen3-vl-235b
-    litellm_params:
-      model: bedrock_mantle/qwen.qwen3-vl-235b-a22b-instruct
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 32768
-
-  # === New models — Writer ===
-
-  - model_name: palmyra-vision-7b
-    litellm_params:
-      model: bedrock_mantle/writer.palmyra-vision-7b
-      api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
-      max_tokens: 8192
 
   # === Non-Bedrock models ===
 
