@@ -67,3 +67,11 @@ model_list:
       model: bedrock_mantle/moonshotai.kimi-k2.5
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
+
+  - model_name: elephant-alpha
+    litellm_params:
+      model: openrouter/openrouter/elephant-alpha
+      api_key: "os.environ/OPENROUTER_API_KEY"
+      extra_headers:
+        HTTP-Referer: "https://github.com/Jeshii"
+        X-OpenRouter-Title: "claw-bedrock"
