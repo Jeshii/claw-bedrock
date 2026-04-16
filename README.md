@@ -117,9 +117,9 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 
 These models are routed through third-party providers rather than AWS Bedrock. Each requires its own API key set in your environment — see [Setup](#2-configure-environment-variables) above.
 
-| Model name | Provider | Underlying model | Requires | Tested |
-|---|---|---|---|---|
-| `elephant-alpha` | [OpenRouter](https://openrouter.ai/) | `openrouter/elephant-alpha` | `OPENROUTER_API_KEY` | ✅ |
+| Model name | Provider | Underlying model | Context Window | Max Output | Requires | Tested |
+|---|---|---|---|---|---|---|
+| `elephant-alpha` | [OpenRouter](https://openrouter.ai/) | `openrouter/elephant-alpha` | 256K | 32K | `OPENROUTER_API_KEY` | ✅ |
 
 ## Using the API
 
