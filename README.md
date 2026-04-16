@@ -94,21 +94,21 @@ This setup works fully over SSH. `aws login --remote` never opens a browser on t
 
 ### Bedrock Models
 
-Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/pricing/), US East/West regions. Sorted cheapest to most expensive by combined input+output cost.
+Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/pricing/), US East/West regions. Sorted by my perception of how functional they are in claw-code (subject to change).
 
 | Model name | Underlying model | Input ($/1M tokens) | Output ($/1M tokens) | Tested |
 |---|---|---|---|---|
-| `nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 | ⚠️ |
-| `ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 | ⚠️ |
-| `ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 | ⚠️ |
-| `ministral-14b` | `mistral.mistral-large-3-14b-instruct` | $0.20 | $0.20 | ⚠️ |
-| `qwen3-235b` | `qwen.qwen3-235b-a22b-2507` | $0.23 ‡ | $0.91 ‡ | ✅ |
 | `qwen3-next-80b` | `qwen.qwen3-next-80b-a3b-instruct` | $0.15 | $1.20 | ✅ |
-| `qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | † | † | ✅ |
-| `mistral-large-3` | `mistral.mistral-large-3-675b-instruct` | $0.50 | $1.50 | ⚠️ |
-| `deepseek-v3.1` | `deepseek.v3.1` | $0.60 ‡ | $1.73 ‡ | ⚠️ |
-| `deepseek-v3.2` | `deepseek.v3.2` | $0.62 | $1.85 | ⚠️ |
 | `kimi-k2.5` | `moonshotai.kimi-k2.5` | $0.60 | $3.00 | ✅ |
+| `qwen3-235b` | `qwen.qwen3-235b-a22b-2507` | $0.23 ‡ | $0.91 ‡ | ⚠️ |
+| `mistral-large-3` | `mistral.mistral-large-3-675b-instruct` | $0.50 | $1.50 | ⚠️ |
+| `deepseek-v3.2` | `deepseek.v3.2` | $0.62 | $1.85 | ⚠️ |
+| `nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 | ⚠️ |
+| `deepseek-v3.1` | `deepseek.v3.1` | $0.60 ‡ | $1.73 ‡ | ⚠️ |
+| `ministral-14b` | `mistral.mistral-large-3-14b-instruct` | $0.20 | $0.20 | ⚠️ |
+| `ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 | ⚠️ |
+| `ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 | ⚠️ |
+| `qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | † | † |  |
 
 † not yet listed on AWS Bedrock pricing page; assumed same tier as similar model.  
 ‡ US on-demand pricing not yet listed for this region tier; price shown is AP Sydney standard.
