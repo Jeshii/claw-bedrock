@@ -1,6 +1,6 @@
 # claw-bedrock
 
-A [LiteLLM](https://docs.litellm.ai/docs/) proxy server for [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/), exposing models via an OpenAI-compatible API. Handles AWS authentication and automatic token refresh automatically.
+A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as an [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/) wrapper and is evolving into a general model router — exposing models from multiple providers via a single OpenAI-compatible API. Handles AWS authentication and automatic token refresh automatically.
 
 ## How It Works
 
@@ -44,6 +44,9 @@ export BEDROCK_MANTLE_API_BASE="https://bedrock-mantle.<your-aws-region>.api.aws
 # Client-side — point any OpenAI-compatible tool at the local proxy
 export OPENAI_API_KEY="dummy"                  # LiteLLM requires a non-empty value
 export OPENAI_BASE_URL="http://127.0.0.1:4000/v1"
+
+# Optional: OpenRouter (required for non-Bedrock models like elephant-alpha)
+export OPENROUTER_API_KEY="<your-openrouter-api-key>"
 ```
 
 Then reload your shell:
@@ -89,6 +92,8 @@ This setup works fully over SSH. `aws login --remote` never opens a browser on t
 
 ## Available Models
 
+### Bedrock Models
+
 Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/pricing/), US East/West regions. Sorted cheapest to most expensive by combined input+output cost.
 
 | Model name | Underlying model | Input ($/1M tokens) | Output ($/1M tokens) | Tested |
@@ -107,6 +112,14 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 
 † not yet listed on AWS Bedrock pricing page; assumed same tier as similar model.  
 ‡ US on-demand pricing not yet listed for this region tier; price shown is AP Sydney standard.
+
+### Non-Bedrock Models
+
+These models are routed through third-party providers rather than AWS Bedrock. Each requires its own API key set in your environment — see [Setup](#2-configure-environment-variables) above.
+
+| Model name | Provider | Underlying model | Requires | Tested |
+|---|---|---|---|---|
+| `elephant-alpha` | [OpenRouter](https://openrouter.ai/) | `openrouter/elephant-alpha` | `OPENROUTER_API_KEY` | ✅ |
 
 ## Using the API
 
