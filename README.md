@@ -94,7 +94,7 @@ This setup works fully over SSH. `aws login --remote` never opens a browser on t
 
 ### Bedrock Models
 
-Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/pricing/), US East/West regions. Sorted by my perception of how functional they are in claw-code (subject to change).
+Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/pricing/), US East/West regions. Sorted by my perception of how functional they are in claw-code (subject to change as testing continues).
 
 | Model name | Underlying model | Input ($/1M tokens) | Output ($/1M tokens) | Tested |
 |---|---|---|---|---|
@@ -105,17 +105,34 @@ Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/
 | `deepseek-v3.2` | `deepseek.v3.2` | $0.62 | $1.85 | ⚠️ |
 | `nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 | ⚠️ |
 | `deepseek-v3.1` | `deepseek.v3.1` | $0.60 ‡ | $1.73 ‡ | ⚠️ |
-| `ministral-14b` | `mistral.mistral-large-3-14b-instruct` | $0.20 | $0.20 | ⚠️ |
+| `ministral-14b` | `mistral.ministral-3-14b-instruct` | $0.20 | $0.20 | ⚠️ |
 | `ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 | ⚠️ |
 | `ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 | ⚠️ |
-| `qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | † | † |  |
+| `qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | † | † | |
+| `gpt-oss-20b` | `openai.gpt-oss-20b` | $0.06 | $0.24 | |
+| `gpt-oss-120b` | `openai.gpt-oss-120b` | $0.35 | $1.40 | |
+| `gemma-3-4b` | `google.gemma-3-4b-it` | $0.03 | $0.07 | |
+| `gemma-3-12b` | `google.gemma-3-12b-it` | $0.06 | $0.17 | |
+| `gemma-3-27b` | `google.gemma-3-27b-it` | $0.12 | $0.35 | |
+| `glm-4.7` | `zai.glm-4.7` | $0.15 | $0.60 | |
+| `glm-4.7-flash` | `zai.glm-4.7-flash` | $0.05 | $0.15 | |
+| `minimax-m2` | `minimax.minimax-m2` | $0.30 | $1.10 | |
+| `minimax-m2.1` | `minimax.minimax-m2.1` | $0.30 | $1.10 | |
+| `magistral-small` | `mistral.magistral-small-2509` | $0.10 | $0.30 | |
+| `devstral-2-123b` | `mistral.devstral-2-123b` | $0.50 | $1.50 | |
+| `kimi-k2-thinking` | `moonshotai.kimi-k2-thinking` | $0.60 | $3.00 | |
+| `nemotron-nano-9b` | `nvidia.nemotron-nano-9b-v2` | $0.04 | $0.15 | |
+| `nemotron-nano-12b` | `nvidia.nemotron-nano-12b-v2` | $0.05 | $0.20 | |
+| `qwen3-32b` | `qwen.qwen3-32b` | $0.10 | $0.40 | |
+| `qwen3-coder-30b` | `qwen.qwen3-coder-30b-a3b-instruct` | $0.10 | $0.40 | |
+| `qwen3-coder-next` | `qwen.qwen3-coder-next` | † | † | |
 
-† not yet listed on AWS Bedrock pricing page; assumed same tier as similar model.  
+† Not yet listed on AWS Bedrock pricing page.  
 ‡ US on-demand pricing not yet listed for this region tier; price shown is AP Sydney standard.
 
-### Non-Bedrock Models
+> ⚠️ Reasoning models (`gpt-oss-*`, `minimax-m2`, `minimax-m2.1`, `kimi-k2-thinking`) require sufficiently high `max_tokens` or responses may return `null` content.
 
-These models are routed through third-party providers rather than AWS Bedrock. Each requires its own API key set in your environment — see [Setup](#2-configure-environment-variables) above.
+### Non-Bedrock Models
 
 | Model name | Provider | Underlying model | Context Window | Max Output | Requires | Tested |
 |---|---|---|---|---|---|---|
