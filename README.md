@@ -90,6 +90,52 @@ Open the URL in any browser, approve the login, copy the code shown, paste it ba
 
 This setup works fully over SSH. `aws login --remote` never opens a browser on the remote machine — it prints a URL you open locally, then prompts for a code you paste back. No display forwarding (`-X`/`-Y`) required.
 
+## Client Integrations
+
+### opencode.ai
+
+[opencode](https://opencode.ai) is an AI coding agent that runs in the terminal. It supports any OpenAI-compatible provider, so it can talk directly to this LiteLLM proxy.
+
+Create `~/.config/opencode/opencode.json` (or an `opencode.json` in your project root):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "litellm": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LiteLLM (claw-bedrock)",
+      "options": {
+        "baseURL": "http://127.0.0.1:4000/v1"
+      },
+      "models": {
+        "devstral-2-123b": { "name": "Devstral 2 123B" },
+        "qwen3-coder-480b": { "name": "Qwen3 Coder 480B" },
+        "qwen3-coder-30b": { "name": "Qwen3 Coder 30B" },
+        "kimi-k2-thinking": { "name": "Kimi K2 Thinking" },
+        "deepseek-v3.2": { "name": "DeepSeek V3.2" },
+        "mistral-large-3": { "name": "Mistral Large 3" }
+      }
+    }
+  },
+  "model": "litellm/devstral-2-123b"
+}
+```
+
+> If LiteLLM is running on a different machine (e.g. `intelmac.local`), replace `127.0.0.1` with that machine's IP address or hostname:
+> ```
+> "baseURL": "http://192.168.10.164:4000/v1"
+> ```
+
+Then set the API key (opencode requires one even though LiteLLM doesn't enforce it):
+
+```bash
+opencode auth login
+# Select "Other" → enter provider ID: litellm → enter any non-empty string as the key
+```
+
+The `model` names in the config must match the `model_name` values defined in [`config.yaml`](./config.yaml). Add or remove entries from `models` to match whichever models you want available in opencode.
+
 ## Available Models
 
 ### Bedrock Models
