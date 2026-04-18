@@ -1,6 +1,6 @@
 # claw-bedrock
 
-A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as an [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/) wrapper and is evolving into a general model router — exposing models from multiple providers via a single OpenAI-compatible API. Handles AWS authentication and automatic token refresh automatically.
+A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as an [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/) wrapper and is evolving into a general model router — exposing models from multiple providers via a single OpenAI-compatible API. Attempts to handle AWS authentication and token refresh automatically. Useful for [claw-code](https://github.com/ultraworkers/claw-code), [opencode](https://github.com/anomalyco/opencode), or other apps that expect an OpenAI response.
 
 ## How It Works
 
