@@ -12,6 +12,39 @@ if [[ -f "${SCRIPT_DIR}/.env" ]]; then
     source "${SCRIPT_DIR}/.env"
 fi
 
+# Merge config.bedrock.yaml and config.local.yaml into config.yaml
+merge_configs() {
+    local bedrock_file="${SCRIPT_DIR}/config.bedrock.yaml"
+    local local_file="${SCRIPT_DIR}/config.local.yaml"
+    local output_file="${SCRIPT_DIR}/config.yaml"
+    
+    echo "🔧 Merging configuration files..."
+    
+    # Start with empty configuration
+    echo "" > "${output_file}"
+    
+    # Add bedrock config if it exists
+    if [[ -f "${bedrock_file}" ]]; then
+        echo "   Adding base configuration from config.bedrock.yaml"
+        cat "${bedrock_file}" >> "${output_file}"
+        echo "" >> "${output_file}"  # Add newline between configs
+    fi
+    
+    # Add/local override config if it exists (skip first line to avoid duplicate model_list header)
+    if [[ -f "${local_file}" ]]; then
+        echo "   Adding local overrides from config.local.yaml (skipping first line)"
+        # Skip the first line of local file to avoid duplicate model_list header
+        tail -n +2 "${local_file}" >> "${output_file}"
+    fi
+    
+    if [[ ! -f "${bedrock_file}" && ! -f "${local_file}" ]]; then
+        echo "⚠️  Warning: Neither config.bedrock.yaml nor config.local.yaml found"
+        echo "   Using empty configuration"
+    fi
+    
+    echo "   Merged configuration written to ${output_file}"
+}
+
 # Function to start the server
 start_server() {
     echo "🚀 Starting LiteLLM proxy server..."
@@ -47,6 +80,9 @@ start_server() {
 # Auto-restart on auth failure with exponential backoff
 MAX_RETRIES=3
 RETRY_COUNT=0
+
+# Merge configs before starting
+merge_configs
 
 while [[ ${RETRY_COUNT} -le ${MAX_RETRIES} ]]; do
     start_server

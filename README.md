@@ -122,9 +122,9 @@ Create `~/.config/opencode/opencode.json` (or an `opencode.json` in your project
 }
 ```
 
-> If LiteLLM is running on a different machine (e.g. `intelmac.local`), replace `127.0.0.1` with that machine's IP address or hostname:
+> If LiteLLM is running on a different machine, replace `127.0.0.1` with that machine's IP address or hostname:
 > ```
-> "baseURL": "http://192.168.10.164:4000/v1"
+> "baseURL": "http://<IP_ADDRESS>:4000/v1"
 > ```
 
 Then set the API key (opencode requires one even though LiteLLM doesn't enforce it):
@@ -206,6 +206,9 @@ curl http://localhost:4000/v1/chat/completions \
 | File | Purpose |
 |---|---|
 | `config.yaml` | LiteLLM proxy config — model list and callback registration |
+| `config.local.yaml` | Local model overrides (Ollama/OpenRouter) — added via `update_model_config.py` |
+| `update_model_config.py` | Interactive script to add models from OpenRouter, Ollama, HuggingFace, etc. |
+| `MODEL_UPDATE_GUIDE.md` | Guide for using `update_model_config.py` |
 | `token_refresher.py` | LiteLLM callback — handles login and token auto-refresh |
 | `policy.json` | Sample IAM policy for Bedrock Mantle access |
 | `Pipfile` | Python dependencies |

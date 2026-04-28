@@ -1,3 +1,5 @@
 .claw/*
 config.local.yaml
-config.merged.yaml
+config.yaml
+.sandbox*
+__pycache__*
