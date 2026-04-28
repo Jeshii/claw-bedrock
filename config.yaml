@@ -188,14 +188,22 @@ model_list:
       api_base: "os.environ/BEDROCK_MANTLE_API_BASE"
       max_tokens: 32768
 
-  # === Non-Bedrock models ===
+  # === Open Router Models ===
 
-  - model_name: elephant-alpha
+  - model_name: ling-2.6-1t
     litellm_params:
-      model: openrouter/openrouter/elephant-alpha
+      model: openrouter/inclusionai/ling-2.6-1t:free
       api_base: "https://openrouter.ai/api/v1"
       api_key: "os.environ/OPENROUTER_API_KEY"
-      max_tokens: 32768
+      extra_headers:
+        HTTP-Referer: "https://github.com/Jeshii/claw-bedrock"
+        X-OpenRouter-Title: "claw-bedrock"
+
+  - model_name: hy3-preview
+    litellm_params:
+      model: openrouter/tencent/hy3-preview:free
+      api_base: "https://openrouter.ai/api/v1"
+      api_key: "os.environ/OPENROUTER_API_KEY"
       extra_headers:
         HTTP-Referer: "https://github.com/Jeshii/claw-bedrock"
         X-OpenRouter-Title: "claw-bedrock"
