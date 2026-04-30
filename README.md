@@ -106,7 +106,6 @@ CPUQuota=50%
 # Pre-built image from GitHub Container Registry:
 Image=ghcr.io/jeshii/claw-bedrock:latest
 ContainerName=claw-bedrock
-HostName=mobydisk
 PublishPort=4000:4000
 PublishPort=8080:8080
 
