@@ -149,6 +149,36 @@ async def add_model(model: Dict):
     return {"status": "success", "model": model}
 
 
+@app.put("/api/models/{old_model_name}")
+async def rename_model(old_model_name: str, update: Dict):
+    """Rename a model in config.local.yaml."""
+    new_model_name = update.get("model_name")
+    if not new_model_name:
+        raise HTTPException(400, "model_name is required")
+    
+    if not os.path.exists(LOCAL_CONFIG_PATH):
+        raise HTTPException(404, "No local config found")
+    
+    with open(LOCAL_CONFIG_PATH, "r") as f:
+        config = yaml.safe_load(f) or {"model_list": []}
+    
+    model_list = config.get("model_list", [])
+    found = False
+    for model in model_list:
+        if model.get("model_name") == old_model_name:
+            model["model_name"] = new_model_name
+            found = True
+            break
+    
+    if not found:
+        raise HTTPException(404, f"Model {old_model_name} not found in local config")
+    
+    save_local_config(config)
+    merge_configs()
+    
+    return {"status": "success", "old_name": old_model_name, "new_name": new_model_name}
+
+
 def save_local_config(config):
     """Save configuration to local config file (config.local.yaml)."""
     with open(LOCAL_CONFIG_PATH, "w") as f:
@@ -334,11 +364,12 @@ async def dashboard():
                         <span id="arrow-${provider}">▶</span> ${provider} (${models.length})
                     </h3>
                     <div id="group-${provider}" style="display: none; padding-left: 20px;">
-                        ${models.map(m => `
-                            <div class="model-item">
-                                <strong>${m.model_name}</strong>: ${m.litellm_params.model}
-                            </div>
-                        `).join('')}
+${models.map(m => `
+    <div class="model-item">
+        <strong>${m.model_name}</strong>: ${m.litellm_params.model}
+        <button onclick="renameModel('${m.model_name.replace(/'/g, "\\'")}')" style="margin-left: 10px; padding: 2px 8px; font-size: 12px;">Rename</button>
+    </div>
+`).join('')}
                     </div>
                 </div>
             `).join('');
@@ -353,6 +384,30 @@ async def dashboard():
             } else {
                 group.style.display = 'none';
                 arrow.textContent = '▶';
+            }
+        }
+        
+        // Rename model
+        async function renameModel(oldName) {
+            const newName = prompt(`Enter new name for model "${oldName}":`, oldName);
+            if (!newName || newName === oldName) return;
+            
+            try {
+                const res = await fetch(`/api/models/${encodeURIComponent(oldName)}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({model_name: newName})
+                });
+                
+                if (res.ok) {
+                    alert('Model renamed successfully');
+                    loadModels();
+                } else {
+                    const error = await res.json();
+                    alert(`Error: ${error.detail || 'Failed to rename model'}`);
+                }
+            } catch (e) {
+                alert(`Error: ${e.message}`);
             }
         }
         

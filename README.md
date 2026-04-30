@@ -228,6 +228,31 @@ opencode --model litellm/<modelname>
 
 The available model names are defined in [`config.yaml`](./config.yaml) under `model_name`.
 
+### claw-code
+
+[claw-code](https://github.com/ultraworkers/claw-code) is another AI coding agent that works with OpenAI-compatible providers.
+
+1. Configure claw-code to use the LiteLLM proxy by setting the API base and key:
+
+```bash
+export OPENAI_API_KEY="dummy"
+export OPENAI_BASE_URL="http://localhost:4000/v1"
+```
+
+2. List available models:
+
+```bash
+claw-code models list
+```
+
+3. Run claw-code with your desired model:
+
+```bash
+claw-code --model litellm/<modelname>
+```
+
+> **Note:** Always use the `litellm/` prefix followed by the model's friendly name (e.g., `litellm/qwen3-235b`, `litellm/elephant-alpha`). The friendly name is the `model_name` value defined in `config.yaml`.
+
 ## Available Models
 
 ### Bedrock Models
