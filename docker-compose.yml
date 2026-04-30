@@ -2,8 +2,8 @@ version: '3.8'
 
 services:
   claw-bedrock:
-    image: ghcr.io/jeshii/claw-bedrock:latest
-    # build: .  # Uncomment to build locally instead of using pre-built image
+    build: .
+    # image: ghcr.io/jeshii/claw-bedrock:latest
     ports:
       - "4000:4000"
       - "8282:8080"

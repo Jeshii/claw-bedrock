@@ -40,7 +40,7 @@ merge_configs
 
 # Start LiteLLM proxy in background
 echo "Starting LiteLLM proxy on port 4000..."
-litellm --config "${CONFIG_PATH}" --port 4000 > /app/litellm.log 2>&1 &
+litellm --config "${CONFIG_PATH}" --port 4000 --host 0.0.0.0 > /app/litellm.log 2>&1 &
 LITELLM_PID=$!
 
 # Start Management UI (foreground)
