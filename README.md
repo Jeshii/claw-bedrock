@@ -107,7 +107,7 @@ CPUQuota=50%
 Image=ghcr.io/jeshii/claw-bedrock:latest
 ContainerName=claw-bedrock
 PublishPort=4000:4000
-PublishPort=8080:8080
+PublishPort=8282:8080
 
 Environment=AWS_PROFILE=your-profile
 Environment=AWS_REGION=your-region
@@ -160,9 +160,9 @@ systemctl --user enable claw-bedrock  # autostart on boot
 
 5. **Access:**
    - LiteLLM API: `http://localhost:4000`
-   - Management UI: `http://localhost:8080` (for AWS auth, model management)
+   - Management UI: `http://localhost:8282` (for AWS auth, model management)
 
-The management UI at port 8080 will:
+The management UI at port 8282 will:
 - Display AWS auth URL when authentication is needed (click to open in browser)
 - Let you add models from OpenRouter, remote Ollama, HuggingFace, or manual entry
 - Replace the need for `update_model_config.py`

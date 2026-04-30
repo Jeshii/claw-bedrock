@@ -6,7 +6,7 @@ services:
     # build: .  # Uncomment to build locally instead of using pre-built image
     ports:
       - "4000:4000"
-      - "8080:8080"
+      - "8282:8080"
     volumes:
       - ./config.local.yaml:/app/config.local.yaml:ro
       - ~/.aws:/root/.aws:ro

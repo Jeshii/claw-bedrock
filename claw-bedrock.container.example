@@ -11,7 +11,7 @@ CPUQuota=50%
 Image=ghcr.io/jeshii/claw-bedrock:latest
 ContainerName=claw-bedrock
 PublishPort=4000:4000
-PublishPort=8080:8080
+PublishPort=8282:8080
 
 # Update these values:
 Environment=AWS_PROFILE=your-profile

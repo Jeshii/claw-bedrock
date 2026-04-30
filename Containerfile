@@ -19,6 +19,6 @@ COPY start_container.sh .
 RUN chmod +x start_container.sh
 
 # Expose ports (LiteLLM + Management UI)
-EXPOSE 4000 8080
+EXPOSE 4000 8080 8282
 
 ENTRYPOINT ["./start_container.sh"]
