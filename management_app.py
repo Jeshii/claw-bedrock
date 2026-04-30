@@ -9,6 +9,12 @@ import re
 
 app = FastAPI(title="Claw Bedrock Management")
 
+
+@app.on_event("startup")
+async def startup_event():
+    merge_configs()
+    print("[Startup] Merged configs on startup")
+
 CONFIG_PATH = "/app/config.yaml"
 LOCAL_CONFIG_PATH = "/app/config.local.yaml"
 BEDROCK_CONFIG_PATH = "/app/config.bedrock.yaml"
@@ -143,24 +149,47 @@ async def add_model(model: Dict):
     return {"status": "success", "model": model}
 
 
+def save_local_config(config):
+    """Save configuration to local config file (config.local.yaml)."""
+    with open(LOCAL_CONFIG_PATH, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
+
+
 def merge_configs():
     """Merge bedrock and local configs into config.yaml."""
-    with open(CONFIG_PATH, "w") as f:
-        f.write("")
-    
+    # Load bedrock config
+    bedrock_config = {"model_list": []}
     if os.path.exists(BEDROCK_CONFIG_PATH):
-        with open(BEDROCK_CONFIG_PATH, "r") as src:
-            content = src.read()
-        with open(CONFIG_PATH, "a") as dst:
-            dst.write(content)
-            dst.write("\n")
+        try:
+            with open(BEDROCK_CONFIG_PATH, "r") as f:
+                bedrock_config = yaml.safe_load(f) or {"model_list": []}
+        except Exception as e:
+            print(f"[Merge] Error loading bedrock config: {e}", file=sys.stderr)
+            bedrock_config = {"model_list": []}
     
+    # Load local config
+    local_config = {"model_list": []}
     if os.path.exists(LOCAL_CONFIG_PATH):
-        with open(LOCAL_CONFIG_PATH, "r") as f:
-            lines = f.readlines()
-        if lines:
-            with open(CONFIG_PATH, "a") as out:
-                out.writelines(lines[1:])  # Skip first line (duplicate model_list header)
+        try:
+            with open(LOCAL_CONFIG_PATH, "r") as f:
+                local_config = yaml.safe_load(f) or {"model_list": []}
+        except Exception as e:
+            print(f"[Merge] Error loading local config: {e}", file=sys.stderr)
+            local_config = {"model_list": []}
+    
+    # Combine model lists
+    combined_models = []
+    combined_models.extend(bedrock_config.get("model_list", []))
+    combined_models.extend(local_config.get("model_list", []))
+    
+    # Write merged config
+    merged_config = {"model_list": combined_models}
+    try:
+        with open(CONFIG_PATH, "w") as f:
+            yaml.dump(merged_config, f, default_flow_style=False)
+        print(f"[Merge] Config merged. Total models: {len(combined_models)}")
+    except Exception as e:
+        print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
 
 
 @app.get("/")
