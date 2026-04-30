@@ -21,6 +21,7 @@ Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 # Environment=OLLAMA_API_BASE=http://your-ollama-host:11434  # optional
 
 # Update path to your cloned repo:
+# IMPORTANT: ~/.aws must exist (run `aws configure` to create it)
 Volume=%h/.aws:/root/.aws:Z
 # Volume=/path/to/claw-bedrock/config.local.yaml:/app/config.local.yaml:Z
 

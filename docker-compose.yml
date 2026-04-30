@@ -9,6 +9,7 @@ services:
       - "8282:8080"
     volumes:
       - ./config.local.yaml:/app/config.local.yaml:ro
+      # IMPORTANT: Requires ~/.aws to exist (run `aws configure` first)
       - ~/.aws:/root/.aws:ro
     environment:
       - AWS_PROFILE=${AWS_PROFILE:-default}

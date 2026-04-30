@@ -91,6 +91,8 @@ Open the URL in any browser, approve the login, copy the code shown, paste it ba
 
 **Option A: Podman systemd `.container` file**
 
+Prerequisite: Ensure `~/.aws` exists (run `aws configure` to set up AWS credentials).
+
 Create `~/.config/containers/systemd/claw-bedrock.container`:
 
 ```ini
