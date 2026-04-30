@@ -129,11 +129,9 @@ class BedrockTokenRefresher(CustomLogger):
                 file=sys.stderr,
             )
             self._ensure_login()
-            # Return a session — credential access will fail, but pre_call_hook
+            # Return None — credential access will fail, but pre_call_hook
             # will block callers until auth is done via web UI
-            # We need to pass a profile that exists or use default;
-            # create one without the profile name to avoid the error
-            return boto3.Session(region_name=self._region)
+            return None
 
         credentials = session.get_credentials()
 
@@ -173,7 +171,7 @@ class BedrockTokenRefresher(CustomLogger):
 
     def _refresh(self):
         session = self._get_valid_session()
-        if self._needs_login:
+        if session is None or self._needs_login:
             return  # don't attempt to generate a token with invalid credentials
         credentials = session.get_credentials()
         token = self._generator.get_token(credentials, self._region)

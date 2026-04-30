@@ -207,7 +207,7 @@ async def dashboard():
     
     <!-- Add Model Modal -->
     <div class="section" id="add-model-section" style="display:none;">
-        <h2>Add New Model</h2>
+        <h2>Add New Model <button onclick="closeAddModel()" style="float: right;">✕ Close</button></h2>
         <select id="provider-select" onchange="loadProviderUI()">
             <option value="">Select Provider</option>
             <option value="openrouter">OpenRouter</option>
@@ -332,6 +332,13 @@ async def dashboard():
             document.getElementById('add-model-section').style.display = 'block';
         }
         
+        // Close add model UI
+        function closeAddModel() {
+            document.getElementById('add-model-section').style.display = 'none';
+            document.getElementById('provider-ui').innerHTML = '';
+            document.getElementById('provider-select').value = '';
+        }
+        
         // Load provider-specific UI
         async function loadProviderUI() {
             const provider = document.getElementById('provider-select').value;
@@ -367,6 +374,9 @@ async def dashboard():
             }
         }
         
+        // Store OpenRouter models data
+        let openRouterModels = [];
+        
         // Load OpenRouter models
         async function loadOpenRouterModels() {
             const search = document.getElementById('or-search').value;
@@ -378,6 +388,7 @@ async def dashboard():
             
             const res = await fetch(`/api/providers/openrouter/models?${params}`);
             const data = await res.json();
+            openRouterModels = data.models;
             const modelsDiv = document.getElementById('openrouter-models');
             modelsDiv.innerHTML = data.models.map(m => {
                 const isFree = parseFloat(m.pricing?.prompt || '1') === 0;
@@ -385,22 +396,94 @@ async def dashboard():
                     <input type="checkbox" id="or-${m.id}" />
                     <label for="or-${m.id}">${m.name} (${m.id}) ${isFree ? '🆓' : ''}</label>
                 </div>`;
-            }).join('');
+            }).join('') + `
+                <button onclick="addSelectedOpenRouterModels()" style="margin-top: 10px;">Add Selected Models</button>
+            `;
         }
+        
+        // Add selected OpenRouter models
+        async function addSelectedOpenRouterModels() {
+            const checkboxes = document.querySelectorAll('#openrouter-models input[type="checkbox"]:checked');
+            if (checkboxes.length === 0) return alert('No models selected');
+            
+            const promises = [];
+            checkboxes.forEach(cb => {
+                const modelId = cb.id.replace('or-', '');
+                const modelData = openRouterModels.find(m => m.id === modelId);
+                if (modelData) {
+                    const modelConfig = {
+                        model_name: modelData.id.replace(/\//g, '-'),
+                        litellm_params: {
+                            model: `openrouter/${modelData.id}`
+                        }
+                    };
+                    promises.push(
+                        fetch('/api/models', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(modelConfig)
+                        })
+                    );
+                    cb.checked = false;
+                }
+            });
+            
+            await Promise.all(promises);
+            alert(`Added ${checkboxes.length} model(s)`);
+            loadModels();
+        }
+        
+        // Store Ollama models data
+        let ollamaModels = [];
+        let ollamaApiBase = '';
         
         // Load Ollama models
         async function loadOllamaModels() {
             const apiBase = document.getElementById('ollama-api-base').value;
             if (!apiBase) return alert('Enter Ollama API Base');
+            ollamaApiBase = apiBase;
             const res = await fetch(`/api/providers/ollama/models?api_base=${encodeURIComponent(apiBase)}`);
             const data = await res.json();
+            ollamaModels = data.models;
             const modelsDiv = document.getElementById('ollama-models');
             modelsDiv.innerHTML = data.models.map(m => 
                 `<div>
                     <input type="checkbox" id="ol-${m.name}" />
                     <label for="ol-${m.name}">${m.name}</label>
                 </div>`
-            ).join('');
+            ).join('') + `
+                <button onclick="addSelectedOllamaModels()" style="margin-top: 10px;">Add Selected Models</button>
+            `;
+        }
+        
+        // Add selected Ollama models
+        async function addSelectedOllamaModels() {
+            const checkboxes = document.querySelectorAll('#ollama-models input[type="checkbox"]:checked');
+            if (checkboxes.length === 0) return alert('No models selected');
+            
+            const promises = [];
+            checkboxes.forEach(cb => {
+                const modelName = cb.id.replace('ol-', '');
+                const modelConfig = {
+                    model_name: `ollama-${modelName}`,
+                    litellm_params: {
+                        model: `ollama/${modelName}`,
+                        api_base: ollamaApiBase
+                    }
+                };
+                promises.push(
+                    fetch('/api/models', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(modelConfig)
+                    })
+                );
+                cb.checked = false;
+            });
+            
+            await Promise.all(promises);
+            alert(`Added ${checkboxes.length} model(s)`);
+            loadModels();
         }
         
         // Load LiteLLM logs
