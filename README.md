@@ -182,7 +182,7 @@ This setup works fully over SSH. `aws login --remote` never opens a browser on t
 
 ```bash
 mkdir -p ~/.config/opencode
-nano ~/.config/opencode/opencode.json
+vim ~/.config/opencode/opencode.json
 ```
 
 2. Add the following configuration:
