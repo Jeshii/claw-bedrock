@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 import yaml
 import os
 import requests
+import subprocess
 from typing import Optional, List, Dict
 import re
 
@@ -36,6 +37,24 @@ async def auth_status():
     return {"auth_needed": auth_needed, "auth_url": auth_url}
 
 
+@app.get("/api/logs")
+async def get_logs(lines: int = 50):
+    """Return the last N lines of the LiteLLM log."""
+    log_path = "/app/litellm.log"
+    if not os.path.exists(log_path):
+        return {"logs": "No logs available yet."}
+    try:
+        result = subprocess.run(
+            ["tail", f"-{lines}", log_path],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return {"logs": result.stdout or "Log is empty."}
+    except Exception as e:
+        return {"logs": f"Error reading logs: {str(e)}"}
+
+
 @app.get("/api/models")
 async def list_models():
     """List all configured models."""
@@ -44,8 +63,8 @@ async def list_models():
 
 
 @app.get("/api/providers/openrouter/models")
-async def fetch_openrouter_models(include_free: bool = True, api_key: Optional[str] = None):
-    """Fetch available models from OpenRouter."""
+async def fetch_openrouter_models(include_free: bool = True, search: Optional[str] = None, api_key: Optional[str] = None):
+    """Fetch available models from OpenRouter with optional filtering."""
     headers = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -57,13 +76,27 @@ async def fetch_openrouter_models(include_free: bool = True, api_key: Optional[s
         resp.raise_for_status()
         models = resp.json().get("data", [])
         
-        if not include_free:
+        # Filter by free/paid
+        if include_free:
             def _is_free(m):
                 try:
                     return float(m.get("pricing", {}).get("prompt", "1")) == 0
                 except:
                     return False
-            models = [m for m in models if not _is_free(m)]
+            models = [m for m in models if _is_free(m)]
+        else:
+            # Exclude free models
+            def _is_not_free(m):
+                try:
+                    return float(m.get("pricing", {}).get("prompt", "1")) != 0
+                except:
+                    return True
+            models = [m for m in models if _is_not_free(m)]
+        
+        # Filter by search term
+        if search:
+            search_lower = search.lower()
+            models = [m for m in models if search_lower in m.get("id", "").lower() or search_lower in m.get("name", "").lower()]
         
         # Sort: free first, then by name
         def sort_key(m):
@@ -139,15 +172,24 @@ async def dashboard():
 <head>
     <title>Claw Bedrock Management</title>
     <style>
-        body { font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        body { font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; transition: all 0.3s; }
+        body.dark { background: #1a1a1a; color: #e0e0e0; }
         .section { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+        body.dark .section { border-color: #444; background: #2a2a2a; }
         .auth-needed { background: #fff3cd; border-color: #ffc107; }
+        body.dark .auth-needed { background: #3d3000; border-color: #ffc107; }
         button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        body.dark button { background: #444; color: #e0e0e0; border: 1px solid #666; }
         input, select { padding: 8px; margin: 5px; width: 300px; }
+        body.dark input, body.dark select { background: #333; color: #e0e0e0; border: 1px solid #666; }
         .model-item { padding: 10px; border-bottom: 1px solid #eee; }
+        body.dark .model-item { border-color: #444; }
+        body.dark pre { background: #2a2a2a !important; color: #e0e0e0; }
+        .theme-toggle { position: fixed; top: 20px; right: 20px; padding: 8px 16px; cursor: pointer; border-radius: 4px; }
     </style>
 </head>
 <body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙 Dark</button>
     <h1>Claw Bedrock Management</h1>
     
     <!-- Auth Section -->
@@ -174,9 +216,39 @@ async def dashboard():
             <option value="manual">Manual</option>
         </select>
         <div id="provider-ui"></div>
-    </div>
-
-    <script>
+        </div>
+        
+        <!-- LiteLLM Logs Section -->
+        <div class="section">
+            <h2>LiteLLM Logs</h2>
+            <button onclick="loadLogs()">↻ Refresh Logs</button>
+            <select id="log-lines" onchange="loadLogs()">
+                <option value="50">Last 50 lines</option>
+                <option value="100">Last 100 lines</option>
+                <option value="200">Last 200 lines</option>
+            </select>
+            <pre id="logs-output" style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; font-size: 12px;"></pre>
+        </div>
+        
+        <script>
+        // Theme toggle
+        function toggleTheme() {
+            const body = document.body;
+            const btn = document.querySelector('.theme-toggle');
+            body.classList.toggle('dark');
+            const isDark = body.classList.contains('dark');
+            btn.textContent = isDark ? '☀️ Light' : '🌙 Dark';
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        }
+        
+        // Load saved theme
+        if (localStorage.getItem('theme') === 'dark') {
+            document.body.classList.add('dark');
+            document.addEventListener('DOMContentLoaded', () => {
+                document.querySelector('.theme-toggle').textContent = '☀️ Light';
+            });
+        }
+        
         // Load auth status
         async function loadAuth() {
             const res = await fetch('/api/auth/status');
@@ -189,6 +261,7 @@ async def dashboard():
                 authDiv.innerHTML = `
                     <p>AWS Authentication Required</p>
                     <p>Visit this URL to authenticate: <a href="${data.auth_url}" target="_blank">${data.auth_url}</a></p>
+                    <button onclick="reloadAuth()" style="margin-top: 10px;">↻ Reload Auth URL</button>
                     <p>After authenticating, the token will refresh automatically.</p>
                 `;
             } else {
@@ -197,16 +270,61 @@ async def dashboard():
             }
         }
         
+        async function reloadAuth() {
+            const btn = event.target;
+            btn.style.transform = 'rotate(360deg)';
+            btn.style.transition = 'transform 0.5s';
+            setTimeout(() => { btn.style.transform = ''; }, 500);
+            
+            const res = await fetch('/api/auth/status');
+            const data = await res.json();
+            if (data.auth_url) {
+                window.open(data.auth_url, '_blank');
+            }
+            loadAuth();
+        }
+        
         // Load models
         async function loadModels() {
             const res = await fetch('/api/models');
             const data = await res.json();
             const modelsDiv = document.getElementById('models-list');
-            modelsDiv.innerHTML = data.models.map(m => 
-                `<div class="model-item">
-                    <strong>${m.model_name}</strong>: ${m.litellm_params.model}
-                </div>`
-            ).join('');
+            
+            // Group models by provider
+            const groups = {};
+            data.models.forEach(m => {
+                const provider = m.litellm_params.model.split('/')[0] || 'other';
+                if (!groups[provider]) groups[provider] = [];
+                groups[provider].push(m);
+            });
+            
+            // Build collapsible sections
+            modelsDiv.innerHTML = Object.entries(groups).map(([provider, models]) => `
+                <div class="provider-group" style="margin-bottom: 10px;">
+                    <h3 onclick="toggleGroup('${provider}')" style="cursor: pointer; user-select: none;">
+                        <span id="arrow-${provider}">▶</span> ${provider} (${models.length})
+                    </h3>
+                    <div id="group-${provider}" style="display: none; padding-left: 20px;">
+                        ${models.map(m => `
+                            <div class="model-item">
+                                <strong>${m.model_name}</strong>: ${m.litellm_params.model}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function toggleGroup(provider) {
+            const group = document.getElementById(`group-${provider}`);
+            const arrow = document.getElementById(`arrow-${provider}`);
+            if (group.style.display === 'none') {
+                group.style.display = 'block';
+                arrow.textContent = '▼';
+            } else {
+                group.style.display = 'none';
+                arrow.textContent = '▶';
+            }
         }
         
         // Show add model UI
@@ -222,6 +340,12 @@ async def dashboard():
             if (provider === 'openrouter') {
                 uiDiv.innerHTML = `
                     <h3>OpenRouter Models</h3>
+                    <div style="margin: 10px 0;">
+                        <input id="or-search" placeholder="Search models..." style="width: 200px; padding: 8px;" oninput="loadOpenRouterModels()" />
+                        <label style="margin-left: 10px;">
+                            <input type="checkbox" id="or-free-only" checked onchange="loadOpenRouterModels()" /> Free only
+                        </label>
+                    </div>
                     <button onclick="loadOpenRouterModels()">Fetch Available Models</button>
                     <div id="openrouter-models"></div>
                 `;
@@ -245,15 +369,23 @@ async def dashboard():
         
         // Load OpenRouter models
         async function loadOpenRouterModels() {
-            const res = await fetch('/api/providers/openrouter/models');
+            const search = document.getElementById('or-search').value;
+            const freeOnly = document.getElementById('or-free-only').checked;
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            if (freeOnly) params.append('include_free', 'true');
+            else params.append('include_free', 'false');
+            
+            const res = await fetch(`/api/providers/openrouter/models?${params}`);
             const data = await res.json();
             const modelsDiv = document.getElementById('openrouter-models');
-            modelsDiv.innerHTML = data.models.slice(0, 20).map(m => 
-                `<div>
+            modelsDiv.innerHTML = data.models.map(m => {
+                const isFree = parseFloat(m.pricing?.prompt || '1') === 0;
+                return `<div>
                     <input type="checkbox" id="or-${m.id}" />
-                    <label for="or-${m.id}">${m.name} (${m.id})</label>
-                </div>`
-            ).join('');
+                    <label for="or-${m.id}">${m.name} (${m.id}) ${isFree ? '🆓' : ''}</label>
+                </div>`;
+            }).join('');
         }
         
         // Load Ollama models
@@ -269,6 +401,16 @@ async def dashboard():
                     <label for="ol-${m.name}">${m.name}</label>
                 </div>`
             ).join('');
+        }
+        
+        // Load LiteLLM logs
+        async function loadLogs() {
+            const lines = document.getElementById('log-lines').value;
+            const res = await fetch(`/api/logs?lines=${lines}`);
+            const data = await res.json();
+            const logsDiv = document.getElementById('logs-output');
+            logsDiv.textContent = data.logs;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
         }
         
         // Initial load
