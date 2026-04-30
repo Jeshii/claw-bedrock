@@ -29,6 +29,15 @@ import inquirer
 # Provider API clients
 # ============================================================
 
+def _is_free_model(model: Dict[str, Any]) -> bool:
+    """Check if a model is free-tier based on its pricing."""
+    prompt_cost = model.get("pricing", {}).get("prompt", "0")
+    try:
+        return float(prompt_cost) == 0
+    except (ValueError, TypeError):
+        return False
+
+
 class BaseProvider:
     """Base class for model providers."""
     
@@ -83,7 +92,7 @@ class OpenRouterProvider(BaseProvider):
             resp = requests.get(self.API_URL, headers=headers, timeout=30)
             resp.raise_for_status()
         except requests.RequestException as e:
-            print(f"\n⚠️  Could not reach OpenRouter API: {e}")
+            print(f"\nCould not reach OpenRouter API: {e}")
             print("   You can still add models manually or enter a cached list.\n")
             return []
         
@@ -92,12 +101,16 @@ class OpenRouterProvider(BaseProvider):
         
         # Filter out if requested
         if not include_free:
-            models = [m for m in models if not m.get("pricing", {}).get("prompt", "0").startswith("0")]
+            models = [m for m in models if not _is_free_model(m)]
         
         # Sort: free first, then by name
         def sort_key(m):
             pricing = m.get("pricing", {})
-            prompt_cost = float(pricing.get("prompt", "inf").replace("inf", "999999"))
+            prompt_cost_str = pricing.get("prompt", "inf")
+            try:
+                prompt_cost = float(prompt_cost_str)
+            except (ValueError, TypeError):
+                prompt_cost = float('inf')
             return (prompt_cost, m.get("name", "").lower())
         
         models.sort(key=sort_key)
@@ -110,11 +123,8 @@ class OpenRouterProvider(BaseProvider):
         """
         safe_name = display_name or self._sanitize_name(model_id)
         
-        # Check if it's a free-tier model (has :free suffix in model id or known free models)
-        is_free = ":free" in model_id or any(
-            free_model in model_id.lower()
-            for free_model in ["ling-2.6-1t:free", "hy3-preview:free"]
-        )
+        # Check if it's a free-tier model (has :free suffix in model id)
+        is_free = ":free" in model_id
         
         if is_free:
             # Strip :free for actual model reference but keep note
@@ -240,7 +250,7 @@ class ManualProvider(BaseProvider):
         return [
             {"id": "custom", "name": "Enter custom model manually..."},
             {"id": "bedrock_mantle/openai.gpt-oss-20b", "name": "Example: Bedrock OSS 20B"},
-            {"id": "openrouter/anthropic/claude-3", "name": "Example: Claude 3 via OpenRouter"},
+            {"id": "anthropic/claude-3", "name": "Example: Claude 3 via OpenRouter"},
         ]
     
     def build_config_entry(self, model_id: str, display_name: Optional[str] = None) -> Dict:
@@ -285,6 +295,9 @@ class ManualProvider(BaseProvider):
                 "api_base": "os.environ/BEDROCK_MANTLE_API_BASE",
                 "max_tokens": 32768
             })
+        else:
+            # Generic fallback - user will need to configure manually
+            print(f"    Note: No defaults for provider '{provider}'. You may need to edit the config.")
         
         return {
             "model_name": name,
@@ -313,41 +326,9 @@ def save_config(config: Dict, config_path: str) -> None:
 
 
 def add_model_to_config(config: Dict, entry: Dict) -> None:
-    """Insert a model entry at the appropriate position in config."""
+    """Insert a model entry at the end of model_list."""
     model_list = config.setdefault("model_list", [])
-    
-    # Determine section: local models vs OpenRouter vs others
-    model_name = entry["model_name"]
-    litellm_params = entry["litellm_params"]
-    model_path = litellm_params.get("model", "")
-    api_base = litellm_params.get("api_base", "")
-    
-    # Simple heuristic for ordering
-    is_local = "ollama" in model_path or "local" in model_name
-    is_openrouter = "openrouter" in model_path or "openrouter.ai" in api_base
-    
-    # Find insertion point
-    insert_pos = len(model_list)
-    for i, existing in enumerate(model_list):
-        ex_name = existing.get("model_name", "")
-        ex_params = existing.get("litellm_params", {})
-        ex_model = ex_params.get("model", "")
-        ex_api = ex_params.get("api_base", "")
-        
-        if is_local and ("openrouter" in ex_model or "bedrock" in ex_model):
-            insert_pos = i
-            break
-        if is_openrouter and "bedrock" in ex_model and "openrouter" not in ex_model:
-            insert_pos = i
-            # Keep looking past other openrouter entries
-            while insert_pos < len(model_list):
-                next_params = model_list[insert_pos].get("litellm_params", {})
-                if "openrouter" not in next_params.get("model", ""):
-                    break
-                insert_pos += 1
-            break
-    
-    model_list.insert(insert_pos, entry)
+    model_list.append(entry)
 
 
 # ============================================================
@@ -448,7 +429,9 @@ def main() -> None:
                            message="Include free-tier models?",
                            default=True),
         ])
-        include_free = include_free_q["include_free"] if include_free_q else True
+        if include_free_q is None:
+            return
+        include_free = include_free_q["include_free"]
         
         print("\n📡 Fetching models from OpenRouter...")
         models = provider.fetch_models(include_free=include_free)
@@ -460,7 +443,7 @@ def main() -> None:
         
         selected = pick_from_fetched(models, "OpenRouter")
         
-        if not selected:
+        if selected is None:
             return
         
         model_id = selected["id"]
@@ -489,6 +472,8 @@ def main() -> None:
                              message="Ollama API base URL",
                              default=api_base),
             ])
+            if host_q is None:
+                return
             api_base = host_q["host"] if host_q else api_base
         
         provider = OllamaProvider(config_path, api_base=api_base)
@@ -501,7 +486,7 @@ def main() -> None:
         
         selected = pick_from_fetched(models, "Ollama")
         
-        if not selected:
+        if selected is None:
             # Fallback to manual entry
             manual_provider = ManualProvider(config_path)
             entry = manual_provider.build_config_entry("", None)
@@ -517,6 +502,8 @@ def main() -> None:
                          message="Search query (or press Enter to see all)",
                          default=""),
         ])
+        if search_q is None:
+            return
         query = search_q["query"] if search_q else ""
         
         print("\n📡 Searching HuggingFace models...")
@@ -526,7 +513,7 @@ def main() -> None:
         
         selected = pick_from_fetched(models, "HuggingFace")
         
-        if not selected:
+        if selected is None:
             return
         
         # For HF, also ask about the TGI endpoint
@@ -537,15 +524,22 @@ def main() -> None:
         ])
         
         entry = provider.build_config_entry(selected["id"], selected["name"])
+        
+        # Apply custom endpoint if provided
+        if endpoint_q and endpoint_q.get("endpoint"):
+            entry["litellm_params"]["api_base"] = endpoint_q["endpoint"]
     
     elif provider_key == "manual":
         provider = ManualProvider(config_path)
         dummy_models = provider.fetch_models()
         selected = pick_from_fetched(dummy_models, "Manual")
         
-        if not selected or selected["id"] != "custom":
+        if selected is None:
+            return
+        
+        if selected["id"] != "custom":
             # Use as template
-            model_id = selected.get("id", "") if selected else ""
+            model_id = selected.get("id", "")
         else:
             model_id = ""
         

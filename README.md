@@ -70,6 +70,7 @@ A sample IAM policy is provided in [`policy.json`](./policy.json) granting the m
 
 ## Running the Server
 
+### Native (pipenv)
 ```bash
 pipenv run litellm --config config.yaml --port 4000
 ```
@@ -86,6 +87,87 @@ Authorization code: _
 
 Open the URL in any browser, approve the login, copy the code shown, paste it back into the terminal, and the server continues automatically.
 
+### Container (Podman/Docker)
+
+**Option A: Podman systemd `.container` file**
+
+Create `~/.config/containers/systemd/claw-bedrock.container`:
+
+```ini
+[Unit]
+Description=claw-bedrock
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=900
+CPUQuota=50%
+
+[Container]
+# Pre-built image from GitHub Container Registry:
+Image=ghcr.io/jeshii/claw-bedrock:latest
+ContainerName=claw-bedrock
+HostName=mobydisk
+PublishPort=4000:4000
+PublishPort=8080:8080
+
+Environment=AWS_PROFILE=your-profile
+Environment=AWS_REGION=your-region
+Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
+Environment=OPENROUTER_API_KEY=your-key
+Environment=OLLAMA_API_BASE=http://your-ollama-host:11434
+
+Volume=%h/.aws:/root/.aws:Z
+Volume=%h/claw-bedrock/config.local.yaml:/app/config.local.yaml:Z
+
+[Install]
+WantedBy=default.target
+```
+
+Then reload and start:
+```bash
+systemctl --user daemon-reload
+systemctl --user start claw-bedrock
+systemctl --user enable claw-bedrock  # autostart on boot
+```
+
+**Option B: Compose**
+
+1. **Start Podman (macOS only):**
+   ```bash
+   podman machine init  # first time only
+   podman machine start
+   ```
+
+2. **Build the image:**
+   ```bash
+   podman build -t claw-bedrock .
+   # or with docker-compose:
+   podman-compose build
+   ```
+
+3. **Create a `.env` file with required variables:**
+   ```bash
+   AWS_PROFILE=your-profile
+   AWS_REGION=your-region
+   BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
+   OPENROUTER_API_KEY=your-key  # optional
+   OLLAMA_API_BASE=http://your-ollama-host:11434  # optional
+   ```
+
+4. **Run with compose:**
+   ```bash
+   podman-compose up -d
+   ```
+
+5. **Access:**
+   - LiteLLM API: `http://localhost:4000`
+   - Management UI: `http://localhost:8080` (for AWS auth, model management)
+
+The management UI at port 8080 will:
+- Display AWS auth URL when authentication is needed (click to open in browser)
+- Let you add models from OpenRouter, remote Ollama, HuggingFace, or manual entry
+- Replace the need for `update_model_config.py`
+
 ## SSH Usage
 
 This setup works fully over SSH. `aws login --remote` never opens a browser on the remote machine — it prints a URL you open locally, then prompts for a code you paste back. No display forwarding (`-X`/`-Y`) required.
@@ -96,45 +178,55 @@ This setup works fully over SSH. `aws login --remote` never opens a browser on t
 
 [opencode](https://opencode.ai) is an AI coding agent that runs in the terminal. It supports any OpenAI-compatible provider, so it can talk directly to this LiteLLM proxy.
 
-Create `~/.config/opencode/opencode.json` (or an `opencode.json` in your project root):
+1. Create the opencode config directory and file:
+
+```bash
+mkdir -p ~/.config/opencode
+nano ~/.config/opencode/opencode.json
+```
+
+2. Add the following configuration:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-models-discovery@latest"],
   "provider": {
     "litellm": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "LiteLLM (claw-bedrock)",
+      "name": "LiteLLM",
       "options": {
-        "baseURL": "http://127.0.0.1:4000/v1"
-      },
-      "models": {
-        "devstral-2-123b": { "name": "Devstral 2 123B" },
-        "qwen3-coder-480b": { "name": "Qwen3 Coder 480B" },
-        "qwen3-coder-30b": { "name": "Qwen3 Coder 30B" },
-        "kimi-k2-thinking": { "name": "Kimi K2 Thinking" },
-        "deepseek-v3.2": { "name": "DeepSeek V3.2" },
-        "mistral-large-3": { "name": "Mistral Large 3" }
+        "baseURL": "http://localhost:4000/v1"
       }
     }
-  },
-  "model": "litellm/devstral-2-123b"
+  }
 }
 ```
 
-> If LiteLLM is running on a different machine, replace `127.0.0.1` with that machine's IP address or hostname:
+> If LiteLLM is running on a different machine, replace `localhost` with that machine's IP address or hostname:
 > ```
 > "baseURL": "http://<IP_ADDRESS>:4000/v1"
 > ```
 
-Then set the API key (opencode requires one even though LiteLLM doesn't enforce it):
+3. Refresh the models list to discover available models from the proxy:
 
 ```bash
-opencode auth login
-# Select "Other" → enter provider ID: litellm → enter any non-empty string as the key
+opencode models --refresh
 ```
 
-The `model` names in the config must match the `model_name` values defined in [`config.yaml`](./config.yaml). Add or remove entries from `models` to match whichever models you want available in opencode.
+4. List available models from the litellm provider:
+
+```bash
+opencode models litellm
+```
+
+5. Run opencode with your desired model:
+
+```bash
+opencode --model litellm/<modelname>
+```
+
+The available model names are defined in [`config.yaml`](./config.yaml) under `model_name`.
 
 ## Available Models
 
@@ -205,10 +297,16 @@ curl http://localhost:4000/v1/chat/completions \
 
 | File | Purpose |
 |---|---|
-| `config.yaml` | LiteLLM proxy config — model list and callback registration |
-| `config.local.yaml` | Local model overrides (Ollama/OpenRouter) — added via `update_model_config.py` |
-| `update_model_config.py` | Interactive script to add models from OpenRouter, Ollama, HuggingFace, etc. |
+| `config.yaml` | LiteLLM proxy config — model list and callback registration (generated) |
+| `config.bedrock.yaml` | Bedrock Mantle model definitions (baked into container) |
+| `config.local.yaml` | Local model overrides (Ollama/OpenRouter) — mounted at runtime |
+| `update_model_config.py` | Interactive script to add models (native use only) |
 | `MODEL_UPDATE_GUIDE.md` | Guide for using `update_model_config.py` |
 | `token_refresher.py` | LiteLLM callback — handles login and token auto-refresh |
+| `management_app.py` | Web management UI for auth and model configuration |
+| `start_container.sh` | Container entrypoint script |
+| `Containerfile` | Podman/Docker image definition |
+| `docker-compose.yml` | Container orchestration (works with podman-compose) |
+| `requirements.txt` | Python dependencies for container builds |
 | `policy.json` | Sample IAM policy for Bedrock Mantle access |
-| `Pipfile` | Python dependencies |
+| `Pipfile` | Python dependencies (native use) |

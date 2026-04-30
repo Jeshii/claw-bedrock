@@ -1,0 +1,8 @@
+aws-bedrock-token-generator
+boto3
+botocore[crt]
+litellm[proxy]
+fastapi
+uvicorn[standard]
+pyyaml
+requests

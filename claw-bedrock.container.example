@@ -1,0 +1,28 @@
+[Unit]
+Description=claw-bedrock
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=900
+CPUQuota=50%
+
+[Container]
+# Pre-built image from GitHub Container Registry:
+Image=ghcr.io/jeshii/claw-bedrock:latest
+ContainerName=claw-bedrock
+PublishPort=4000:4000
+PublishPort=8080:8080
+
+# Update these values:
+Environment=AWS_PROFILE=your-profile
+Environment=AWS_REGION=your-region
+Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
+# Environment=OPENROUTER_API_KEY=your-key  # optional
+# Environment=OLLAMA_API_BASE=http://your-ollama-host:11434  # optional
+
+# Update path to your cloned repo:
+Volume=%h/.aws:/root/.aws:Z
+# Volume=/path/to/claw-bedrock/config.local.yaml:/app/config.local.yaml:Z
+
+[Install]
+WantedBy=default.target
