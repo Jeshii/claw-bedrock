@@ -23,6 +23,11 @@ Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 # Update path to your cloned repo:
 # IMPORTANT: ~/.aws must exist (run `aws configure` to create it)
 Volume=%h/.aws:/root/.aws:Z
+
+# Optional: mount config.local.yaml for local model overrides (Ollama/OpenRouter)
+# NOTE: The file must exist on the host for the mount to succeed.
+# If you don't need local overrides, you can skip this or create an empty file:
+#   touch /path/to/claw-bedrock/config.local.yaml
 # Volume=/path/to/claw-bedrock/config.local.yaml:/app/config.local.yaml:Z
 
 [Install]

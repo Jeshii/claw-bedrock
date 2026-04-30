@@ -116,17 +116,18 @@ def merge_configs():
         f.write("")
     
     if os.path.exists(BEDROCK_CONFIG_PATH):
-        with open(BEDROCK_CONFIG_PATH, "r") as f:
-            f.write(f.read())
-        with open(CONFIG_PATH, "a") as f:
-            f.write("\n")
+        with open(BEDROCK_CONFIG_PATH, "r") as src:
+            content = src.read()
+        with open(CONFIG_PATH, "a") as dst:
+            dst.write(content)
+            dst.write("\n")
     
     if os.path.exists(LOCAL_CONFIG_PATH):
         with open(LOCAL_CONFIG_PATH, "r") as f:
             lines = f.readlines()
-            if lines:
-                with open(CONFIG_PATH, "a") as out:
-                    out.writelines(lines[1:])  # Skip first line (duplicate model_list header)
+        if lines:
+            with open(CONFIG_PATH, "a") as out:
+                out.writelines(lines[1:])  # Skip first line (duplicate model_list header)
 
 
 @app.get("/")

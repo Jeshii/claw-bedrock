@@ -15,6 +15,9 @@ COPY token_refresher.py .
 COPY management_app.py .
 COPY start_container.sh .
 
+# Create empty local config (will be overridden if user mounts their own)
+RUN touch /app/config.local.yaml
+
 # Make start script executable
 RUN chmod +x start_container.sh
 

@@ -118,7 +118,6 @@ Environment=OPENROUTER_API_KEY=your-key
 Environment=OLLAMA_API_BASE=http://your-ollama-host:11434
 
 Volume=%h/.aws:/root/.aws:Z
-Volume=%h/claw-bedrock/config.local.yaml:/app/config.local.yaml:Z
 
 [Install]
 WantedBy=default.target
