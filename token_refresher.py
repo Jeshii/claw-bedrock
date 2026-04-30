@@ -5,6 +5,7 @@ import sys
 import time
 
 import boto3
+import botocore.exceptions
 from aws_bedrock_token_generator import BedrockTokenGenerator
 from litellm.integrations.custom_logger import CustomLogger
 
@@ -119,7 +120,21 @@ class BedrockTokenRefresher(CustomLogger):
 
     def _get_valid_session(self) -> boto3.Session:
         """Return a boto3 Session with valid credentials, triggering login if needed."""
-        session = boto3.Session(profile_name=self._profile, region_name=self._region)
+        try:
+            session = boto3.Session(profile_name=self._profile, region_name=self._region)
+        except botocore.exceptions.ProfileNotFound:
+            print(
+                f"[TokenRefresher] AWS profile '{self._profile}' not found. "
+                f"Auth will be required via web UI.",
+                file=sys.stderr,
+            )
+            self._ensure_login()
+            # Return a session — credential access will fail, but pre_call_hook
+            # will block callers until auth is done via web UI
+            # We need to pass a profile that exists or use default;
+            # create one without the profile name to avoid the error
+            return boto3.Session(region_name=self._region)
+
         credentials = session.get_credentials()
 
         if credentials is None:

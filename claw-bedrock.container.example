@@ -20,9 +20,8 @@ Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 # Environment=OPENROUTER_API_KEY=your-key  # optional
 # Environment=OLLAMA_API_BASE=http://your-ollama-host:11434  # optional
 
-# Update path to your cloned repo:
 # IMPORTANT: ~/.aws must exist (run `aws configure` to create it)
-Volume=%h/.aws:/root/.aws:Z
+Volume=%h/.aws:/app/.aws:Z
 
 # Optional: mount config.local.yaml for local model overrides (Ollama/OpenRouter)
 # NOTE: The file must exist on the host for the mount to succeed.

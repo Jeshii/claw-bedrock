@@ -2,6 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Set HOME to /app so AWS config is found at /app/.aws
+ENV HOME=/app
+
 # Install AWS CLI
 RUN pip install --no-cache-dir awscli
 
