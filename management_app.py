@@ -643,7 +643,7 @@ async def dashboard():
             const modelId = cb.id.replace('or-', '');
             const modelData = openRouterModels.find(m => m.id === modelId);
             if (modelData) {
-                r"const safeName = modelData.id.replace(/\//g, '-');"
+                const safeName = modelData.id.replace(/[/]/g, '-');
                 const modelConfig = {
                     model_name: 'claw-bedrock/' + safeName,
                     litellm_params: { model: 'openrouter/' + modelData.id }
