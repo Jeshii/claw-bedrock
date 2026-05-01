@@ -21,6 +21,11 @@ init_configs() {
         echo "Copying bedrock config template to ${BEDROCK_CONFIG}..."
         cp "/app/config.bedrock.yaml" "${BEDROCK_CONFIG}"
     fi
+
+    # Always copy token_refresher so it stays in sync with the image
+    if [[ -f "/app/token_refresher.py" ]]; then
+        cp "/app/token_refresher.py" "${CONFIG_DIR}/token_refresher.py"
+    fi
 }
 
 # Handle shutdown signals
