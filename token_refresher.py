@@ -67,13 +67,18 @@ class BedrockTokenRefresher(CustomLogger):
                     text=True,
                     timeout=30
                 )
-                # Parse output for auth URL
+                # Parse output for auth URL (only match AWS SSO device auth URLs)
                 auth_url = None
-                for line in result.stdout.splitlines() + result.stderr.splitlines():
-                    urls = re.findall(r'https?://[^\s<>"]+', line)
-                    if urls:
-                        auth_url = urls[0]
-                        break
+                all_output = result.stdout + result.stderr
+                # AWS SSO device auth URLs look like: https://device.sso.<region>.amazonaws.com/?user_code=XXXX-XXXX
+                sso_urls = re.findall(r'https://device\.sso\.[^\s<>"\']+\.amazonaws\.com/[^\s<>"\']*', all_output)
+                if sso_urls:
+                    auth_url = sso_urls[0]
+                else:
+                    # Fallback: look for any URL containing 'user_code' or 'device' parameter
+                    fallback_urls = re.findall(r'https?://[^\s<>"\']*user_code[^\s<>"\']*|https?://[^\s<>"\']*device[^\s<>"\']*', all_output)
+                    if fallback_urls:
+                        auth_url = fallback_urls[0]
                 
                 if auth_url:
                     with open("/tmp/auth_url", "w") as f:
@@ -100,13 +105,18 @@ class BedrockTokenRefresher(CustomLogger):
                 text=True,
                 check=True
             )
-            # Parse and save auth URL
+            # Parse and save auth URL (only match AWS SSO device auth URLs)
             auth_url = None
-            for line in result.stdout.splitlines() + result.stderr.splitlines():
-                urls = re.findall(r'https?://[^\s<>"]+', line)
-                if urls:
-                    auth_url = urls[0]
-                    break
+            all_output = result.stdout + result.stderr
+            # AWS SSO device auth URLs look like: https://device.sso.<region>.amazonaws.com/?user_code=XXXX-XXXX
+            sso_urls = re.findall(r'https://device\.sso\.[^\s<>"\']+\.amazonaws\.com/[^\s<>"\']*', all_output)
+            if sso_urls:
+                auth_url = sso_urls[0]
+            else:
+                # Fallback: look for any URL containing 'user_code' or 'device' parameter
+                fallback_urls = re.findall(r'https?://[^\s<>"\']*user_code[^\s<>"\']*|https?://[^\s<>"\']*device[^\s<>"\']*', all_output)
+                if fallback_urls:
+                    auth_url = fallback_urls[0]
             if auth_url:
                 with open("/tmp/auth_url", "w") as f:
                     f.write(auth_url)
