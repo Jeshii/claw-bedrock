@@ -14,6 +14,7 @@ CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
 LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 BEDROCK_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.bedrock.yaml")
+LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
 
 
 @app.on_event("startup")
@@ -48,12 +49,11 @@ async def auth_status():
 @app.get("/api/logs")
 async def get_logs(lines: int = 50):
     """Return the last N lines of the LiteLLM log."""
-    log_path = "/app/litellm.log"
-    if not os.path.exists(log_path):
+    if not os.path.exists(LOG_PATH):
         return {"logs": "No logs available yet."}
     try:
         result = subprocess.run(
-            ["tail", f"-{lines}", log_path],
+            ["tail", f"-{lines}", LOG_PATH],
             capture_output=True,
             text=True,
             timeout=5,
@@ -780,9 +780,9 @@ ${models.map(m => `
          setInterval(loadAuth, 30000); // Refresh auth status every 30s
      </script>
      <footer style="margin-top: 40px; padding: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-         <p><strong>Persistence Note:</strong> To persist model configurations across container restarts, use a volume mount:</p>
-         <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">docker run -v $(pwd)/local_config:/app:Z -p 4000:4000 -p 8282:8282 claw-bedrock</pre>
-         <p>Or use the provided <code>docker-compose.yml</code> file.</p>
+         <p><strong>Persistence Note:</strong> To persist model configurations across container restarts, mount a host directory and set <code>CONFIG_DIR</code>:</p>
+         <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">podman run -e CONFIG_DIR=/config -v ~/claw-bedrock:/config:Z -p 4000:4000 -p 8282:8282 claw-bedrock</pre>
+         <p>Or use the provided <code>docker-compose.yml</code> or a systemd <code>.container</code> file with <code>Environment=CONFIG_DIR=/config</code> and <code>Volume=%h/claw-bedrock:/config:Z</code>.</p>
      </footer>
 </body>
 </html>
