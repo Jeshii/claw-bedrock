@@ -76,7 +76,7 @@ async def reload_models():
     reloaded = reload_litellm()
     if reloaded:
         return {"status": "success", "message": "LiteLLM reloaded"}
-    raise HTTPException(500, "LiteLLM reload failed — PID file not found or process unreachable. Try restarting the container.")
+    raise HTTPException(500, "LiteLLM reload failed \u2014 PID file not found or process unreachable. Try restarting the container.")
 
 
 @app.get("/api/providers/openrouter/models")
@@ -244,7 +244,8 @@ async def rename_model(old_model_name: str, update: Dict):
 
 
 def merge_configs():
-    """Merge local config into config.yaml."""
+    """Merge local config into config.yaml, including litellm_settings from bedrock template
+    if any bedrock_mantle models are present."""
     local_config = {"model_list": []}
     if os.path.exists(LOCAL_CONFIG_PATH):
         try:
@@ -254,10 +255,27 @@ def merge_configs():
             print(f"[Merge] Error loading local config: {e}", file=sys.stderr)
             local_config = {"model_list": []}
 
+    merged = {"model_list": local_config.get("model_list", [])}
+
+    # Include litellm_settings from bedrock template if any bedrock_mantle models are in use
+    has_bedrock = any(
+        "bedrock_mantle" in (m.get("litellm_params", {}).get("model", ""))
+        for m in merged["model_list"]
+    )
+    if has_bedrock and os.path.exists(BEDROCK_CONFIG_PATH):
+        try:
+            with open(BEDROCK_CONFIG_PATH, "r") as f:
+                bedrock_config = yaml.safe_load(f) or {}
+            if "litellm_settings" in bedrock_config:
+                merged["litellm_settings"] = bedrock_config["litellm_settings"]
+                print(f"[Merge] Included litellm_settings from bedrock template (BedrockTokenRefresher)")
+        except Exception as e:
+            print(f"[Merge] Error loading bedrock template for litellm_settings: {e}", file=sys.stderr)
+
     try:
         with open(CONFIG_PATH, "w") as f:
-            yaml.dump(local_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-        print(f"[Merge] Config merged. Total models: {len(local_config.get('model_list', []))}")
+            yaml.dump(merged, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        print(f"[Merge] Config merged. Total models: {len(merged['model_list'])}")
     except Exception as e:
         print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
 
@@ -367,13 +385,13 @@ async def dashboard():
         const btn = document.querySelector('.theme-toggle');
         body.classList.toggle('dark');
         const isDark = body.classList.contains('dark');
-        btn.textContent = isDark ? '☀️ Light' : '🌙 Dark';
+        btn.textContent = isDark ? '\u2600\ufe0f Light' : '\ud83c\udf19 Dark';
         localStorage.setItem('theme', isDark ? 'dark' : 'light');
     }
     if (localStorage.getItem('theme') === 'dark') {
         document.body.classList.add('dark');
         document.addEventListener('DOMContentLoaded', () => {
-            document.querySelector('.theme-toggle').textContent = '☀️ Light';
+            document.querySelector('.theme-toggle').textContent = '\u2600\ufe0f Light';
         });
     }
 
@@ -460,9 +478,9 @@ async def dashboard():
                 <div id="group-${provider}" style="display: none; padding-left: 20px;">
                     ${models.map(m => `
                     <div class="model-item" data-model-name="${m.model_name}">
-                        <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'")}', this)">${m.model_name}</span>
+                        <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'") }', this)">${m.model_name}</span>
                         <span>: ${m.litellm_params.model}</span>
-                        <button class="delete-btn" onclick="deleteModel('${m.model_name.replace(/'/g, "\\'")}')">Delete</button>
+                        <button class="delete-btn" onclick="deleteModel('${m.model_name.replace(/'/g, "\\'")}')" >Delete</button>
                     </div>`).join('')}
                 </div>
             </div>
@@ -474,10 +492,10 @@ async def dashboard():
         const arrow = document.getElementById(`arrow-${provider}`);
         if (group.style.display === 'none') {
             group.style.display = 'block';
-            arrow.textContent = '▼';
+            arrow.textContent = '\u25bc';
         } else {
             group.style.display = 'none';
-            arrow.textContent = '▶';
+            arrow.textContent = '\u25b6';
         }
     }
 
@@ -608,10 +626,10 @@ async def dashboard():
         openRouterModels = data.models;
         const modelsDiv = document.getElementById('openrouter-models');
         modelsDiv.innerHTML = data.models.map(m => {
-            const isFree = parseFloat(m.pricing?.prompt || '1') === 0;
+            const isFree = parseFloat(m.pricing && m.pricing.prompt || '1') === 0;
             return `<div>
                 <input type="checkbox" id="or-${m.id}" />
-                <label for="or-${m.id}">${m.name} (${m.id}) ${isFree ? '🆓' : ''}</label>
+                <label for="or-${m.id}">${m.name} (${m.id}) ${isFree ? '\ud83c\udd93' : ''}</label>
             </div>`;
         }).join('') + `<button onclick="addSelectedOpenRouterModels()" style="margin-top: 10px;">Add Selected Models</button>`;
     }
@@ -625,9 +643,10 @@ async def dashboard():
             const modelId = cb.id.replace('or-', '');
             const modelData = openRouterModels.find(m => m.id === modelId);
             if (modelData) {
+                const safeName = modelData.id.replace(/\//g, '-');
                 const modelConfig = {
-                    model_name: `claw-bedrock/${modelData.id.replace(/\//g, '-')}`,
-                    litellm_params: { model: `openrouter/${modelData.id}` }
+                    model_name: 'claw-bedrock/' + safeName,
+                    litellm_params: { model: 'openrouter/' + modelData.id }
                 };
                 promises.push(
                     fetch('/api/models', {
@@ -670,8 +689,8 @@ async def dashboard():
         checkboxes.forEach(cb => {
             const modelName = cb.id.replace('ol-', '');
             const modelConfig = {
-                model_name: `claw-bedrock/ollama-${modelName}`,
-                litellm_params: { model: `ollama/${modelName}`, api_base: ollamaApiBase }
+                model_name: 'claw-bedrock/ollama-' + modelName,
+                litellm_params: { model: 'ollama/' + modelName, api_base: ollamaApiBase }
             };
             promises.push(
                 fetch('/api/models', {
