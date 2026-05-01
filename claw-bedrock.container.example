@@ -11,7 +11,7 @@ CPUQuota=50%
 Image=ghcr.io/jeshii/claw-bedrock:latest
 ContainerName=claw-bedrock
 PublishPort=4000:4000
-PublishPort=8282:8080
+PublishPort=8282:8282
 
 # Update these values:
 Environment=AWS_PROFILE=your-profile
@@ -23,11 +23,10 @@ Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 # IMPORTANT: ~/.aws must exist (run `aws configure` to create it)
 Volume=%h/.aws:/app/.aws:Z
 
-# Optional: mount config.local.yaml for local model overrides (Ollama/OpenRouter)
-# NOTE: The file must exist on the host for the mount to succeed.
-# If you don't need local overrides, you can skip this or create an empty file:
-#   touch /path/to/claw-bedrock/config.local.yaml
-# Volume=/path/to/claw-bedrock/config.local.yaml:/app/config.local.yaml:Z
+# Mount config directory for persistence (model configs survive container restarts):
+# Create a local directory and mount it to /app:
+#   mkdir -p %h/claw-bedrock-config
+# Volume=%h/claw-bedrock-config:/app:Z
 
 [Install]
 WantedBy=default.target

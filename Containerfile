@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Set HOME to /app so AWS config is found at /app/.aws
 ENV HOME=/app
+ENV CONFIG_DIR=/app
 
 # Install AWS CLI
 RUN pip install --no-cache-dir awscli
@@ -18,13 +19,13 @@ COPY token_refresher.py .
 COPY management_app.py .
 COPY start_container.sh .
 
-# Create empty local config (will be overridden if user mounts their own)
-RUN touch /app/config.local.yaml
+# Create empty local config template (users should mount their own directory for persistence)
+RUN echo '{"model_list": []}' > /app/config.local.yaml
 
 # Make start script executable
 RUN chmod +x start_container.sh
 
-# Expose ports (LiteLLM + Management UI)
-EXPOSE 4000 8080 8282
+# Expose ports (LiteLLM proxy + Management UI)
+EXPOSE 4000 8282
 
 ENTRYPOINT ["./start_container.sh"]

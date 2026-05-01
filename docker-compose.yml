@@ -3,18 +3,16 @@ version: '3.8'
 services:
   claw-bedrock:
     build: .
-    # image: ghcr.io/jeshii/claw-bedrock:latest
+    container_name: claw-bedrock
     ports:
-      - "4000:4000"
-      - "8282:8080"
-    volumes:
-      - ./config.local.yaml:/app/config.local.yaml:ro
-      # IMPORTANT: Requires ~/.aws to exist (run `aws configure` first)
-      - ~/.aws:/root/.aws:ro
+      - "4000:4000"  # LiteLLM proxy
+      - "8282:8282"  # Management UI
     environment:
-      - AWS_PROFILE=${AWS_PROFILE:-default}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - BEDROCK_MANTLE_API_BASE=${BEDROCK_MANTLE_API_BASE}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-}
+      - CONFIG_DIR=/app
+      # Add your API keys here
+      # - OPENROUTER_API_KEY=your_key_here
+      # - OPENAI_API_KEY=your_key_here
+    volumes:
+      # Mount local config directory for persistence across container restarts
+      - ./local_config:/app:Z
     restart: unless-stopped

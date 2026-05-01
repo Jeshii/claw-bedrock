@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 import yaml
 import os
+import sys
 import requests
 import subprocess
 from typing import Optional, List, Dict
@@ -9,15 +10,16 @@ import re
 
 app = FastAPI(title="Claw Bedrock Management")
 
+CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
+CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
+LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
+BEDROCK_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.bedrock.yaml")
+
 
 @app.on_event("startup")
 async def startup_event():
     merge_configs()
-    print("[Startup] Merged configs on startup")
-
-CONFIG_PATH = "/app/config.yaml"
-LOCAL_CONFIG_PATH = "/app/config.local.yaml"
-BEDROCK_CONFIG_PATH = "/app/config.bedrock.yaml"
+    print(f"[Startup] Merged configs on startup (CONFIG_DIR={CONFIG_DIR})")
 
 
 def load_config() -> Dict:
@@ -130,6 +132,62 @@ async def fetch_ollama_models(api_base: str = Query(...)):
         raise HTTPException(500, f"Failed to fetch Ollama models: {str(e)}")
 
 
+@app.get("/api/providers/bedrock/models")
+async def fetch_bedrock_models():
+    """Fetch available Bedrock Mantle models from template, excluding already added ones."""
+    # Load bedrock template
+    bedrock_config = {"model_list": []}
+    if os.path.exists(BEDROCK_CONFIG_PATH):
+        try:
+            with open(BEDROCK_CONFIG_PATH, "r") as f:
+                bedrock_config = yaml.safe_load(f) or {"model_list": []}
+        except Exception as e:
+            print(f"[Bedrock] Error loading bedrock template: {e}", file=sys.stderr)
+
+    # Load local config to exclude already added models
+    local_config = {"model_list": []}
+    if os.path.exists(LOCAL_CONFIG_PATH):
+        try:
+            with open(LOCAL_CONFIG_PATH, "r") as f:
+                local_config = yaml.safe_load(f) or {"model_list": []}
+        except Exception as e:
+            print(f"[Bedrock] Error loading local config: {e}", file=sys.stderr)
+
+    # Get set of already added model names
+    added_model_names = {m.get("model_name") for m in local_config.get("model_list", [])}
+
+    # Filter out already added models
+    available_models = [
+        m for m in bedrock_config.get("model_list", [])
+        if m.get("model_name") not in added_model_names
+    ]
+
+    return {"models": available_models}
+
+
+@app.delete("/api/models/{model_name}")
+async def delete_model(model_name: str):
+    """Delete a model from config.local.yaml."""
+    if not os.path.exists(LOCAL_CONFIG_PATH):
+        raise HTTPException(404, "No local config found")
+
+    with open(LOCAL_CONFIG_PATH, "r") as f:
+        config = yaml.safe_load(f) or {"model_list": []}
+
+    model_list = config.get("model_list", [])
+    initial_count = len(model_list)
+    config["model_list"] = [m for m in model_list if m.get("model_name") != model_name]
+
+    if len(config["model_list"]) == initial_count:
+        raise HTTPException(404, f"Model {model_name} not found in local config")
+
+    save_local_config(config)
+    merge_configs()
+    reload_litellm()
+
+    return {"status": "success", "deleted": model_name}
+
+
 @app.post("/api/models")
 async def add_model(model: Dict):
     """Add a new model to config.local.yaml."""
@@ -137,15 +195,16 @@ async def add_model(model: Dict):
     if os.path.exists(LOCAL_CONFIG_PATH):
         with open(LOCAL_CONFIG_PATH, "r") as f:
             config = yaml.safe_load(f) or {"model_list": []}
-    
+
     model_list = config.setdefault("model_list", [])
     model_list.append(model)
-    
+
     save_local_config(config)
-    
-    # Trigger config merge by recreating config.yaml
+
+    # Trigger config merge and reload LiteLLM
     merge_configs()
-    
+    reload_litellm()
+
     return {"status": "success", "model": model}
 
 
@@ -155,13 +214,13 @@ async def rename_model(old_model_name: str, update: Dict):
     new_model_name = update.get("model_name")
     if not new_model_name:
         raise HTTPException(400, "model_name is required")
-    
+
     if not os.path.exists(LOCAL_CONFIG_PATH):
         raise HTTPException(404, "No local config found")
-    
+
     with open(LOCAL_CONFIG_PATH, "r") as f:
         config = yaml.safe_load(f) or {"model_list": []}
-    
+
     model_list = config.get("model_list", [])
     found = False
     for model in model_list:
@@ -169,34 +228,19 @@ async def rename_model(old_model_name: str, update: Dict):
             model["model_name"] = new_model_name
             found = True
             break
-    
+
     if not found:
         raise HTTPException(404, f"Model {old_model_name} not found in local config")
-    
+
     save_local_config(config)
     merge_configs()
-    
+    reload_litellm()
+
     return {"status": "success", "old_name": old_model_name, "new_name": new_model_name}
 
 
-def save_local_config(config):
-    """Save configuration to local config file (config.local.yaml)."""
-    with open(LOCAL_CONFIG_PATH, "w") as f:
-        yaml.dump(config, f, default_flow_style=False)
-
-
 def merge_configs():
-    """Merge bedrock and local configs into config.yaml."""
-    # Load bedrock config
-    bedrock_config = {"model_list": []}
-    if os.path.exists(BEDROCK_CONFIG_PATH):
-        try:
-            with open(BEDROCK_CONFIG_PATH, "r") as f:
-                bedrock_config = yaml.safe_load(f) or {"model_list": []}
-        except Exception as e:
-            print(f"[Merge] Error loading bedrock config: {e}", file=sys.stderr)
-            bedrock_config = {"model_list": []}
-    
+    """Merge local config into config.yaml (bedrock config no longer pre-merged)."""
     # Load local config
     local_config = {"model_list": []}
     if os.path.exists(LOCAL_CONFIG_PATH):
@@ -206,20 +250,32 @@ def merge_configs():
         except Exception as e:
             print(f"[Merge] Error loading local config: {e}", file=sys.stderr)
             local_config = {"model_list": []}
-    
-    # Combine model lists
-    combined_models = []
-    combined_models.extend(bedrock_config.get("model_list", []))
-    combined_models.extend(local_config.get("model_list", []))
-    
-    # Write merged config
-    merged_config = {"model_list": combined_models}
+
+    # Write merged config (local config only)
     try:
         with open(CONFIG_PATH, "w") as f:
-            yaml.dump(merged_config, f, default_flow_style=False)
-        print(f"[Merge] Config merged. Total models: {len(combined_models)}")
+            yaml.dump(local_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        print(f"[Merge] Config merged. Total models: {len(local_config.get('model_list', []))}")
     except Exception as e:
         print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
+
+
+def reload_litellm():
+    """Reload LiteLLM config by sending SIGHUP to the process."""
+    pid_file = "/tmp/litellm.pid"
+    if not os.path.exists(pid_file):
+        print("[Reload] PID file not found, skipping reload")
+        return False
+
+    try:
+        with open(pid_file, "r") as f:
+            pid = int(f.read().strip())
+        os.kill(pid, 1)  # SIGHUP = signal 1
+        print(f"[Reload] Sent SIGHUP to LiteLLM (PID {pid})")
+        return True
+    except Exception as e:
+        print(f"[Reload] Error reloading LiteLLM: {e}", file=sys.stderr)
+        return False
 
 
 @app.get("/")
@@ -241,13 +297,25 @@ async def dashboard():
         body.dark button { background: #444; color: #e0e0e0; border: 1px solid #666; }
         input, select { padding: 8px; margin: 5px; width: 300px; }
         body.dark input, body.dark select { background: #333; color: #e0e0e0; border: 1px solid #666; }
-        .model-item { padding: 10px; border-bottom: 1px solid #eee; }
+        .model-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px; }
         body.dark .model-item { border-color: #444; }
         body.dark pre { background: #2a2a2a !important; color: #e0e0e0; }
         .theme-toggle { position: fixed; top: 20px; right: 20px; padding: 8px 16px; cursor: pointer; border-radius: 4px; }
+        .model-name { cursor: pointer; flex: 1; }
+        .model-name:hover { text-decoration: underline; }
+        .delete-btn { padding: 2px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        body.dark .delete-btn { background: #842029; }
+        /* Toast notifications */
+        #toast-container { position: fixed; top: 60px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+        .toast { padding: 12px 20px; border-radius: 6px; color: white; font-size: 14px; animation: fadeIn 0.3s ease-in; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .toast-success { background: #28a745; }
+        .toast-error { background: #dc3545; }
+        .toast-info { background: #17a2b8; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
+    <div id="toast-container"></div>
     <button class="theme-toggle" onclick="toggleTheme()">🌙 Dark</button>
     <h1>Claw Bedrock Management</h1>
     
@@ -271,6 +339,7 @@ async def dashboard():
             <option value="">Select Provider</option>
             <option value="openrouter">OpenRouter</option>
             <option value="ollama">Ollama (Remote)</option>
+            <option value="bedrock">Bedrock (Mantle)</option>
             <option value="huggingface">HuggingFace</option>
             <option value="manual">Manual</option>
         </select>
@@ -306,6 +375,20 @@ async def dashboard():
             document.addEventListener('DOMContentLoaded', () => {
                 document.querySelector('.theme-toggle').textContent = '☀️ Light';
             });
+        }
+
+        // Toast notification function
+        function showToast(message, type = 'success', duration = 3000) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
         }
         
         // Load auth status
@@ -348,7 +431,7 @@ async def dashboard():
             const res = await fetch('/api/models');
             const data = await res.json();
             const modelsDiv = document.getElementById('models-list');
-            
+
             // Group models by provider
             const groups = {};
             data.models.forEach(m => {
@@ -356,7 +439,7 @@ async def dashboard():
                 if (!groups[provider]) groups[provider] = [];
                 groups[provider].push(m);
             });
-            
+
             // Build collapsible sections
             modelsDiv.innerHTML = Object.entries(groups).map(([provider, models]) => `
                 <div class="provider-group" style="margin-bottom: 10px;">
@@ -365,9 +448,10 @@ async def dashboard():
                     </h3>
                     <div id="group-${provider}" style="display: none; padding-left: 20px;">
 ${models.map(m => `
-    <div class="model-item">
-        <strong>${m.model_name}</strong>: ${m.litellm_params.model}
-        <button onclick="renameModel('${m.model_name.replace(/'/g, "\\'")}')" style="margin-left: 10px; padding: 2px 8px; font-size: 12px;">Rename</button>
+    <div class="model-item" data-model-name="${m.model_name}">
+        <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'")}', this)">${m.model_name}</span>
+        <span>: ${m.litellm_params.model}</span>
+        <button class="delete-btn" onclick="deleteModel('${m.model_name.replace(/'/g, "\\'")}')">Delete</button>
     </div>
 `).join('')}
                     </div>
@@ -387,27 +471,78 @@ ${models.map(m => `
             }
         }
         
-        // Rename model
-        async function renameModel(oldName) {
-            const newName = prompt(`Enter new name for model "${oldName}":`, oldName);
-            if (!newName || newName === oldName) return;
-            
+        // Inline rename model
+        function startRename(oldName, element) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = oldName;
+            input.style.flex = '1';
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') submitRename(oldName, input.value, element);
+                if (e.key === 'Escape') cancelRename(oldName, element);
+            };
+            input.onblur = () => cancelRename(oldName, element);
+            element.parentNode.replaceChild(input, element);
+            input.focus();
+            input.select();
+        }
+
+        function cancelRename(oldName, originalElement) {
+            const input = originalElement.parentNode.querySelector('input');
+            if (input) {
+                const span = document.createElement('span');
+                span.className = 'model-name';
+                span.textContent = oldName;
+                span.onclick = () => startRename(oldName, span);
+                input.parentNode.replaceChild(span, input);
+            }
+        }
+
+        async function submitRename(oldName, newName, originalElement) {
+            if (!newName || newName === oldName) {
+                cancelRename(oldName, originalElement);
+                return;
+            }
+
             try {
                 const res = await fetch(`/api/models/${encodeURIComponent(oldName)}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({model_name: newName})
                 });
-                
+
                 if (res.ok) {
-                    alert('Model renamed successfully');
+                    showToast('Model renamed successfully');
                     loadModels();
                 } else {
                     const error = await res.json();
-                    alert(`Error: ${error.detail || 'Failed to rename model'}`);
+                    showToast(`Error: ${error.detail || 'Failed to rename model'}`, 'error');
+                    cancelRename(oldName, originalElement);
                 }
             } catch (e) {
-                alert(`Error: ${e.message}`);
+                showToast(`Error: ${e.message}`, 'error');
+                cancelRename(oldName, originalElement);
+            }
+        }
+
+        // Delete model
+        async function deleteModel(modelName) {
+            if (!confirm(`Delete model "${modelName}"?`)) return;
+
+            try {
+                const res = await fetch(`/api/models/${encodeURIComponent(modelName)}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    showToast('Model deleted successfully');
+                    loadModels();
+                } else {
+                    const error = await res.json();
+                    showToast(`Error: ${error.detail || 'Failed to delete model'}`, 'error');
+                }
+            } catch (e) {
+                showToast(`Error: ${e.message}`, 'error');
             }
         }
         
@@ -427,7 +562,7 @@ ${models.map(m => `
         async function loadProviderUI() {
             const provider = document.getElementById('provider-select').value;
             const uiDiv = document.getElementById('provider-ui');
-            
+
             if (provider === 'openrouter') {
                 uiDiv.innerHTML = `
                     <h3>OpenRouter Models</h3>
@@ -446,6 +581,12 @@ ${models.map(m => `
                     <input id="ollama-api-base" placeholder="Ollama API Base (e.g., http://192.168.10.1:11434)" />
                     <button onclick="loadOllamaModels()">Fetch Models</button>
                     <div id="ollama-models"></div>
+                `;
+            } else if (provider === 'bedrock') {
+                uiDiv.innerHTML = `
+                    <h3>Bedrock (Mantle) Models</h3>
+                    <button onclick="loadBedrockModels()">Fetch Available Models</button>
+                    <div id="bedrock-models"></div>
                 `;
             } else if (provider === 'manual') {
                 uiDiv.innerHTML = `
@@ -488,15 +629,15 @@ ${models.map(m => `
         // Add selected OpenRouter models
         async function addSelectedOpenRouterModels() {
             const checkboxes = document.querySelectorAll('#openrouter-models input[type="checkbox"]:checked');
-            if (checkboxes.length === 0) return alert('No models selected');
-            
+            if (checkboxes.length === 0) return showToast('No models selected', 'error');
+
             const promises = [];
             checkboxes.forEach(cb => {
                 const modelId = cb.id.replace('or-', '');
                 const modelData = openRouterModels.find(m => m.id === modelId);
                 if (modelData) {
                     const modelConfig = {
-                        model_name: modelData.id.replace(/\//g, '-'),
+                        model_name: `claw-bedrock/${modelData.id.replace(/\//g, '-')}`,
                         litellm_params: {
                             model: `openrouter/${modelData.id}`
                         }
@@ -513,24 +654,24 @@ ${models.map(m => `
             });
             
             await Promise.all(promises);
-            alert(`Added ${checkboxes.length} model(s)`);
+            showToast(`Added ${checkboxes.length} model(s)`);
             loadModels();
         }
-        
+
         // Store Ollama models data
         let ollamaModels = [];
         let ollamaApiBase = '';
-        
+
         // Load Ollama models
         async function loadOllamaModels() {
             const apiBase = document.getElementById('ollama-api-base').value;
-            if (!apiBase) return alert('Enter Ollama API Base');
+            if (!apiBase) return showToast('Enter Ollama API Base', 'error');
             ollamaApiBase = apiBase;
             const res = await fetch(`/api/providers/ollama/models?api_base=${encodeURIComponent(apiBase)}`);
             const data = await res.json();
             ollamaModels = data.models;
             const modelsDiv = document.getElementById('ollama-models');
-            modelsDiv.innerHTML = data.models.map(m => 
+            modelsDiv.innerHTML = data.models.map(m =>
                 `<div>
                     <input type="checkbox" id="ol-${m.name}" />
                     <label for="ol-${m.name}">${m.name}</label>
@@ -539,17 +680,17 @@ ${models.map(m => `
                 <button onclick="addSelectedOllamaModels()" style="margin-top: 10px;">Add Selected Models</button>
             `;
         }
-        
+
         // Add selected Ollama models
         async function addSelectedOllamaModels() {
             const checkboxes = document.querySelectorAll('#ollama-models input[type="checkbox"]:checked');
-            if (checkboxes.length === 0) return alert('No models selected');
-            
+            if (checkboxes.length === 0) return showToast('No models selected', 'error');
+
             const promises = [];
             checkboxes.forEach(cb => {
                 const modelName = cb.id.replace('ol-', '');
                 const modelConfig = {
-                    model_name: `ollama-${modelName}`,
+                    model_name: `claw-bedrock/ollama-${modelName}`,
                     litellm_params: {
                         model: `ollama/${modelName}`,
                         api_base: ollamaApiBase
@@ -564,10 +705,63 @@ ${models.map(m => `
                 );
                 cb.checked = false;
             });
-            
+
             await Promise.all(promises);
-            alert(`Added ${checkboxes.length} model(s)`);
+            showToast(`Added ${checkboxes.length} model(s)`);
             loadModels();
+        }
+
+        // Store Bedrock models data
+        let bedrockModels = [];
+
+        // Load Bedrock models
+        async function loadBedrockModels() {
+            const res = await fetch('/api/providers/bedrock/models');
+            const data = await res.json();
+            bedrockModels = data.models;
+            const modelsDiv = document.getElementById('bedrock-models');
+
+            if (bedrockModels.length === 0) {
+                modelsDiv.innerHTML = '<p>No available Bedrock models (all may already be added).</p>';
+                return;
+            }
+
+            modelsDiv.innerHTML = bedrockModels.map(m =>
+                `<div>
+                    <input type="checkbox" id="br-${m.model_name}" />
+                    <label for="br-${m.model_name}">${m.model_name} (${m.litellm_params.model})</label>
+                </div>`
+            ).join('') + `
+                <button onclick="addSelectedBedrockModels()" style="margin-top: 10px;">Add Selected Models</button>
+            `;
+        }
+
+        // Add selected Bedrock models
+        async function addSelectedBedrockModels() {
+            const checkboxes = document.querySelectorAll('#bedrock-models input[type="checkbox"]:checked');
+            if (checkboxes.length === 0) return showToast('No models selected', 'error');
+
+            const promises = [];
+            checkboxes.forEach(cb => {
+                const modelName = cb.id.replace('br-', '');
+                const modelData = bedrockModels.find(m => m.model_name === modelName);
+                if (modelData) {
+                    promises.push(
+                        fetch('/api/models', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(modelData)
+                        })
+                    );
+                    cb.checked = false;
+                }
+            });
+
+            await Promise.all(promises);
+            showToast(`Added ${checkboxes.length} model(s)`);
+            loadModels();
+            // Refresh Bedrock models list
+            loadBedrockModels();
         }
         
         // Load LiteLLM logs
@@ -580,11 +774,16 @@ ${models.map(m => `
             logsDiv.scrollTop = logsDiv.scrollHeight;
         }
         
-        // Initial load
-        loadAuth();
-        loadModels();
-        setInterval(loadAuth, 30000); // Refresh auth status every 30s
-    </script>
+         // Initial load
+         loadAuth();
+         loadModels();
+         setInterval(loadAuth, 30000); // Refresh auth status every 30s
+     </script>
+     <footer style="margin-top: 40px; padding: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+         <p><strong>Persistence Note:</strong> To persist model configurations across container restarts, use a volume mount:</p>
+         <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">docker run -v $(pwd)/local_config:/app:Z -p 4000:4000 -p 8282:8282 claw-bedrock</pre>
+         <p>Or use the provided <code>docker-compose.yml</code> file.</p>
+     </footer>
 </body>
 </html>
 """
