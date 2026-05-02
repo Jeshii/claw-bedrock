@@ -7,6 +7,7 @@ import requests
 import subprocess
 from typing import Optional, List, Dict
 import re
+import subprocess as sp
 
 app = FastAPI(title="Claw Bedrock Management")
 
@@ -15,6 +16,24 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
 LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 BEDROCK_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.bedrock.yaml")
 LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
+VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
+
+
+def get_version():
+    """Get version from VERSION file or git tags."""
+    try:
+        if os.path.exists(VERSION_PATH):
+            with open(VERSION_PATH, "r") as f:
+                return f.read().strip()
+    except:
+        pass
+    try:
+        result = sp.run(["git", "describe", "--tags", "--abbrev=0"], capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except:
+        pass
+    return "0.1.0"
 
 
 @app.on_event("startup")
@@ -43,7 +62,38 @@ async def auth_status():
     if os.path.exists("/tmp/auth_url"):
         with open("/tmp/auth_url", "r") as f:
             auth_url = f.read().strip()
-    return {"auth_needed": auth_needed, "auth_url": auth_url}
+
+    openrouter_key = bool(os.environ.get("OPENROUTER_API_KEY"))
+    ollama_host = os.environ.get("OLLAMA_HOST", "")
+
+    return {
+        "auth_needed": auth_needed,
+        "auth_url": auth_url,
+        "openrouter": {"configured": openrouter_key},
+        "ollama": {"configured": bool(ollama_host), "host": ollama_host}
+    }
+
+
+@app.get("/api/version")
+async def get_version():
+    """Return the current version of claw-bedrock."""
+    return {"version": get_version()}
+
+
+@app.get("/api/dashboard")
+async def get_dashboard():
+    """Return dashboard statistics."""
+    config = load_config()
+    model_count = len(config.get("model_list", []))
+    providers = {}
+    for m in config.get("model_list", []):
+        provider = m.get("litellm_params", {}).get("model", "").split("/")[0] or "unknown"
+        providers[provider] = providers.get(provider, 0) + 1
+    return {
+        "model_count": model_count,
+        "providers": providers,
+        "version": get_version()
+    }
 
 
 @app.get("/api/logs")
@@ -301,85 +351,205 @@ def reload_litellm() -> bool:
 @app.get("/")
 async def dashboard():
     """Serve the management dashboard."""
+    version = get_version()
     html = """
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Claw Bedrock Management</title>
     <style>
-        body { font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; transition: all 0.3s; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: sans-serif; display: flex; min-height: 100vh; transition: all 0.3s; }
         body.dark { background: #1a1a1a; color: #e0e0e0; }
+
+        .sidebar { width: 250px; background: #f8f9fa; padding: 20px; display: flex; flex-direction: column; border-right: 1px solid #ddd; transition: all 0.3s; }
+        body.dark .sidebar { background: #252525; border-color: #444; }
+        .sidebar-header { margin-bottom: 30px; }
+        .sidebar-header h2 { font-size: 18px; font-weight: 600; }
+        .sidebar-header .version { font-size: 12px; color: #666; margin-top: 4px; }
+        body.dark .sidebar-header .version { color: #999; }
+        .nav { list-style: none; flex: 1; }
+        .nav li { margin-bottom: 5px; }
+        .nav a { display: block; padding: 10px 15px; text-decoration: none; color: #333; border-radius: 6px; transition: background 0.2s; cursor: pointer; }
+        body.dark .nav a { color: #e0e0e0; }
+        .nav a:hover { background: #e9ecef; }
+        body.dark .nav a:hover { background: #333; }
+        .nav a.active { background: #007bff; color: white; }
+        body.dark .nav a.active { background: #0056b3; }
+        .sidebar-footer { margin-top: auto; padding-top: 20px; border-top: 1px solid #ddd; }
+        body.dark .sidebar-footer { border-color: #444; }
+        .theme-toggle { width: 100%; padding: 10px; cursor: pointer; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 14px; transition: all 0.2s; }
+        body.dark .theme-toggle { background: #333; color: #e0e0e0; border-color: #666; }
+        .theme-toggle:hover { background: #f8f9fa; }
+        body.dark .theme-toggle:hover { background: #444; }
+
+        .main { flex: 1; padding: 30px; max-width: 1200px; overflow-y: auto; }
+        .page { display: none; }
+        .page.active { display: block; }
+        h1 { margin-bottom: 20px; font-size: 24px; }
+        h2 { margin-bottom: 15px; font-size: 20px; }
+        h3 { margin-bottom: 10px; font-size: 16px; }
+
         .section { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
         body.dark .section { border-color: #444; background: #2a2a2a; }
         .auth-needed { background: #fff3cd; border-color: #ffc107; }
         body.dark .auth-needed { background: #3d3000; border-color: #ffc107; }
-        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
-        body.dark button { background: #444; color: #e0e0e0; border: 1px solid #666; }
-        input, select { padding: 8px; margin: 5px; width: 300px; }
-        body.dark input, body.dark select { background: #333; color: #e0e0e0; border: 1px solid #666; }
+
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 14px; }
+        body.dark button { background: #444; color: #e0e0e0; border-color: #666; }
+        button:hover { background: #f8f9fa; }
+        body.dark button:hover { background: #555; }
+
+        input, select { padding: 8px; margin: 5px; width: 300px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        body.dark input, body.dark select { background: #333; color: #e0e0e0; border-color: #666; }
+
         .model-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px; }
         body.dark .model-item { border-color: #444; }
         body.dark pre { background: #2a2a2a !important; color: #e0e0e0; }
-        .theme-toggle { position: fixed; top: 20px; right: 20px; padding: 8px 16px; cursor: pointer; border-radius: 4px; }
         .model-name { cursor: pointer; flex: 1; }
         .model-name:hover { text-decoration: underline; }
         .delete-btn { padding: 2px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; }
         body.dark .delete-btn { background: #842029; }
-        #toast-container { position: fixed; top: 60px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+
+        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
         .toast { padding: 12px 20px; border-radius: 6px; color: white; font-size: 14px; animation: fadeIn 0.3s ease-in; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
         .toast-success { background: #28a745; }
         .toast-error { background: #dc3545; }
         .toast-info { background: #17a2b8; }
         .toast-warning { background: #fd7e14; }
+
+        .help-section { line-height: 1.6; }
+        .help-section pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; margin: 10px 0; }
+        body.dark .help-section pre { background: #333; }
+
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
-    <div id="toast-container"></div>
-    <button class="theme-toggle" onclick="toggleTheme()">🌙 Dark</button>
-    <h1>Claw Bedrock Management</h1>
-
-    <!-- Auth Section -->
-    <div class="section" id="auth-section">
-        <h2>AWS Authentication</h2>
-        <div id="auth-status"></div>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>claw-bedrock</h2>
+            <div class="version">v""" + version + """</div>
+        </div>
+        <ul class="nav">
+            <li><a onclick="showPage('dashboard')" class="active">Dashboard</a></li>
+            <li><a onclick="showPage('auth')">Authentication</a></li>
+            <li><a onclick="showPage('models')">Models</a></li>
+            <li><a onclick="showPage('logs')">Logs</a></li>
+            <li><a onclick="showPage('help')">Help</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <button class="theme-toggle" onclick="toggleTheme()">\ud83c\udf19 Dark</button>
+        </div>
     </div>
 
-    <!-- Models Section -->
-    <div class="section">
-        <h2>Configured Models</h2>
-        <div id="models-list"></div>
-        <button onclick="showAddModel()">Add New Model</button>
-        <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload">↻ Reload LiteLLM</button>
-    </div>
+    <div class="main">
+        <div id="toast-container"></div>
 
-    <!-- Add Model Modal -->
-    <div class="section" id="add-model-section" style="display:none;">
-        <h2>Add New Model <button onclick="closeAddModel()" style="float: right;">✕ Close</button></h2>
-        <select id="provider-select" onchange="loadProviderUI()">
-            <option value="">Select Provider</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="ollama">Ollama (Remote)</option>
-            <option value="bedrock">Bedrock (Mantle)</option>
-            <option value="huggingface">HuggingFace</option>
-            <option value="manual">Manual</option>
-        </select>
-        <div id="provider-ui"></div>
-    </div>
+        <!-- Dashboard Page -->
+        <div id="page-dashboard" class="page active">
+            <h1>Dashboard</h1>
+            <div class="section" id="dashboard-info">
+                <h2>Server Information</h2>
+                <div id="server-status">Loading...</div>
+            </div>
+        </div>
 
-    <!-- LiteLLM Logs Section -->
-    <div class="section">
-        <h2>LiteLLM Logs</h2>
-        <button onclick="loadLogs()">↻ Refresh Logs</button>
-        <select id="log-lines" onchange="loadLogs()">
-            <option value="50">Last 50 lines</option>
-            <option value="100">Last 100 lines</option>
-            <option value="200">Last 200 lines</option>
-        </select>
-        <pre id="logs-output" style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; font-size: 12px;"></pre>
+        <!-- Authentication Page -->
+        <div id="page-auth" class="page">
+            <h1>Authentication</h1>
+            <div class="section" id="auth-section">
+                <h2>AWS Authentication</h2>
+                <div id="auth-status"></div>
+            </div>
+        </div>
+
+        <!-- Models Page -->
+        <div id="page-models" class="page">
+            <h1>Models</h1>
+            <div class="section">
+                <h2>Configured Models</h2>
+                <div id="models-list"></div>
+                <button onclick="showAddModel()">Add New Model</button>
+                <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload">\u21bb Reload LiteLLM</button>
+            </div>
+            <div class="section" id="add-model-section" style="display:none;">
+                <h2>Add New Model <button onclick="closeAddModel()" style="float: right;">\u2715 Close</button></h2>
+                <select id="provider-select" onchange="loadProviderUI()">
+                    <option value="">Select Provider</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="ollama">Ollama (Remote)</option>
+                    <option value="bedrock">Bedrock (Mantle)</option>
+                    <option value="huggingface">HuggingFace</option>
+                    <option value="manual">Manual</option>
+                </select>
+                <div id="provider-ui"></div>
+            </div>
+        </div>
+
+        <!-- Logs Page -->
+        <div id="page-logs" class="page">
+            <h1>Logs</h1>
+            <div class="section">
+                <h2>LiteLLM Logs</h2>
+                <button onclick="loadLogs()">\u21bb Refresh Logs</button>
+                <select id="log-lines" onchange="loadLogs()">
+                    <option value="50">Last 50 lines</option>
+                    <option value="100">Last 100 lines</option>
+                    <option value="200">Last 200 lines</option>
+                </select>
+                <pre id="logs-output" style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; font-size: 12px;"></pre>
+            </div>
+        </div>
+
+        <!-- Help Page -->
+        <div id="page-help" class="page">
+            <h1>Help</h1>
+            <div class="section help-section">
+                <h2>Persistence</h2>
+                <p>To persist model configurations across container restarts, mount a host directory and set <code>CONFIG_DIR</code>:</p>
+                <pre>podman run -e CONFIG_DIR=/config -v ~/claw-bedrock:/config:Z -p 4000:4000 -p 8282:8282 claw-bedrock</pre>
+                <p>Or use the provided <code>docker-compose.yml</code> or a systemd <code>.container</code> file with <code>Environment=CONFIG_DIR=/config</code> and <code>Volume=%h/claw-bedrock:/config:Z</code>.</p>
+            </div>
+            <div class="section help-section">
+                <h2>Version</h2>
+                <p>Current version: <strong>""" + version + """</strong></p>
+                <p>Versioning is done via git tags. To create a new release:</p>
+                <pre>git tag -a v0.1.0 -m "Initial release"
+git push origin v0.1.0</pre>
+            </div>
+        </div>
     </div>
 
     <script>
+    function showPage(pageId) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-' + pageId).classList.add('active');
+        document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+        event.target.classList.add('active');
+        if (pageId === 'dashboard') loadDashboard();
+        if (pageId === 'models') loadModels();
+        if (pageId === 'logs') loadLogs();
+        if (pageId === 'auth') loadAuth();
+    }
+
+    async function loadDashboard() {
+        const res = await fetch('/api/dashboard');
+        const data = await res.json();
+        const serverStatus = document.getElementById('server-status');
+        let html = `<p><strong>Version:</strong> ${data.version}</p>`;
+        html += `<p><strong>Configured Models:</strong> ${data.model_count}</p>`;
+        if (Object.keys(data.providers).length > 0) {
+            html += '<p><strong>Providers:</strong></p><ul>';
+            for (const [provider, count] of Object.entries(data.providers)) {
+                html += `<li>${provider}: ${count} model(s)</li>`;
+            }
+            html += '</ul>';
+        }
+        serverStatus.innerHTML = html;
+    }
+
     function toggleTheme() {
         const body = document.body;
         const btn = document.querySelector('.theme-toggle');
@@ -433,20 +603,46 @@ async def dashboard():
     async function loadAuth() {
         const res = await fetch('/api/auth/status');
         const data = await res.json();
-        const authDiv = document.getElementById('auth-status');
+
+        let html = '';
+
+        // AWS Auth
         const authSection = document.getElementById('auth-section');
         if (data.auth_needed) {
             authSection.classList.add('auth-needed');
-            authDiv.innerHTML = `
-                <p>AWS Authentication Required</p>
-                <p>Visit this URL to authenticate: <a href="${data.auth_url}" target="_blank">${data.auth_url}</a></p>
-                <button onclick="reloadAuth()" style="margin-top: 10px;">↻ Reload Auth URL</button>
-                <p>After authenticating, the token will refresh automatically.</p>
+            html += `
+                <div style="margin-bottom: 15px;">
+                    <h3>AWS</h3>
+                    <p>Authentication Required</p>
+                    <p>Visit this URL to authenticate: <a href="${data.auth_url}" target="_blank">${data.auth_url}</a></p>
+                    <button onclick="reloadAuth()" style="margin-top: 10px;">\u21bb Reload Auth URL</button>
+                    <p>After authenticating, the token will refresh automatically.</p>
+                </div>
             `;
         } else {
             authSection.classList.remove('auth-needed');
-            authDiv.innerHTML = '<p>AWS Authentication: OK</p>';
+            html += '<div style="margin-bottom: 15px;"><h3>AWS</h3><p>\u2705 Authenticated</p></div>';
         }
+
+        // OpenRouter Auth
+        html += `<div style="margin-bottom: 15px;"><h3>OpenRouter</h3>`;
+        if (data.openrouter.configured) {
+            html += '<p>\u2705 API Key configured</p>';
+        } else {
+            html += '<p>\u274c API Key not set (OPENROUTER_API_KEY)</p>';
+        }
+        html += '</div>';
+
+        // Ollama Auth
+        html += `<div style="margin-bottom: 15px;"><h3>Ollama</h3>`;
+        if (data.ollama.configured) {
+            html += `<p>\u2705 Host configured: ${data.ollama.host}</p>`;
+        } else {
+            html += '<p>\u274c Host not set (OLLAMA_HOST)</p>';
+        }
+        html += '</div>';
+
+        document.getElementById('auth-status').innerHTML = html;
     }
 
     async function reloadAuth() {
@@ -473,7 +669,7 @@ async def dashboard():
         modelsDiv.innerHTML = Object.entries(groups).map(([provider, models]) => `
             <div class="provider-group" style="margin-bottom: 10px;">
                 <h3 onclick="toggleGroup('${provider}')" style="cursor: pointer; user-select: none;">
-                    <span id="arrow-${provider}">▶</span> ${provider} (${models.length})
+                    <span id="arrow-${provider}">\u25b6</span> ${provider} (${models.length})
                 </h3>
                 <div id="group-${provider}" style="display: none; padding-left: 20px;">
                     ${models.map(m => `
@@ -573,6 +769,36 @@ async def dashboard():
         document.getElementById('add-model-section').style.display = 'none';
         document.getElementById('provider-ui').innerHTML = '';
         document.getElementById('provider-select').value = '';
+    }
+
+    async function addManualModel() {
+        const name = document.getElementById('manual-name').value;
+        const modelPath = document.getElementById('manual-model-path').value;
+        const apiBase = document.getElementById('manual-api-base').value;
+        if (!name || !modelPath) return showToast('Model Name and Model Path are required', 'error');
+        const modelConfig = {
+            model_name: 'claw-bedrock/' + name,
+            litellm_params: { model: modelPath }
+        };
+        if (apiBase) modelConfig.litellm_params.api_base = apiBase;
+        try {
+            const res = await fetch('/api/models', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(modelConfig)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast('Model added successfully');
+                showReloadToast(data.reloaded);
+                closeAddModel();
+                loadModels();
+            } else {
+                showToast(`Error: ${data.detail || 'Failed to add model'}`, 'error');
+            }
+        } catch (e) {
+            showToast(`Error: ${e.message}`, 'error');
+        }
     }
 
     async function loadProviderUI() {
@@ -714,7 +940,7 @@ async def dashboard():
         const res = await fetch('/api/providers/bedrock/models');
         if (!res.ok) {
             const err = await res.json();
-            modelsDiv.innerHTML = `<p style="color: #dc3545;">⚠️ ${err.detail}</p>`;
+            modelsDiv.innerHTML = `<p style="color: #dc3545;">\u26a0\ufe0f ${err.detail}</p>`;
             return;
         }
         const data = await res.json();
@@ -766,15 +992,11 @@ async def dashboard():
         logsDiv.scrollTop = logsDiv.scrollHeight;
     }
 
-    loadAuth();
-    loadModels();
-    setInterval(loadAuth, 30000);
-    </script>
-    <footer style="margin-top: 40px; padding: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-        <p><strong>Persistence Note:</strong> To persist model configurations across container restarts, mount a host directory and set <code>CONFIG_DIR</code>:</p>
-        <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">podman run -e CONFIG_DIR=/config -v ~/claw-bedrock:/config:Z -p 4000:4000 -p 8282:8282 claw-bedrock</pre>
-        <p>Or use the provided <code>docker-compose.yml</code> or a systemd <code>.container</code> file with <code>Environment=CONFIG_DIR=/config</code> and <code>Volume=%h/claw-bedrock:/config:Z</code>.</p>
-    </footer>
+     loadDashboard();
+     loadAuth();
+     loadModels();
+     setInterval(loadAuth, 30000);
+     </script>
 </body>
 </html>
 """
