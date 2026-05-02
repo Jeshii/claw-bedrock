@@ -430,7 +430,7 @@ async def dashboard():
             <li><a onclick="showPage('help')">Help</a></li>
         </ul>
         <div class="sidebar-footer">
-            <button class="theme-toggle" onclick="toggleTheme()">\ud83c\udf19 Dark</button>
+            <button class="theme-toggle" onclick="toggleTheme()"></button>
         </div>
     </div>
 
@@ -540,18 +540,21 @@ git push origin v0.1.0</pre>
         serverStatus.innerHTML = html;
     }
 
+    const MOON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    const SUN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+
     function toggleTheme() {
         const body = document.body;
         const btn = document.querySelector('.theme-toggle');
         body.classList.toggle('dark');
         const isDark = body.classList.contains('dark');
-        btn.textContent = isDark ? '\u2600\ufe0f Light' : '\ud83c\udf19 Dark';
+        btn.innerHTML = isDark ? SUN_SVG + 'Light' : MOON_SVG + 'Dark';
         localStorage.setItem('theme', isDark ? 'dark' : 'light');
     }
     if (localStorage.getItem('theme') === 'dark') {
         document.body.classList.add('dark');
         document.addEventListener('DOMContentLoaded', () => {
-            document.querySelector('.theme-toggle').textContent = '\u2600\ufe0f Light';
+            document.querySelector('.theme-toggle').innerHTML = SUN_SVG + 'Light';
         });
     }
 
