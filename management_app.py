@@ -450,6 +450,10 @@ async def dashboard():
         body.dark .nav a:hover {{ background: #333; }}
         .nav a.active {{ background: #007bff; color: white; }}
         body.dark .nav a.active {{ background: #0056b3; }}
+        .main a {{ color: #444; text-decoration: underline; }}
+        body.dark .main a {{ color: #aaa; }}
+        .main a:hover {{ color: #007bff; }}
+        body.dark .main a:hover {{ color: #66b3ff; }}
         .sidebar-footer {{ margin-top: auto; padding-top: 20px; border-top: 1px solid #ddd; }}
         body.dark .sidebar-footer {{ border-color: #444; }}
         .theme-toggle {{ width: 100%; padding: 10px; cursor: pointer; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 14px; transition: all 0.2s; }}
@@ -544,10 +548,10 @@ async def dashboard():
                 <h2>Configured Models</h2>
                 <div id="models-list"></div>
                 <button onclick="showAddModel()">Add New Model</button>
-                <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload">` + RELOAD_SVG + ` Reload LiteLLM</button>
+                <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Reload LiteLLM</button>
             </div>
             <div class="section" id="add-model-section" style="display:none;">
-                <h2>Add New Model <button onclick="closeAddModel()" style="float: right;">` + CLOSE_SVG + ` Close</button></h2>
+                <h2>Add New Model <button onclick="closeAddModel()" style="float: right;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Close</button></h2>
                 <select id="provider-select" onchange="loadProviderUI()">
                     <option value="">Select Provider</option>
                     <option value="openrouter">OpenRouter</option>
@@ -558,7 +562,7 @@ async def dashboard():
                 <div id="provider-ui"></div>
             </div>
             <div class="section">
-                <p><label><input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()"> Add <code>claw-bedrock/</code> prefix to model names</label></p>
+                <label style="display: block;"><input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()"> Add <code>claw-bedrock/</code> prefix to model names</label>
             </div>
         </div>
 
@@ -567,7 +571,7 @@ async def dashboard():
             <h1>Logs</h1>
             <div class="section">
                 <h2>LiteLLM Logs</h2>
-                <button onclick="loadLogs()">` + RELOAD_SVG + ` Refresh Logs</button>
+                <button onclick="loadLogs()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Refresh Logs</button>
                 <select id="log-lines" onchange="loadLogs()">
                     <option value="50">Last 50 lines</option>
                     <option value="100">Last 100 lines</option>
@@ -715,7 +719,8 @@ git push origin v0.1.0</pre>
 
     async function loadAuth() {
         const res = await fetch('/api/auth/status');
-        window.authData = await res.json();
+        const data = await res.json();
+        window.authData = data;
 
         let html = '';
 
@@ -728,7 +733,7 @@ git push origin v0.1.0</pre>
                     <h3>AWS</h3>
                     <p>Authentication Required</p>
                     <p>Visit this URL to authenticate: <a href="${data.auth_url}" target="_blank">${data.auth_url}</a></p>
-                    <button onclick="reloadAuth()" style="margin-top: 10px;">` + RELOAD_SVG + ` Reload Auth URL</button>
+                    <button onclick="reloadAuth()" style="margin-top: 10px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Reload Auth URL</button>
                     <p>After authenticating, the token will refresh automatically.</p>
                 </div>
             `;
