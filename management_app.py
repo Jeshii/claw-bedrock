@@ -5,9 +5,7 @@ import os
 import sys
 import requests
 import subprocess
-from typing import Optional, List, Dict
-import re
-import subprocess as sp
+from typing import Optional, Dict
 
 app = FastAPI(title="Claw Bedrock Management")
 
