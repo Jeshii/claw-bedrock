@@ -35,7 +35,10 @@ A sample IAM policy is provided in [`policy.json`](./policy.json) granting the m
 
 ### Option A: Podman systemd `.container` file
 
-Prerequisite: Ensure `~/.aws` exists (run `aws configure` to set up AWS credentials).
+Prerequisites:
+- Ensure `~/.aws` exists (run `aws configure` to set up AWS credentials).
+- Optionally, create a directory for persistent config (e.g., `mkdir ~/claw-bedrock`).
+- Optionally, create a secret called `openrouter-api-key` with your OpenRouter API key if you don't want to set it as an environment variable.
 
 Create `~/.config/containers/systemd/claw-bedrock.container`:
 
@@ -58,7 +61,8 @@ PublishPort=8282:8282
 Environment=AWS_PROFILE=your-profile
 Environment=AWS_REGION=your-region
 Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
-Environment=OPENROUTER_API_KEY=<your-key>
+Environment=OPENROUTER_API_KEY=<your-key> 
+# Or you can use podman secrets: Secret=openrouter-api-key,type=env,target=OPENROUTER_API_KEY
 Environment=OLLAMA_API_BASE=http://your-ollama-host:11434
 # CONFIG_DIR defaults to /app - mount your config directory:
 Environment=CONFIG_DIR=/app

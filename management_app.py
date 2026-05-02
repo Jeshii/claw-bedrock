@@ -83,7 +83,7 @@ async def auth_status():
             auth_url = f.read().strip()
 
     openrouter_key = bool(os.environ.get("OPENROUTER_API_KEY"))
-    ollama_host = os.environ.get("OLLAMA_HOST", "")
+    ollama_host = os.environ.get("OLLAMA_API_BASE", "")
 
     return {
         "auth_needed": auth_needed,
@@ -698,7 +698,7 @@ git push origin v0.1.0</pre>
         if (data.ollama.configured) {
             html += `<p>\u2705 Host configured: ${data.ollama.host}</p>`;
         } else {
-            html += '<p>\u274c Host not set (OLLAMA_HOST)</p>';
+            html += '<p>\u274c Host not set (OLLAMA_API_BASE)</p>';
         }
         html += '</div>';
 
@@ -879,7 +879,7 @@ git push origin v0.1.0</pre>
         } else if (provider === 'ollama') {
             uiDiv.innerHTML = `
                 <h3>Ollama (Remote Instance)</h3>
-                <input id="ollama-api-base" placeholder="Ollama API Base (e.g., http://192.168.10.1:11434)" />
+                <input id="ollama-api-base" placeholder="Ollama API Base (e.g., http://192.168.1.1:11434)" />
                 <button onclick="loadOllamaModels()">Fetch Models</button>
                 <div id="ollama-models"></div>
             `;
