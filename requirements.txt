@@ -4,5 +4,6 @@ botocore[crt]
 litellm[proxy]
 fastapi
 uvicorn[standard]
+psutil
 pyyaml
 requests

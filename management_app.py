@@ -541,15 +541,6 @@ async def dashboard():
         <div id="page-models" class="page">
             <h1>Models</h1>
             <div class="section">
-                <p>
-                    <label>
-                        <input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()">
-                        Add <code>claw-bedrock/</code> prefix to model names
-                    </label>
-                    <br><small>Disable to use shorter model names (e.g., <code>qwen3-235b</code> instead of <code>claw-bedrock/qwen3-235b</code>)</small>
-                </p>
-            </div>
-            <div class="section">
                 <h2>Configured Models</h2>
                 <div id="models-list"></div>
                 <button onclick="showAddModel()">Add New Model</button>
@@ -565,6 +556,9 @@ async def dashboard():
                     <option value="manual">Manual</option>
                 </select>
                 <div id="provider-ui"></div>
+            </div>
+            <div class="section">
+                <p><label><input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()"> Add <code>claw-bedrock/</code> prefix to model names</label></p>
             </div>
         </div>
 
