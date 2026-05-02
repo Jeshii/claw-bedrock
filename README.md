@@ -235,6 +235,24 @@ Since Bedrock doesn't have a method for discovery via API, the following models 
 
 > ⚠️ Reasoning models (`claw-bedrock/gpt-oss-*`, `claw-bedrock/minimax-m2`, `claw-bedrock/minimax-m2.1`, `claw-bedrock/kimi-k2-thinking`) require sufficiently high `max_tokens` or responses may return `null` content.
 
+## Adding Models
+
+1. Access the Management UI at `http://localhost:8282`
+2. Use the UI to add models from Bedrock (Mantle), OpenRouter, Ollama, or enter manually
+3. When you add/delete models via the UI, `config.yaml` is automatically regenerated and LiteLLM reloads its config via SIGHUP — no container restart needed.
+
+**Supported Providers:**
+- **OpenRouter**: Fetches models from [OpenRouter](https://openrouter.ai/). Requires `OPENROUTER_API_KEY` (optional but recommended).
+- **Ollama**: Lists local Ollama models. Requires Ollama running at `http://<host>:11434` (set `OLLAMA_API_BASE` env var).
+- **Manual**: Custom configuration for any provider.
+
+**Environment Variables for Models:**
+| Provider | Required Variable | Notes |
+|----------|------------------|-------|
+| OpenRouter | `OPENROUTER_API_KEY` | Optional but recommended for rate limits |
+| Ollama | `OLLAMA_API_BASE` | Default: `http://localhost:11434` |
+| Bedrock | `AWS_PROFILE`, `AWS_REGION`, `BEDROCK_MANTLE_API_BASE` | Configured in `~/.aws/config` |
+
 ## Using the API
 
 The server exposes an OpenAI-compatible API on port 4000. Point any OpenAI-compatible client at `http://localhost:4000`.

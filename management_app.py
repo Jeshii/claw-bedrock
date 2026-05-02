@@ -495,10 +495,37 @@ async def dashboard():
         <div id="page-help" class="page">
             <h1>Help</h1>
             <div class="section help-section">
+                <h2>About</h2>
+                <p>A LiteLLM proxy server that exposes AWS Bedrock Mantle models and other providers via a single OpenAI-compatible API. Useful for <a href="https://github.com/ultraworkers/claw-code">claw-code</a>, <a href="https://github.com/anomalyco/opencode">opencode</a>, or other apps expecting an OpenAI response.</p>
+                <p>GitHub: <a href="https://github.com/jeshii/claw-bedrock">https://github.com/jeshii/claw-bedrock</a></p>
+            </div>
+            <div class="section help-section">
+                <h2>Endpoints</h2>
+                <p><strong>LiteLLM API:</strong> <code>http://localhost:4000</code> (OpenAI-compatible)</p>
+                <p><strong>Management UI:</strong> <code>http://localhost:8282</code> (this page)</p>
+                <p>List models: <code>curl http://localhost:4000/models</code></p>
+            </div>
+            <div class="section help-section">
+                <h2>Client Integrations</h2>
+                <p><strong>opencode.ai:</strong> Set baseURL to <code>http://localhost:4000/v1</code> in <code>~/.config/opencode/opencode.json</code></p>
+                <p><strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="http://localhost:4000/v1"</code></p>
+                <p>Model names use the <code>claw-bedrock/</code> prefix (e.g., <code>claw-bedrock/qwen3-235b</code>)</p>
+            </div>
+            <div class="section help-section">
+                <h2>Adding Models</h2>
+                <p>Use the Models page to add from Bedrock, OpenRouter, Ollama, or manually. Changes auto-reload LiteLLM via SIGHUP.</p>
+                <p><strong>Required Environment Variables:</strong></p>
+                <ul>
+                    <li>OpenRouter: <code>OPENROUTER_API_KEY</code></li>
+                    <li>Ollama: <code>OLLAMA_API_BASE</code> (default: <code>http://localhost:11434</code>)</li>
+                    <li>Bedrock: <code>AWS_PROFILE</code>, <code>AWS_REGION</code>, <code>BEDROCK_MANTLE_API_BASE</code></li>
+                </ul>
+            </div>
+            <div class="section help-section">
                 <h2>Persistence</h2>
-                <p>To persist model configurations across container restarts, mount a host directory and set <code>CONFIG_DIR</code>:</p>
-                <pre>podman run -e CONFIG_DIR=/config -v ~/claw-bedrock:/config:Z -p 4000:4000 -p 8282:8282 claw-bedrock</pre>
-                <p>Or use the provided <code>docker-compose.yml</code> or a systemd <code>.container</code> file with <code>Environment=CONFIG_DIR=/config</code> and <code>Volume=%h/claw-bedrock:/config:Z</code>.</p>
+                <p>To persist model configurations across container restarts, mount a host directory to <code>/app</code> and set <code>CONFIG_DIR</code>:</p>
+                <pre>podman run -e CONFIG_DIR=/app -v ~/claw-bedrock:/app:Z -p 4000:4000 -p 8282:8282 claw-bedrock</pre>
+                <p>Or use the provided <code>docker-compose.yml</code> or a systemd <code>.container</code> file with <code>Environment=CONFIG_DIR=/app</code> and <code>Volume=%h/claw-bedrock:/app:Z</code>.</p>
             </div>
             <div class="section help-section">
                 <h2>Version</h2>
