@@ -22,6 +22,7 @@ COPY config.bedrock.yaml .
 COPY token_refresher.py .
 COPY management_app.py .
 COPY start_container.sh .
+COPY db.py .
 
 # Create empty local config template (users should mount their own directory for persistence)
 RUN echo '{"model_list": []}' > /app/config.local.yaml
