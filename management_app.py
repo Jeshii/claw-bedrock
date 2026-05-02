@@ -450,7 +450,6 @@ async def dashboard():
         <div id="page-auth" class="page">
             <h1>Authentication</h1>
             <div class="section" id="auth-section">
-                <h2>AWS Authentication</h2>
                 <div id="auth-status"></div>
             </div>
         </div>
@@ -471,7 +470,6 @@ async def dashboard():
                     <option value="openrouter">OpenRouter</option>
                     <option value="ollama">Ollama (Remote)</option>
                     <option value="bedrock">Bedrock (Mantle)</option>
-                    <option value="huggingface">HuggingFace</option>
                     <option value="manual">Manual</option>
                 </select>
                 <div id="provider-ui"></div>

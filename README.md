@@ -1,13 +1,13 @@
 # claw-bedrock
 
-A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as an [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/) wrapper and is evolving into a general model router — exposing models from multiple providers via a single OpenAI-compatible API. Attempts to handle AWS authentication and token refresh automatically. Useful for [claw-code](https://github.com/ultraworkers/claw-code), [opencode](https://github.com/anomalyco/opencode), or other apps that expect an OpenAI response.
+A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as a way to expose [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/) models to claw-code. Now it is more of containerized LiteLLM with a webapp front end for exposing models from multiple providers via a single OpenAI-compatible API. Useful for [claw-code](https://github.com/ultraworkers/claw-code), [opencode](https://github.com/anomalyco/opencode), or other apps that expect an OpenAI response.
 
 ## How It Works
 
 1. The container starts LiteLLM with `config.yaml` and the Management UI on port 8282.
 2. The `BedrockTokenRefresher` callback checks your AWS session. If expired, it triggers `aws login --remote`, which prints a URL and waits for you to paste back the authorization code shown in the browser.
 3. Once authenticated, a short-lived Bedrock bearer token is fetched and injected as `BEDROCK_MANTLE_API_KEY`.
-4. Models are added via the Management UI (port 8282), which writes to `config.local.yaml`. Supported providers: Bedrock (Mantle), OpenRouter, Ollama, HuggingFace, and manual entry.
+4. Models are added via the Management UI (port 8282), which writes to `config.local.yaml`. Supported providers: Bedrock (Mantle), OpenRouter, Ollama, and manual entry.
 5. When you add, rename, or delete models via the UI, `config.yaml` is automatically regenerated and LiteLLM reloads its config via SIGHUP - no container restart needed.
 6. For persistence across container restarts, mount a host directory to `/app` using the `CONFIG_DIR` environment variable.
 
@@ -176,11 +176,10 @@ systemctl --user enable claw-bedrock  # autostart on boot
 
 The management UI at port 8282 will:
 - Display AWS auth URL when authentication is needed (click to open in browser)
-- Let you add models from Bedrock (Mantle), OpenRouter, remote Ollama, HuggingFace, or manual entry
+- Let you add models from Bedrock (Mantle), OpenRouter, remote Ollama, or manual entry
 - Inline model renaming (click model name to edit)
 - Delete models with confirmation
 - Toast notifications instead of browser popups
-- Replace the need for `update_model_config.py`
 
 ## SSH Usage
 
@@ -267,51 +266,41 @@ claw-code --model claw-bedrock/<modelname>
 
 ## Available Models
 
-### Bedrock Models
+### Bedrock Models Baked In
+Since Bedrock doesn't have a method for discovery via API, the following models have been baked in. If you would like another added, feel free to open an issue or PR.
 
-Prices are [AWS Bedrock on-demand standard tier](https://aws.amazon.com/bedrock/pricing/), US East/West regions. Sorted by my perception of how functional they are in claw-code (subject to change as testing continues).
-
-| Model name | Underlying model | Input ($/1M tokens) | Output ($/1M tokens) | Tested |
-|---|---|---|---|---|
-| `claw-bedrock/qwen3-next-80b` | `qwen.qwen3-next-80b-a3b-instruct` | $0.15 | $1.20 | ✅ |
-| `claw-bedrock/kimi-k2.5` | `moonshotai.kimi-k2.5` | $0.60 | $3.00 | ✅ |
-| `claw-bedrock/qwen3-235b` | `qwen.qwen3-235b-a22b-2507` | $0.23 ‡ | $0.91 ‡ | ⚠️ |
-| `claw-bedrock/mistral-large-3` | `mistral.mistral-large-3-675b-instruct` | $0.50 | $1.50 | ⚠️ |
-| `claw-bedrock/deepseek-v3.2` | `deepseek.v3.2` | $0.62 | $1.85 | ⚠️ |
-| `claw-bedrock/nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` | $0.06 | $0.24 | ⚠️ |
-| `claw-bedrock/deepseek-v3.1` | `deepseek.v3.1` | $0.60 ‡ | $1.73 ‡ | ⚠️ |
-| `claw-bedrock/ministral-14b` | `mistral.ministral-3-14b-instruct` | $0.20 | $0.20 | ⚠️ |
-| `claw-bedrock/ministral-8b` | `mistral.ministral-3-8b-instruct` | $0.15 | $0.15 | ⚠️ |
-| `claw-bedrock/ministral-3b` | `mistral.ministral-3-3b-instruct` | $0.10 | $0.10 | ⚠️ |
-| `claw-bedrock/qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` | † | † | |
-| `claw-bedrock/gpt-oss-20b` | `openai.gpt-oss-20b` | $0.06 | $0.24 | |
-| `claw-bedrock/gpt-oss-120b` | `openai.gpt-oss-120b` | $0.35 | $1.40 | |
-| `claw-bedrock/gemma-3-4b` | `google.gemma-3-4b-it` | $0.03 | $0.07 | |
-| `claw-bedrock/gemma-3-12b` | `google.gemma-3-12b-it` | $0.06 | $0.17 | |
-| `claw-bedrock/gemma-3-27b` | `google.gemma-3-27b-it` | $0.12 | $0.35 | |
-| `claw-bedrock/glm-4.7` | `zai.glm-4.7` | $0.15 | $0.60 | |
-| `claw-bedrock/glm-4.7-flash` | `zai.glm-4.7-flash` | $0.05 | $0.15 | |
-| `claw-bedrock/minimax-m2` | `minimax.minimax-m2` | $0.30 | $1.10 | |
-| `claw-bedrock/minimax-m2.1` | `minimax.minimax-m2.1` | $0.30 | $1.10 | |
-| `claw-bedrock/magistral-small` | `mistral.magistral-small-2509` | $0.10 | $0.30 | |
-| `claw-bedrock/devstral-2-123b` | `mistral.devstral-2-123b` | $0.50 | $1.50 | |
-| `claw-bedrock/kimi-k2-thinking` | `moonshotai.kimi-k2-thinking` | $0.60 | $3.00 | |
-| `claw-bedrock/nemotron-nano-9b` | `nvidia.nemotron-nano-9b-v2` | $0.04 | $0.15 | |
-| `claw-bedrock/nemotron-nano-12b` | `nvidia.nemotron-nano-12b-v2` | $0.05 | $0.20 | |
-| `claw-bedrock/qwen3-32b` | `qwen.qwen3-32b` | $0.10 | $0.40 | |
-| `claw-bedrock/qwen3-coder-30b` | `qwen.qwen3-coder-30b-a3b-instruct` | $0.10 | $0.40 | |
-| `claw-bedrock/qwen3-coder-next` | `qwen.qwen3-coder-next` | † | † | |
-
-† Not yet listed on AWS Bedrock pricing page.  
-‡ US on-demand pricing not yet listed for this region tier; price shown is AP Sydney standard.
+| Model name | Underlying model |
+|---|---|
+| `claw-bedrock/qwen3-next-80b` | `qwen.qwen3-next-80b-a3b-instruct` |
+| `claw-bedrock/kimi-k2.5` | `moonshotai.kimi-k2.5` |
+| `claw-bedrock/qwen3-235b` | `qwen.qwen3-235b-a22b-2507` |
+| `claw-bedrock/mistral-large-3` | `mistral.mistral-large-3-675b-instruct` |
+| `claw-bedrock/deepseek-v3.2` | `deepseek.v3.2` |
+| `claw-bedrock/nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` |
+| `claw-bedrock/deepseek-v3.1` | `deepseek.v3.1` |
+| `claw-bedrock/ministral-14b` | `mistral.ministral-3-14b-instruct` |
+| `claw-bedrock/ministral-8b` | `mistral.ministral-3-8b-instruct` |
+| `claw-bedrock/ministral-3b` | `mistral.ministral-3-3b-instruct` |
+| `claw-bedrock/qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` |
+| `claw-bedrock/gpt-oss-20b` | `openai.gpt-oss-20b` |
+| `claw-bedrock/gpt-oss-120b` | `openai.gpt-oss-120b` |
+| `claw-bedrock/gemma-3-4b` | `google.gemma-3-4b-it` |
+| `claw-bedrock/gemma-3-12b` | `google.gemma-3-12b-it` |
+| `claw-bedrock/gemma-3-27b` | `google.gemma-3-27b-it` |
+| `claw-bedrock/glm-4.7` | `zai.glm-4.7` |
+| `claw-bedrock/glm-4.7-flash` | `zai.glm-4.7-flash` |
+| `claw-bedrock/minimax-m2` | `minimax.minimax-m2` |
+| `claw-bedrock/minimax-m2.1` | `minimax.minimax-m2.1` |
+| `claw-bedrock/magistral-small` | `mistral.magistral-small-2509` |
+| `claw-bedrock/devstral-2-123b` | `mistral.devstral-2-123b` |
+| `claw-bedrock/kimi-k2-thinking` | `moonshotai.kimi-k2-thinking` |
+| `claw-bedrock/nemotron-nano-9b` | `nvidia.nemotron-nano-9b-v2` |
+| `claw-bedrock/nemotron-nano-12b` | `nvidia.nemotron-nano-12b-v2` |
+| `claw-bedrock/qwen3-32b` | `qwen.qwen3-32b` |
+| `claw-bedrock/qwen3-coder-30b` | `qwen.qwen3-coder-30b-a3b-instruct` |
+| `claw-bedrock/qwen3-coder-next` | `qwen.qwen3-coder-next` |
 
 > ⚠️ Reasoning models (`claw-bedrock/gpt-oss-*`, `claw-bedrock/minimax-m2`, `claw-bedrock/minimax-m2.1`, `claw-bedrock/kimi-k2-thinking`) require sufficiently high `max_tokens` or responses may return `null` content.
-
-### Non-Bedrock Models
-
-| Model name | Provider | Underlying model | Context Window | Max Output | Requires | Tested |
-|---|---|---|---|---|---|---|
-| `claw-bedrock/elephant-alpha` | [OpenRouter](https://openrouter.ai/) | `openrouter/elephant-alpha` | 256K | 32K | `OPENROUTER_API_KEY` | ⚠️ |
 
 ## Using the API
 
@@ -329,21 +318,3 @@ curl http://localhost:4000/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `config.yaml` | LiteLLM proxy config — generated by merging `config.local.yaml` |
-| `config.bedrock.yaml` | Bedrock Mantle model template — used by Management UI to add models |
-| `config.local.yaml` | User-added models (all providers) — mount directory for persistence |
-| `management_app.py` | Web management UI for auth and model configuration |
-| `start_container.sh` | Container entrypoint — handles config init, PID writing, CONFIG_DIR |
-| `Containerfile` | Podman/Docker image definition |
-| `docker-compose.yml` | Container orchestration example with volume mount for persistence |
-| `token_refresher.py` | LiteLLM callback — handles login and token auto-refresh |
-| `update_model_config.py` | Interactive script to add models (native use only, deprecated) |
-| `MODEL_UPDATE_GUIDE.md` | Guide for using `update_model_config.py` |
-| `requirements.txt` | Python dependencies for container builds |
-| `policy.json` | Sample IAM policy for Bedrock Mantle access |
-| `Pipfile` | Python dependencies (native use) |

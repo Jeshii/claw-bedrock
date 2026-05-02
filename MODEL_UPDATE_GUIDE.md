@@ -30,14 +30,7 @@ Connects to a locally running [Ollama](https://ollama.com/) instance to list ava
 - Ollama running at `http://<local_host_or_IP>:11434`
 - Models pulled locally (`ollama pull <model_name>`)
 
-### 3. HuggingFace (Text-Generation-Inference)
-Provides a curated list of popular HuggingFace models that can be served via TGI.
-
-**What You Need:**
-- `HUGGINGFACE_API_KEY` environment variable
-- `HF_INFERENCE_API_BASE` environment variable (URL of your TGI endpoint)
-
-### 4. Manual / Custom
+### 3. Manual / Custom
 Allows you to fully customize the model configuration for any provider.
 
 ## Installation
@@ -145,12 +138,6 @@ After adding a model, ensure you have the required environment variables set:
 ### OpenRouter
 ```bash
 export OPENROUTER_API_KEY="your-key-here"
-```
-
-### HuggingFace
-```bash
-export HUGGINGFACE_API_KEY="your-key-here"
-export HF_INFERENCE_API_BASE="https://your-endpoint-url"
 ```
 
 ### Ollama
