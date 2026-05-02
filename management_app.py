@@ -5,6 +5,7 @@ import os
 import sys
 import requests
 import subprocess
+import psutil
 from typing import Optional, Dict
 
 app = FastAPI(title="Claw Bedrock Management")
@@ -145,7 +146,7 @@ async def reload_models():
     reloaded = reload_litellm()
     if reloaded:
         return {"status": "success", "message": "LiteLLM reloaded"}
-    raise HTTPException(500, "LiteLLM reload failed \u2014 PID file not found or process unreachable. Try restarting the container.")
+    return {"status": "warning", "message": "LiteLLM reload failed - PID file not found or process unreachable. Try restarting the container.", "reloaded": False}
 
 
 @app.get("/api/providers/openrouter/models")
@@ -195,15 +196,25 @@ async def fetch_openrouter_models(include_free: bool = True, search: Optional[st
 
 
 @app.get("/api/providers/ollama/models")
-async def fetch_ollama_models(api_base: str = Query(...)):
+async def fetch_ollama_models(api_base: Optional[str] = Query(None)):
     """Fetch models from a remote Ollama instance."""
+    api_base = api_base or os.environ.get("OLLAMA_API_BASE", "")
+    if not api_base:
+        raise HTTPException(400, "No Ollama API base provided. Set OLLAMA_API_BASE or provide api_base parameter.")
+
     try:
         resp = requests.get(f"{api_base.rstrip('/')}/api/tags", timeout=10)
         resp.raise_for_status()
         models = resp.json().get("models", [])
         return {"models": sorted(models, key=lambda m: m.get("name", "").lower())}
+    except requests.exceptions.ConnectionError as e:
+        raise HTTPException(400, f"Cannot connect to Ollama at {api_base}. Check the address and ensure Ollama is running.") from e
+    except requests.exceptions.Timeout as e:
+        raise HTTPException(400, f"Connection to Ollama at {api_base} timed out. The server may be slow or unreachable.") from e
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(400, f"Error communicating with Ollama at {api_base}: {str(e)}") from e
     except Exception as e:
-        raise HTTPException(500, f"Failed to fetch Ollama models: {str(e)}")
+        raise HTTPException(400, f"Failed to fetch Ollama models: {str(e)}") from e
 
 
 @app.get("/api/providers/bedrock/models")
@@ -352,16 +363,55 @@ def merge_configs():
 def reload_litellm() -> bool:
     """Reload LiteLLM config by sending SIGHUP to the process. Returns True on success."""
     pid_file = "/tmp/litellm.pid"
-    if not os.path.exists(pid_file):
-        print("[Reload] PID file not found, skipping reload")
+
+    # Read PID from file
+    pid = None
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file, "r") as f:
+                pid = int(f.read().strip())
+        except (ValueError, IOError) as e:
+            print(f"[Reload] Error reading PID file: {e}", file=sys.stderr)
+            pid = None
+
+    # Verify PID is running, or find LiteLLM process using psutil
+    if pid is not None:
+        try:
+            os.kill(pid, 0)  # Check if process exists (signal 0 doesn't actually send a signal)
+        except OSError:
+            print(f"[Reload] PID {pid} is stale, searching for LiteLLM process...")
+            pid = None
+
+    if pid is None:
+        # Try to find LiteLLM process using psutil
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                cmdline = proc.info['cmdline']
+                if cmdline and any('litellm' in arg.lower() for arg in cmdline):
+                    pid = proc.info['pid']
+                    print(f"[Reload] Found LiteLLM process: PID {pid}")
+                    # Update PID file
+                    with open(pid_file, "w") as f:
+                        f.write(str(pid))
+                    break
+        except Exception as e:
+            print(f"[Reload] Error searching for LiteLLM process: {e}", file=sys.stderr)
+
+    if pid is None:
+        print("[Reload] No LiteLLM process found, skipping reload")
         return False
 
+    # Send SIGHUP to reload config
     try:
-        with open(pid_file, "r") as f:
-            pid = int(f.read().strip())
         os.kill(pid, 1)  # SIGHUP = signal 1
         print(f"[Reload] Sent SIGHUP to LiteLLM (PID {pid})")
         return True
+    except OSError as e:
+        if e.errno == 3:  # No such process
+            print(f"[Reload] Process {pid} no longer exists", file=sys.stderr)
+        else:
+            print(f"[Reload] Error reloading LiteLLM: {e}", file=sys.stderr)
+        return False
     except Exception as e:
         print(f"[Reload] Error reloading LiteLLM: {e}", file=sys.stderr)
         return False
@@ -503,10 +553,10 @@ async def dashboard():
                 <h2>Configured Models</h2>
                 <div id="models-list"></div>
                 <button onclick="showAddModel()">Add New Model</button>
-                <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload">\u21bb Reload LiteLLM</button>
+                <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload">` + RELOAD_SVG + ` Reload LiteLLM</button>
             </div>
             <div class="section" id="add-model-section" style="display:none;">
-                <h2>Add New Model <button onclick="closeAddModel()" style="float: right;">\u2715 Close</button></h2>
+                <h2>Add New Model <button onclick="closeAddModel()" style="float: right;">` + CLOSE_SVG + ` Close</button></h2>
                 <select id="provider-select" onchange="loadProviderUI()">
                     <option value="">Select Provider</option>
                     <option value="openrouter">OpenRouter</option>
@@ -523,7 +573,7 @@ async def dashboard():
             <h1>Logs</h1>
             <div class="section">
                 <h2>LiteLLM Logs</h2>
-                <button onclick="loadLogs()">\u21bb Refresh Logs</button>
+                <button onclick="loadLogs()">` + RELOAD_SVG + ` Refresh Logs</button>
                 <select id="log-lines" onchange="loadLogs()">
                     <option value="50">Last 50 lines</option>
                     <option value="100">Last 100 lines</option>
@@ -580,6 +630,15 @@ git push origin v0.1.0</pre>
     </div>
 
     <script>
+    const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+    const X_CIRCLE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+    const RELOAD_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>';
+    const CHEVRON_RIGHT_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle"><path d="M9 18l6-6-6-6"/></svg>';
+    const CHEVRON_DOWN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle"><path d="M6 9l6 6 6-6"/></svg>';
+    const CLOSE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    const FREE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/></svg>';
+    const WARNING_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
     function showPage(pageId) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById('page-' + pageId).classList.add('active');
@@ -642,18 +701,18 @@ git push origin v0.1.0</pre>
         if (reloaded) {
             showToast('LiteLLM reloaded', 'info');
         } else {
-            showToast('LiteLLM reload failed \u2014 try restarting the container', 'warning', 6000);
+            showToast('LiteLLM reload failed - try restarting the container', 'warning', 6000);
         }
     }
 
     async function reloadLiteLLM() {
         try {
             const res = await fetch('/api/models/reload', { method: 'POST' });
-            if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'success') {
                 showToast('LiteLLM reloaded', 'info');
             } else {
-                const err = await res.json();
-                showToast(`Reload failed: ${err.detail || 'unknown error'}`, 'warning', 6000);
+                showToast(`Reload failed: ${data.message || 'unknown error'}`, 'warning', 6000);
             }
         } catch (e) {
             showToast(`Reload error: ${e.message}`, 'error');
@@ -662,7 +721,7 @@ git push origin v0.1.0</pre>
 
     async function loadAuth() {
         const res = await fetch('/api/auth/status');
-        const data = await res.json();
+        window.authData = await res.json();
 
         let html = '';
 
@@ -675,30 +734,30 @@ git push origin v0.1.0</pre>
                     <h3>AWS</h3>
                     <p>Authentication Required</p>
                     <p>Visit this URL to authenticate: <a href="${data.auth_url}" target="_blank">${data.auth_url}</a></p>
-                    <button onclick="reloadAuth()" style="margin-top: 10px;">\u21bb Reload Auth URL</button>
+                    <button onclick="reloadAuth()" style="margin-top: 10px;">` + RELOAD_SVG + ` Reload Auth URL</button>
                     <p>After authenticating, the token will refresh automatically.</p>
                 </div>
             `;
         } else {
             authSection.classList.remove('auth-needed');
-            html += '<div style="margin-bottom: 15px;"><h3>AWS</h3><p>\u2705 Authenticated</p></div>';
+            html += '<div style="margin-bottom: 15px;"><h3>AWS</h3><p>' + CHECK_SVG + ' Authenticated</p></div>';
         }
 
         // OpenRouter Auth
         html += `<div style="margin-bottom: 15px;"><h3>OpenRouter</h3>`;
         if (data.openrouter.configured) {
-            html += '<p>\u2705 API Key configured</p>';
+            html += '<p>' + CHECK_SVG + ' API Key configured</p>';
         } else {
-            html += '<p>\u274c API Key not set (OPENROUTER_API_KEY)</p>';
+            html += '<p>' + X_CIRCLE_SVG + ' API Key not set (OPENROUTER_API_KEY)</p>';
         }
         html += '</div>';
 
         // Ollama Auth
         html += `<div style="margin-bottom: 15px;"><h3>Ollama</h3>`;
         if (data.ollama.configured) {
-            html += `<p>\u2705 Host configured: ${data.ollama.host}</p>`;
+            html += `<p>` + CHECK_SVG + ` Host configured: ${data.ollama.host}</p>`;
         } else {
-            html += '<p>\u274c Host not set (OLLAMA_API_BASE)</p>';
+            html += '<p>' + X_CIRCLE_SVG + ' Host not set (OLLAMA_API_BASE)</p>';
         }
         html += '</div>';
 
@@ -728,9 +787,9 @@ git push origin v0.1.0</pre>
         });
         modelsDiv.innerHTML = Object.entries(groups).map(([provider, models]) => `
             <div class="provider-group" style="margin-bottom: 10px;">
-                <h3 onclick="toggleGroup('${provider}')" style="cursor: pointer; user-select: none;">
-                    <span id="arrow-${provider}">\u25b6</span> ${provider} (${models.length})
-                </h3>
+                    <h3 onclick="toggleGroup('${provider}')" style="cursor: pointer; user-select: none;">
+                        <span id="arrow-${provider}">` + CHEVRON_RIGHT_SVG + `</span> ${provider} (${models.length})
+                    </h3>
                 <div id="group-${provider}" style="display: none; padding-left: 20px;">
                     ${models.map(m => `
                     <div class="model-item" data-model-name="${m.model_name}">
@@ -748,10 +807,10 @@ git push origin v0.1.0</pre>
         const arrow = document.getElementById(`arrow-${provider}`);
         if (group.style.display === 'none') {
             group.style.display = 'block';
-            arrow.textContent = '\u25bc';
+            arrow.innerHTML = CHEVRON_DOWN_SVG;
         } else {
             group.style.display = 'none';
-            arrow.textContent = '\u25b6';
+            arrow.innerHTML = CHEVRON_RIGHT_SVG;
         }
     }
 
@@ -883,6 +942,9 @@ git push origin v0.1.0</pre>
                 <button onclick="loadOllamaModels()">Fetch Models</button>
                 <div id="ollama-models"></div>
             `;
+            if (window.authData && window.authData.ollama && window.authData.ollama.host) {
+                document.getElementById('ollama-api-base').value = window.authData.ollama.host;
+            }
         } else if (provider === 'bedrock') {
             uiDiv.innerHTML = `
                 <h3>Bedrock (Mantle) Models</h3>
@@ -913,10 +975,10 @@ git push origin v0.1.0</pre>
         const modelsDiv = document.getElementById('openrouter-models');
         modelsDiv.innerHTML = data.models.map(m => {
             const isFree = parseFloat(m.pricing && m.pricing.prompt || '1') === 0;
-            return `<div>
-                <input type="checkbox" id="or-${m.id}" />
-                <label for="or-${m.id}">${m.name} (${m.id}) ${isFree ? '\ud83c\udd93' : ''}</label>
-            </div>`;
+                return `<div>
+                    <input type="checkbox" id="or-${m.id}" />
+                    <label for="or-${m.id}">${m.name} (${m.id}) ${isFree ? FREE_SVG : ''}</label>
+                </div>`;
         }).join('') + `<button onclick="addSelectedOpenRouterModels()" style="margin-top: 10px;">Add Selected Models</button>`;
     }
 
@@ -952,10 +1014,17 @@ git push origin v0.1.0</pre>
 
     let ollamaModels = [], ollamaApiBase = '';
     async function loadOllamaModels() {
-        const apiBase = document.getElementById('ollama-api-base').value;
+        const apiBaseInput = document.getElementById('ollama-api-base');
+        const apiBase = apiBaseInput.value || (window.authData && window.authData.ollama && window.authData.ollama.host) || '';
         if (!apiBase) return showToast('Enter Ollama API Base', 'error');
+        apiBaseInput.value = apiBase;
         ollamaApiBase = apiBase;
         const res = await fetch(`/api/providers/ollama/models?api_base=${encodeURIComponent(apiBase)}`);
+        if (!res.ok) {
+            const err = await res.json();
+            showToast(`Error: ${err.detail || 'Failed to fetch models'}`, 'error');
+            return;
+        }
         const data = await res.json();
         ollamaModels = data.models;
         const modelsDiv = document.getElementById('ollama-models');
@@ -1000,7 +1069,7 @@ git push origin v0.1.0</pre>
         const res = await fetch('/api/providers/bedrock/models');
         if (!res.ok) {
             const err = await res.json();
-            modelsDiv.innerHTML = `<p style="color: #dc3545;">\u26a0\ufe0f ${err.detail}</p>`;
+            modelsDiv.innerHTML = `<p style="color: #dc3545;">` + WARNING_SVG + ` ${err.detail}</p>`;
             return;
         }
         const data = await res.json();
@@ -1028,7 +1097,7 @@ git push origin v0.1.0</pre>
             if (modelData) {
                 const modelToAdd = { ...modelData };
                 if (!window.USE_PREFIX) {
-                    modelToAdd.model_name = modelToAdd.model_name.replace(/^claw-bedrock\//, '');
+                    modelToAdd.model_name = modelToAdd.model_name.replace(/^claw-bedrock\\//, '');
                 }
                 promises.push(
                     fetch('/api/models', {
