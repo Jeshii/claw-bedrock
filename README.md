@@ -20,50 +20,11 @@ A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as a way to
 
 ## Setup
 
-### 1. Clone and install dependencies
-
-```bash
-git clone https://github.com/Jeshii/claw-bedrock.git
-cd claw-bedrock
-pipenv install
-```
-
-### 2. Configure environment variables
-
-Add the following to your `~/.zshrc` (or `~/.bashrc`):
-
-```bash
-# Prevent LiteLLM from routing to Anthropic instead of Bedrock
-unset ANTHROPIC_API_KEY
-unset ANTHROPIC_BASE_URL
-
-# AWS — used by token_refresher.py to authenticate and fetch a bearer token
-export AWS_PROFILE="<your-aws-profile-name>"
-export AWS_REGION="<your-aws-region>"          # e.g. ap-northeast-1
-export BEDROCK_MANTLE_API_BASE="https://bedrock-mantle.<your-aws-region>.api.aws/v1"
-# Note: BEDROCK_MANTLE_API_KEY is set automatically at runtime — do not set it here
-
-# Client-side — point any OpenAI-compatible tool at the local proxy
-export OPENAI_API_KEY="dummy"                  # LiteLLM requires a non-empty value
-export OPENAI_BASE_URL="http://127.0.0.1:4000/v1"
-
-# Optional: OpenRouter (required for non-Bedrock models like elephant-alpha)
-export OPENROUTER_API_KEY="<your-openrouter-api-key>"
-```
-
-Then reload your shell:
-
-```bash
-source ~/.zshrc
-```
-
-> **`OPENAI_API_KEY` / `OPENAI_BASE_URL`** — Setting these globally means any OpenAI-compatible client (Cursor, Continue, shell scripts using the `openai` SDK) will automatically use the local proxy without additional configuration.
-
-### 3. Configure your AWS profile
+### 1. Configure your AWS profile
 
 Ensure `~/.aws/config` has a profile matching the `AWS_PROFILE` value you set above. Your Bedrock Mantle account provider will supply the exact profile configuration.
 
-### 4. (Optional) Attach the IAM policy
+### 2. (Optional) Attach the IAM policy
 
 A sample IAM policy is provided in [`policy.json`](./policy.json) granting the minimum permissions required:
 - Short-term bearer token usage for Bedrock Mantle
@@ -72,32 +33,7 @@ A sample IAM policy is provided in [`policy.json`](./policy.json) granting the m
 
 ## Running the Server
 
-### Native (pipenv)
-```bash
-# Start the management UI (includes LiteLLM proxy)
-pipenv run uvicorn management_app:app --host 0.0.0.0 --port 8282
-
-# Or start LiteLLM directly (models managed via config.local.yaml)
-pipenv run litellm --config config.yaml --port 4000
-```
-
-Access the Management UI at `http://localhost:8282` to add/manage models.
-
-If your AWS session has expired, you will see:
-
-```
-[TokenRefresher] AWS session expired. Launching login for profile '<your-profile>'...
-A URL will be printed — open it in any browser, then paste the authorization code back into this terminal.
-
-Using a browser, open: https://device.sso.<region>.amazonaws.com/?user_code=XXXX-XXXX
-Authorization code: _
-```
-
-Open the URL in any browser, approve the login, copy the code shown, paste it back into the terminal, and the server continues automatically.
-
-### Container (Podman/Docker)
-
-**Option A: Podman systemd `.container` file**
+### Option A: Podman systemd `.container` file
 
 Prerequisite: Ensure `~/.aws` exists (run `aws configure` to set up AWS credentials).
 
@@ -122,7 +58,7 @@ PublishPort=8282:8282
 Environment=AWS_PROFILE=your-profile
 Environment=AWS_REGION=your-region
 Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
-Environment=OPENROUTER_API_KEY=your-key
+Environment=OPENROUTER_API_KEY=<your-key>
 Environment=OLLAMA_API_BASE=http://your-ollama-host:11434
 # CONFIG_DIR defaults to /app - mount your config directory:
 Environment=CONFIG_DIR=/app
@@ -142,7 +78,7 @@ systemctl --user start claw-bedrock
 systemctl --user enable claw-bedrock  # autostart on boot
 ```
 
-**Option B: Compose**
+### Option B: Compose
 
 1. **Start Podman (macOS only):**
    ```bash
@@ -181,9 +117,6 @@ The management UI at port 8282 will:
 - Delete models with confirmation
 - Toast notifications instead of browser popups
 
-## SSH Usage
-
-This setup works fully over SSH. `aws login --remote` never opens a browser on the remote machine — it prints a URL you open locally, then prompts for a code you paste back. No display forwarding (`-X`/`-Y`) required.
 
 ## Client Integrations
 

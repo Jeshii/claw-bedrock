@@ -12,7 +12,7 @@ from litellm.integrations.custom_logger import CustomLogger
 
 _LOGIN_REQUIRED_MSG = (
     "AWS authentication required — the LiteLLM server needs to be restarted "
-    "and logged in. Run './start.sh' in the repo directory to re-authenticate."
+    "and logged in."
 )
 
 class BedrockTokenRefresher(CustomLogger):
@@ -42,7 +42,7 @@ class BedrockTokenRefresher(CustomLogger):
             time.sleep(self.EXIT_GRACE_SECONDS)
             print(
                 f"[TokenRefresher] Exiting with code {self.EXIT_CODE_LOGIN_REQUIRED} "
-                f"— AWS login required. Restart start.sh to re-authenticate.",
+                f"— AWS login required.",
                 file=sys.stderr,
             )
             os._exit(self.EXIT_CODE_LOGIN_REQUIRED)
