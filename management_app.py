@@ -44,6 +44,35 @@ def save_local_config(config: Dict):
         yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
 
+def load_local_config() -> Dict:
+    """Load local config, creating with defaults if needed."""
+    if os.path.exists(LOCAL_CONFIG_PATH):
+        with open(LOCAL_CONFIG_PATH, "r") as f:
+            config = yaml.safe_load(f) or {}
+    else:
+        config = {}
+    # Set defaults
+    if 'use_prefix' not in config:
+        config['use_prefix'] = True
+    return config
+
+
+@app.get("/api/settings")
+async def get_settings():
+    """Get current settings."""
+    config = load_local_config()
+    return {"use_prefix": config.get('use_prefix', True)}
+
+
+@app.post("/api/settings")
+async def update_settings(use_prefix: bool = Query(...)):
+    """Update settings."""
+    config = load_local_config()
+    config['use_prefix'] = use_prefix
+    save_local_config(config)
+    return {"success": True, "use_prefix": use_prefix}
+
+
 @app.get("/api/auth/status")
 async def auth_status():
     """Check if AWS auth is needed and get auth URL."""
@@ -342,14 +371,18 @@ def reload_litellm() -> bool:
 async def dashboard():
     """Serve the management dashboard."""
     version = get_version()
-    html = """
+    config = load_local_config()
+    use_prefix = config.get('use_prefix', True)
+    html = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Claw Bedrock Management</title>
+    <script>window.USE_PREFIX = {str(use_prefix).lower()};</script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        ul { padding-left: 20px; }
         body { font-family: sans-serif; display: flex; min-height: 100vh; transition: all 0.3s; }
         body.dark { background: #1a1a1a; color: #e0e0e0; }
 
@@ -458,6 +491,15 @@ async def dashboard():
         <div id="page-models" class="page">
             <h1>Models</h1>
             <div class="section">
+                <p>
+                    <label>
+                        <input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()">
+                        Add <code>claw-bedrock/</code> prefix to model names
+                    </label>
+                    <br><small>Disable to use shorter model names (e.g., <code>qwen3-235b</code> instead of <code>claw-bedrock/qwen3-235b</code>)</small>
+                </p>
+            </div>
+            <div class="section">
                 <h2>Configured Models</h2>
                 <div id="models-list"></div>
                 <button onclick="showAddModel()">Add New Model</button>
@@ -501,14 +543,14 @@ async def dashboard():
             </div>
             <div class="section help-section">
                 <h2>Endpoints</h2>
-                <p><strong>LiteLLM API:</strong> <code>http://localhost:4000</code> (OpenAI-compatible)</p>
-                <p><strong>Management UI:</strong> <code>http://localhost:8282</code> (this page)</p>
-                <p>List models: <code>curl http://localhost:4000/models</code></p>
+                <p><strong>LiteLLM API:</strong> <code id="litellm-url">detecting...</code> (OpenAI-compatible)</p>
+                <p><strong>Management UI:</strong> <code id="mgmt-url">detecting...</code> (this page)</p>
+                <p><strong>List models:</strong> <code id="models-curl">detecting...</code></p>
             </div>
             <div class="section help-section">
                 <h2>Client Integrations</h2>
-                <p><strong>opencode.ai:</strong> Set baseURL to <code>http://localhost:4000/v1</code> in <code>~/.config/opencode/opencode.json</code></p>
-                <p><strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="http://localhost:4000/v1"</code></p>
+                <p><strong>opencode.ai:</strong> Set baseURL to <code id="opencode-url">detecting...</code> in <code>~/.config/opencode/opencode.json</code></p>
+                <p><strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</code></p>
                 <p>Model names use the <code>claw-bedrock/</code> prefix (e.g., <code>claw-bedrock/qwen3-235b</code>)</p>
             </div>
             <div class="section help-section">
@@ -795,7 +837,7 @@ git push origin v0.1.0</pre>
         const apiBase = document.getElementById('manual-api-base').value;
         if (!name || !modelPath) return showToast('Model Name and Model Path are required', 'error');
         const modelConfig = {
-            model_name: 'claw-bedrock/' + name,
+            model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + name,
             litellm_params: { model: modelPath }
         };
         if (apiBase) modelConfig.litellm_params.api_base = apiBase;
@@ -889,7 +931,7 @@ git push origin v0.1.0</pre>
             if (modelData) {
                 const safeName = modelData.id.replace(/[/]/g, '-');
                 const modelConfig = {
-                    model_name: 'claw-bedrock/' + safeName,
+                    model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + safeName,
                     litellm_params: { model: 'openrouter/' + modelData.id }
                 };
                 promises.push(
@@ -933,7 +975,7 @@ git push origin v0.1.0</pre>
         checkboxes.forEach(cb => {
             const modelName = cb.id.replace('ol-', '');
             const modelConfig = {
-                model_name: 'claw-bedrock/ollama-' + modelName,
+                model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + 'ollama-' + modelName,
                 litellm_params: { model: 'ollama/' + modelName, api_base: ollamaApiBase }
             };
             promises.push(
@@ -984,11 +1026,15 @@ git push origin v0.1.0</pre>
             const modelName = cb.id.replace('br-', '');
             const modelData = bedrockModels.find(m => m.model_name === modelName);
             if (modelData) {
+                const modelToAdd = { ...modelData };
+                if (!window.USE_PREFIX) {
+                    modelToAdd.model_name = modelToAdd.model_name.replace(/^claw-bedrock\//, '');
+                }
                 promises.push(
                     fetch('/api/models', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(modelData)
+                        body: JSON.stringify(modelToAdd)
                     }).then(r => r.json()).then(d => { lastReloaded = d.reloaded; })
                 );
                 cb.checked = false;
@@ -1014,6 +1060,38 @@ git push origin v0.1.0</pre>
      loadAuth();
      loadModels();
      setInterval(loadAuth, 30000);
+
+     // Initialize prefix toggle
+     const prefixToggle = document.getElementById('use-prefix-toggle');
+     if (prefixToggle) {
+         prefixToggle.checked = window.USE_PREFIX !== false;
+     }
+
+     async function togglePrefix() {
+         const toggle = document.getElementById('use-prefix-toggle');
+         const usePrefix = toggle.checked;
+         const res = await fetch(`/api/settings?use_prefix=${usePrefix}`, { method: 'POST' });
+         if (res.ok) {
+             window.USE_PREFIX = usePrefix;
+             showToast(`Model prefix ${usePrefix ? 'enabled' : 'disabled'}`);
+         } else {
+             showToast('Failed to update setting', 'error');
+             toggle.checked = !usePrefix;
+         }
+     }
+
+     // Detect and update URLs based on actual access location
+     (function() {
+         const mgmtUrl = window.location.origin;
+         const apiHost = window.location.hostname;
+         const apiUrl = `${window.location.protocol}//${apiHost}:4000`;
+         const apiUrlV1 = `${apiUrl}/v1`;
+         document.getElementById('mgmt-url').textContent = mgmtUrl;
+         document.getElementById('litellm-url').textContent = apiUrl;
+         document.getElementById('models-curl').textContent = `curl ${apiUrl}/models`;
+         document.getElementById('opencode-url').textContent = apiUrlV1;
+         document.getElementById('clawcode-url').textContent = apiUrlV1;
+     })();
      </script>
 </body>
 </html>
