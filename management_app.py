@@ -8,11 +8,12 @@ import subprocess
 import psutil
 from typing import Optional, Dict
 
+import db
+
 app = FastAPI(title="Claw Bedrock Management")
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
-LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 BEDROCK_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.bedrock.yaml")
 LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
 VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
@@ -29,11 +30,19 @@ def get_version():
 
 @app.on_event("startup")
 async def startup_event():
+    db._migrate_yaml_to_db()
     merge_configs()
     print(f"[Startup] Merged configs on startup (CONFIG_DIR={CONFIG_DIR})")
 
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    db.close_db()
+    print("[Shutdown] Database closed")
+
+
 def load_config() -> Dict:
+    """Load merged config for LiteLLM (reads from generated config.yaml)."""
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, "r") as f:
             return yaml.safe_load(f) or {"model_list": []}
@@ -41,20 +50,17 @@ def load_config() -> Dict:
 
 
 def save_local_config(config: Dict):
-    with open(LOCAL_CONFIG_PATH, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    """Legacy function - no longer writes YAML, settings saved via db module."""
+    pass
 
 
 def load_local_config() -> Dict:
-    """Load local config, creating with defaults if needed."""
-    if os.path.exists(LOCAL_CONFIG_PATH):
-        with open(LOCAL_CONFIG_PATH, "r") as f:
-            config = yaml.safe_load(f) or {}
-    else:
-        config = {}
+    """Load local config from TinyDB, creating with defaults if needed."""
+    config = db.get_settings()
     # Set defaults
     if 'use_prefix' not in config:
         config['use_prefix'] = True
+        db.set_setting('use_prefix', True)
     return config
 
 
@@ -68,9 +74,7 @@ async def get_settings():
 @app.post("/api/settings")
 async def update_settings(use_prefix: bool = Query(...)):
     """Update settings."""
-    config = load_local_config()
-    config['use_prefix'] = use_prefix
-    save_local_config(config)
+    db.set_setting('use_prefix', use_prefix)
     return {"success": True, "use_prefix": use_prefix}
 
 
@@ -103,10 +107,10 @@ async def version_endpoint():
 @app.get("/api/dashboard")
 async def get_dashboard():
     """Return dashboard statistics."""
-    config = load_config()
-    model_count = len(config.get("model_list", []))
+    models = db.get_all_models()
+    model_count = len(models)
     providers = {}
-    for m in config.get("model_list", []):
+    for m in models:
         provider = m.get("litellm_params", {}).get("model", "").split("/")[0] or "unknown"
         providers[provider] = providers.get(provider, 0) + 1
     return {
@@ -136,8 +140,7 @@ async def get_logs(lines: int = 50):
 @app.get("/api/models")
 async def list_models():
     """List all configured models."""
-    config = load_config()
-    return {"models": config.get("model_list", [])}
+    return {"models": db.get_all_models()}
 
 
 @app.post("/api/models/reload")
@@ -234,15 +237,8 @@ async def fetch_bedrock_models():
     except Exception as e:
         raise HTTPException(500, f"Error loading Bedrock template: {e}")
 
-    local_config = {"model_list": []}
-    if os.path.exists(LOCAL_CONFIG_PATH):
-        try:
-            with open(LOCAL_CONFIG_PATH, "r") as f:
-                local_config = yaml.safe_load(f) or {"model_list": []}
-        except Exception as e:
-            print(f"[Bedrock] Error loading local config: {e}", file=sys.stderr)
-
-    added_model_names = {m.get("model_name") for m in local_config.get("model_list", [])}
+    # Get already-added model names from TinyDB
+    added_model_names = {m.get("model_name") for m in db.get_all_models()}
     available_models = [
         m for m in bedrock_config.get("model_list", [])
         if m.get("model_name") not in added_model_names
@@ -253,21 +249,11 @@ async def fetch_bedrock_models():
 
 @app.delete("/api/models/{model_name}")
 async def delete_model(model_name: str):
-    """Delete a model from config.local.yaml."""
-    if not os.path.exists(LOCAL_CONFIG_PATH):
-        raise HTTPException(404, "No local config found")
+    """Delete a model from TinyDB."""
+    if not db.model_name_exists(model_name):
+        raise HTTPException(404, f"Model {model_name} not found")
 
-    with open(LOCAL_CONFIG_PATH, "r") as f:
-        config = yaml.safe_load(f) or {"model_list": []}
-
-    model_list = config.get("model_list", [])
-    initial_count = len(model_list)
-    config["model_list"] = [m for m in model_list if m.get("model_name") != model_name]
-
-    if len(config["model_list"]) == initial_count:
-        raise HTTPException(404, f"Model {model_name} not found in local config")
-
-    save_local_config(config)
+    db.delete_model(model_name)
     merge_configs()
     reloaded = reload_litellm()
 
@@ -276,16 +262,8 @@ async def delete_model(model_name: str):
 
 @app.post("/api/models")
 async def add_model(model: Dict):
-    """Add a new model to config.local.yaml."""
-    config = {"model_list": []}
-    if os.path.exists(LOCAL_CONFIG_PATH):
-        with open(LOCAL_CONFIG_PATH, "r") as f:
-            config = yaml.safe_load(f) or {"model_list": []}
-
-    model_list = config.setdefault("model_list", [])
-    model_list.append(model)
-
-    save_local_config(config)
+    """Add a new model to TinyDB."""
+    db.add_model(model)
     merge_configs()
     reloaded = reload_litellm()
 
@@ -294,29 +272,15 @@ async def add_model(model: Dict):
 
 @app.put("/api/models/{old_model_name}")
 async def rename_model(old_model_name: str, update: Dict):
-    """Rename a model in config.local.yaml."""
+    """Rename a model in TinyDB."""
     new_model_name = update.get("model_name")
     if not new_model_name:
         raise HTTPException(400, "model_name is required")
 
-    if not os.path.exists(LOCAL_CONFIG_PATH):
-        raise HTTPException(404, "No local config found")
+    renamed = db.rename_model(old_model_name, new_model_name)
+    if not renamed:
+        raise HTTPException(404, f"Model {old_model_name} not found")
 
-    with open(LOCAL_CONFIG_PATH, "r") as f:
-        config = yaml.safe_load(f) or {"model_list": []}
-
-    model_list = config.get("model_list", [])
-    found = False
-    for model in model_list:
-        if model.get("model_name") == old_model_name:
-            model["model_name"] = new_model_name
-            found = True
-            break
-
-    if not found:
-        raise HTTPException(404, f"Model {old_model_name} not found in local config")
-
-    save_local_config(config)
     merge_configs()
     reloaded = reload_litellm()
 
@@ -324,18 +288,9 @@ async def rename_model(old_model_name: str, update: Dict):
 
 
 def merge_configs():
-    """Merge local config into config.yaml, including litellm_settings from bedrock template
+    """Merge TinyDB models into config.yaml for LiteLLM, including litellm_settings from bedrock template
     if any bedrock_mantle models are present."""
-    local_config = {"model_list": []}
-    if os.path.exists(LOCAL_CONFIG_PATH):
-        try:
-            with open(LOCAL_CONFIG_PATH, "r") as f:
-                local_config = yaml.safe_load(f) or {"model_list": []}
-        except Exception as e:
-            print(f"[Merge] Error loading local config: {e}", file=sys.stderr)
-            local_config = {"model_list": []}
-
-    merged = {"model_list": local_config.get("model_list", [])}
+    merged = db.get_models_for_litellm()
 
     # Include litellm_settings from bedrock template if any bedrock_mantle models are in use
     has_bedrock = any(
@@ -613,7 +568,7 @@ async def dashboard():
             </div>
             <div class="section help-section">
                 <h2>Persistence</h2>
-                <p>To persist model configurations across container restarts, mount a host directory to <code>/app</code> and set <code>CONFIG_DIR</code>:</p>
+                <p>Models are stored in TinyDB (<code>models.db.json</code>). To persist configurations across container restarts, mount a host directory to <code>/app</code> and set <code>CONFIG_DIR</code>:</p>
                 <pre>podman run -e CONFIG_DIR=/app -v ~/claw-bedrock:/app:Z -p 4000:4000 -p 8282:8282 claw-bedrock</pre>
                 <p>Or use the provided <code>docker-compose.yml</code> or a systemd <code>.container</code> file with <code>Environment=CONFIG_DIR=/app</code> and <code>Volume=%h/claw-bedrock:/app:Z</code>.</p>
             </div>

@@ -5,17 +5,11 @@ set -euo pipefail
 CONFIG_DIR="${CONFIG_DIR:-/app}"
 CONFIG_PATH="${CONFIG_DIR}/config.yaml"
 BEDROCK_CONFIG="${CONFIG_DIR}/config.bedrock.yaml"
-LOCAL_CONFIG="${CONFIG_DIR}/config.local.yaml"
+DB_PATH="${CONFIG_DIR}/models.db.json"
 PID_FILE="/tmp/litellm.pid"
 
 # Initialize default configs if they don't exist
 init_configs() {
-    # Create config.local.yaml if it doesn't exist
-    if [[ ! -f "${LOCAL_CONFIG}" ]]; then
-        echo "Initializing ${LOCAL_CONFIG}..."
-        echo '{"model_list": []}' > "${LOCAL_CONFIG}"
-    fi
-
     # Copy bedrock config template if it doesn't exist
     if [[ ! -f "${BEDROCK_CONFIG}" ]] && [[ -f "/app/config.bedrock.yaml" ]]; then
         echo "Copying bedrock config template to ${BEDROCK_CONFIG}..."

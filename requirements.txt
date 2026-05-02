@@ -6,4 +6,5 @@ fastapi
 uvicorn[standard]
 psutil
 pyyaml
+tinydb
 requests
