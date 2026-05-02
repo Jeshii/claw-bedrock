@@ -20,20 +20,12 @@ VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION
 
 
 def get_version():
-    """Get version from VERSION file or git tags."""
+    """Get version baked in at build time."""
     try:
-        if os.path.exists(VERSION_PATH):
-            with open(VERSION_PATH, "r") as f:
-                return f.read().strip()
+        with open(VERSION_PATH, "r") as f:
+            return f.read().strip()
     except:
-        pass
-    try:
-        result = sp.run(["git", "describe", "--tags", "--abbrev=0"], capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except:
-        pass
-    return "0.1.0"
+        return "unknown"
 
 
 @app.on_event("startup")

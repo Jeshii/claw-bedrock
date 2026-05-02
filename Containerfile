@@ -6,6 +6,10 @@ WORKDIR /app
 ENV HOME=/app
 ENV CONFIG_DIR=/app
 
+# Bake version into image at build time
+ARG VERSION=dev
+RUN echo "${VERSION}" > /app/VERSION
+
 # Install AWS CLI
 RUN pip install --no-cache-dir awscli
 
