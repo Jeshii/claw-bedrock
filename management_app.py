@@ -75,7 +75,7 @@ async def auth_status():
 
 
 @app.get("/api/version")
-async def get_version():
+async def version_endpoint():
     """Return the current version of claw-bedrock."""
     return {"version": get_version()}
 
