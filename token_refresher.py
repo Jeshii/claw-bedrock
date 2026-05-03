@@ -1,19 +1,19 @@
 import asyncio
 import os
-import re
 import subprocess
 import sys
 import time
+import threading
 
 import boto3
-import botocore.exceptions
 from aws_bedrock_token_generator import BedrockTokenGenerator
 from litellm.integrations.custom_logger import CustomLogger
 
 _LOGIN_REQUIRED_MSG = (
     "AWS authentication required — the LiteLLM server needs to be restarted "
-    "and logged in."
+    "and logged in. Run './start.sh' in the repo directory to re-authenticate."
 )
+
 
 class BedrockTokenRefresher(CustomLogger):
     TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
@@ -23,15 +23,14 @@ class BedrockTokenRefresher(CustomLogger):
     def __init__(self):
         self._fetched_at = 0
         self._force_refresh = False
-        self._needs_login = False
+        self._needs_login = False  # set True when login required in non-interactive mode
+        self._auth_url: str | None = None  # captured aws login --remote URL for web UI
+        self._login_process: subprocess.Popen | None = None  # background aws login process
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
         self._profile = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
-        # Clean up any stale auth files on startup
-        for f in ["/tmp/auth_needed", "/tmp/auth_url"]:
-            if os.path.exists(f):
-                os.remove(f)
         self._refresh()
+        self._register_auth_endpoint()
 
     def _is_interactive(self) -> bool:
         return sys.stdin.isatty()
@@ -42,86 +41,87 @@ class BedrockTokenRefresher(CustomLogger):
             time.sleep(self.EXIT_GRACE_SECONDS)
             print(
                 f"[TokenRefresher] Exiting with code {self.EXIT_CODE_LOGIN_REQUIRED} "
-                f"— AWS login required.",
+                f"— AWS login required. Restart start.sh to re-authenticate.",
                 file=sys.stderr,
             )
             os._exit(self.EXIT_CODE_LOGIN_REQUIRED)
 
-        import threading
         t = threading.Thread(target=_do_exit, daemon=True)
         t.start()
 
+    def _capture_auth_url_from_process(self, proc: subprocess.Popen):
+        """Read stdout from aws login --remote in a background thread, capture the auth URL."""
+        def _read():
+            try:
+                for line in proc.stdout:
+                    line = line.strip()
+                    if line.startswith("https://"):
+                        self._auth_url = line
+                        print(f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}")
+                proc.wait()
+                if proc.returncode == 0:
+                    print("[TokenRefresher] AWS login completed — refreshing token...")
+                    self._needs_login = False
+                    self._auth_url = None
+                    self._login_process = None
+                    self._refresh()
+                else:
+                    print(
+                        f"[TokenRefresher] aws login exited with code {proc.returncode}.",
+                        file=sys.stderr,
+                    )
+            except Exception as e:
+                print(f"[TokenRefresher] Error reading aws login output: {e}", file=sys.stderr)
+
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+
     def _ensure_login(self):
-        """Trigger aws login --remote and capture auth URL for web display."""
+        """Trigger aws login --remote for SSH-safe authentication.
+
+        In interactive mode: prints a URL, prompts for authorization code.
+        In non-interactive mode: launches aws login --remote in the background,
+        captures the URL, sets _needs_login, and surfaces it via /auth/status.
+        """
         if not self._is_interactive():
-            # Non-interactive mode: capture auth URL to file for web UI
             print(
                 f"[TokenRefresher] AWS session expired or missing for profile '{self._profile}'. "
                 f"Non-interactive mode — capturing auth URL for web UI.",
                 file=sys.stderr,
             )
-            try:
-                result = subprocess.run(
-                    ["aws", "login", "--profile", self._profile, "--region", self._region, "--remote"],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-                # Parse output for auth URL (only match AWS SSO device auth URLs)
-                auth_url = None
-                all_output = result.stdout + result.stderr
-                # AWS SSO device auth URLs look like: https://device.sso.<region>.amazonaws.com/?user_code=XXXX-XXXX
-                sso_urls = re.findall(r'https://device\.sso\.[^\s<>"\']+\.amazonaws\.com/[^\s<>"\']*', all_output)
-                if sso_urls:
-                    auth_url = sso_urls[0]
-                else:
-                    # Fallback: look for any URL containing 'user_code' or 'device' parameter
-                    fallback_urls = re.findall(r'https?://[^\s<>"\']*user_code[^\s<>"\']*|https?://[^\s<>"\']*device[^\s<>"\']*', all_output)
-                    if fallback_urls:
-                        auth_url = fallback_urls[0]
-                
-                if auth_url:
-                    with open("/tmp/auth_url", "w") as f:
-                        f.write(auth_url)
-                    with open("/tmp/auth_needed", "w") as f:
-                        f.write("true")
-                    print(f"[TokenRefresher] Auth URL written to /tmp/auth_url: {auth_url}", file=sys.stderr)
-            except Exception as e:
-                print(f"[TokenRefresher] Failed to capture auth URL: {e}", file=sys.stderr)
-            
             self._needs_login = True
-            return
 
-        # Interactive mode (fallback, though container will use web UI)
+            # Only start one login process at a time
+            if self._login_process is not None and self._login_process.poll() is None:
+                print("[TokenRefresher] aws login --remote already running, skipping duplicate launch.")
+                return
+
+            try:
+                proc = subprocess.Popen(
+                    ["aws", "login", "--profile", self._profile, "--region", self._region, "--remote"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                self._login_process = proc
+                self._capture_auth_url_from_process(proc)
+            except FileNotFoundError:
+                print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
+            except Exception as e:
+                print(f"[TokenRefresher] ERROR: failed to launch aws login --remote: {e}", file=sys.stderr)
+            return  # do not block — background thread handles the rest
+
         print(
             f"[TokenRefresher] AWS session expired or missing. "
             f"Launching login for profile '{self._profile}'...\n"
-            f"A URL will be printed — open it in any browser."
+            f"A URL will be printed — open it in any browser, "
+            f"then paste the authorization code back into this terminal."
         )
         try:
-            result = subprocess.run(
+            subprocess.run(
                 ["aws", "login", "--profile", self._profile, "--region", self._region, "--remote"],
-                capture_output=False,
-                text=True,
-                check=True
+                check=True,
             )
-            # Parse and save auth URL (only match AWS SSO device auth URLs)
-            auth_url = None
-            all_output = result.stdout + result.stderr
-            # AWS SSO device auth URLs look like: https://device.sso.<region>.amazonaws.com/?user_code=XXXX-XXXX
-            sso_urls = re.findall(r'https://device\.sso\.[^\s<>"\']+\.amazonaws\.com/[^\s<>"\']*', all_output)
-            if sso_urls:
-                auth_url = sso_urls[0]
-            else:
-                # Fallback: look for any URL containing 'user_code' or 'device' parameter
-                fallback_urls = re.findall(r'https?://[^\s<>"\']*user_code[^\s<>"\']*|https?://[^\s<>"\']*device[^\s<>"\']*', all_output)
-                if fallback_urls:
-                    auth_url = fallback_urls[0]
-            if auth_url:
-                with open("/tmp/auth_url", "w") as f:
-                    f.write(auth_url)
-                with open("/tmp/auth_needed", "w") as f:
-                    f.write("true")
         except FileNotFoundError:
             print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
             raise
@@ -133,16 +133,13 @@ class BedrockTokenRefresher(CustomLogger):
         """Return a boto3 Session with valid credentials, triggering login if needed."""
         try:
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
-        except botocore.exceptions.ProfileNotFound:
+        except Exception:
             print(
-                f"[TokenRefresher] AWS profile '{self._profile}' not found. "
-                f"Auth will be required via web UI.",
+                f"[TokenRefresher] AWS profile '{self._profile}' not found. Auth will be required via web UI.",
                 file=sys.stderr,
             )
             self._ensure_login()
-            # Return None — credential access will fail, but pre_call_hook
-            # will block callers until auth is done via web UI
-            return None
+            return boto3.Session(region_name=self._region)
 
         credentials = session.get_credentials()
 
@@ -182,19 +179,31 @@ class BedrockTokenRefresher(CustomLogger):
 
     def _refresh(self):
         session = self._get_valid_session()
-        if session is None or self._needs_login:
+        if self._needs_login:
             return  # don't attempt to generate a token with invalid credentials
         credentials = session.get_credentials()
         token = self._generator.get_token(credentials, self._region)
         os.environ["BEDROCK_MANTLE_API_KEY"] = token
         self._fetched_at = time.time()
-        
-        # Clear auth needed files if present
-        for f in ["/tmp/auth_needed", "/tmp/auth_url"]:
-            if os.path.exists(f):
-                os.remove(f)
-        
         print(f"[TokenRefresher] Token refreshed at {time.strftime('%H:%M:%S')}")
+
+    def _register_auth_endpoint(self):
+        """Register GET /auth/status on LiteLLM's FastAPI app."""
+        try:
+            from litellm.proxy.proxy_server import app
+            from fastapi.responses import JSONResponse
+
+            @app.get("/auth/status", tags=["Authentication"])
+            async def auth_status():
+                return JSONResponse({
+                    "needs_login": self._needs_login,
+                    "auth_url": self._auth_url,
+                    "profile": self._profile,
+                })
+
+            print("[TokenRefresher] Registered /auth/status endpoint on LiteLLM proxy.")
+        except Exception as e:
+            print(f"[TokenRefresher] WARNING: Could not register /auth/status endpoint: {e}", file=sys.stderr)
 
     def _is_expired_error(self, exception) -> bool:
         error_str = str(exception).lower()
@@ -202,8 +211,6 @@ class BedrockTokenRefresher(CustomLogger):
 
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         if self._needs_login:
-            # Don't raise an exception that could crash the server
-            # Instead, let the client handle the authentication requirement
             print(f"[TokenRefresher] Authentication required for profile '{self._profile}'. "
                   "Client must re-authenticate.", file=sys.stderr)
         if self._force_refresh or time.time() - self._fetched_at > self.TOKEN_TTL:
@@ -222,5 +229,6 @@ class BedrockTokenRefresher(CustomLogger):
             )
             self._force_refresh = True
             self._refresh()
+
 
 token_refresher = BedrockTokenRefresher()
