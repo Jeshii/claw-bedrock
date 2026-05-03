@@ -10,7 +10,7 @@ LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 BEDROCK_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.bedrock.yaml")
 
 # Initialize TinyDB with caching for better performance
-db = TinyDB(DB_PATH, storage=CachingMiddleware(JSONStorage), indent=2, sort_keys=True)
+db = TinyDB(DB_PATH, indent=2, sort_keys=True)
 models_table = db.table('models')
 settings_table = db.table('settings')
 
