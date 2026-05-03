@@ -8,7 +8,7 @@ A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as a way to
 2. The `BedrockTokenRefresher` callback checks your AWS session. If expired, it triggers `aws login --remote`, which prints a URL and waits for you to paste back the authorization code shown in the browser.
 3. Once authenticated, a short-lived Bedrock bearer token is fetched and injected as `BEDROCK_MANTLE_API_KEY`.
 4. Models are added via the Management UI (port 8282), which stores them in TinyDB (`models.db.json`). Supported providers: Bedrock (Mantle), OpenRouter, Ollama, and manual entry.
-5. When you add, rename, or delete models via the UI, `config.yaml` is automatically regenerated and LiteLLM reloads its config via SIGHUP - no container restart needed.
+5. When you add, rename, or delete models via the UI, `config.yaml` is automatically regenerated and LiteLLM is restarted to pick up the new config - no manual container restart needed.
 6. For persistence across container restarts, mount a host directory to `/app` using the `CONFIG_DIR` environment variable. Models are stored in `models.db.json` (TinyDB format).
 
 ## Prerequisites
@@ -243,7 +243,7 @@ Since Bedrock doesn't have a method for discovery via API, the following models 
 
 1. Access the Management UI at `http://localhost:8282`
 2. Use the UI to add models from Bedrock (Mantle), OpenRouter, Ollama, or enter manually
-3. When you add/delete models via the UI, `config.yaml` is automatically regenerated and LiteLLM reloads its config via SIGHUP — no container restart needed.
+3. When you add/delete models via the UI, `config.yaml` is automatically regenerated and LiteLLM is restarted to pick up the new config — no manual container restart needed.
 
 **Supported Providers:**
 - **OpenRouter**: Fetches models from [OpenRouter](https://openrouter.ai/). Requires `OPENROUTER_API_KEY` (optional but recommended).

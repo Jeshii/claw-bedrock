@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import requests
+import time
 import subprocess
 import psutil
 import base64
@@ -182,11 +183,11 @@ async def list_models():
 
 @app.post("/api/models/reload")
 async def reload_models():
-    """Manually trigger a LiteLLM config reload via SIGHUP."""
+    """Manually trigger a LiteLLM restart to pick up new config."""
     reloaded = reload_litellm()
     if reloaded:
-        return {"status": "success", "message": "LiteLLM reloaded"}
-    return {"status": "warning", "message": "LiteLLM reload failed - PID file not found or process unreachable. Try restarting the container.", "reloaded": False}
+        return {"status": "success", "message": "LiteLLM restarted with new config"}
+    return {"status": "warning", "message": "LiteLLM restart failed. Try restarting the container manually.", "reloaded": False}
 
 
 @app.get("/api/providers/openrouter/models")
@@ -330,9 +331,12 @@ def merge_configs():
 
 
 def reload_litellm() -> bool:
-    """Reload LiteLLM config by sending SIGHUP to the process. Returns True on success."""
+    """Reload LiteLLM by restarting the process to pick up new config. Returns True on success."""
     pid_file = "/tmp/litellm.pid"
+    config_path = os.environ.get("CONFIG_PATH", "/app/config.yaml")
+    config_dir = os.environ.get("CONFIG_DIR", "/app")
 
+    # Step 1: Find and stop the existing LiteLLM process
     pid = None
     if os.path.exists(pid_file):
         try:
@@ -344,40 +348,56 @@ def reload_litellm() -> bool:
 
     if pid is not None:
         try:
-            os.kill(pid, 0)
+            os.kill(pid, 0)  # Check if process is running
         except OSError:
-            print(f"[Reload] PID {pid} is stale, searching for LiteLLM process...")
+            print(f"[Reload] PID {pid} is stale, will search for process...")
             pid = None
 
     if pid is None:
+        # Search for running LiteLLM process
         try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 cmdline = proc.info['cmdline']
                 if cmdline and any('litellm' in arg.lower() for arg in cmdline):
                     pid = proc.info['pid']
                     print(f"[Reload] Found LiteLLM process: PID {pid}")
-                    with open(pid_file, "w") as f:
-                        f.write(str(pid))
                     break
         except Exception as e:
             print(f"[Reload] Error searching for LiteLLM process: {e}", file=sys.stderr)
 
-    if pid is None:
-        print("[Reload] No LiteLLM process found, skipping reload")
-        return False
+    # Step 2: Stop the existing process
+    if pid is not None:
+        try:
+            os.kill(pid, 15)  # SIGTERM
+            print(f"[Reload] Sent SIGTERM to LiteLLM (PID {pid})")
+            # Wait for process to terminate
+            for _ in range(10):
+                try:
+                    os.kill(pid, 0)
+                    time.sleep(0.5)
+                except OSError:
+                    print(f"[Reload] LiteLLM process terminated")
+                    break
+        except OSError as e:
+            print(f"[Reload] Error stopping LiteLLM: {e}", file=sys.stderr)
 
+    # Step 3: Start new LiteLLM process
     try:
-        os.kill(pid, 1)  # SIGHUP
-        print(f"[Reload] Sent SIGHUP to LiteLLM (PID {pid})")
+        log_path = os.path.join(config_dir, "litellm.log")
+        with open(log_path, "a") as log_file:
+            process = subprocess.Popen(
+                ["litellm", "--config", config_path, "--port", "4000", "--host", "0.0.0.0"],
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=config_dir
+            )
+        new_pid = process.pid
+        with open(pid_file, "w") as f:
+            f.write(str(new_pid))
+        print(f"[Reload] LiteLLM restarted with PID {new_pid}")
         return True
-    except OSError as e:
-        if e.errno == 3:
-            print(f"[Reload] Process {pid} no longer exists", file=sys.stderr)
-        else:
-            print(f"[Reload] Error reloading LiteLLM: {e}", file=sys.stderr)
-        return False
     except Exception as e:
-        print(f"[Reload] Error reloading LiteLLM: {e}", file=sys.stderr)
+        print(f"[Reload] Error starting LiteLLM: {e}", file=sys.stderr)
         return False
 
 
