@@ -107,8 +107,10 @@ class BedrockTokenRefresher(CustomLogger):
             print(f"[TokenRefresher] ERROR: aws login failed (exit {e.returncode}).", file=sys.stderr)
             raise
 
-    def _get_valid_session(self) -> boto3.Session:
-        """Return a boto3 Session with valid credentials, triggering login if needed."""
+    def _get_valid_session(self) -> boto3.Session | None:
+        """Return a boto3 Session with valid credentials, triggering login if needed.
+        Returns None if login is required and the server should continue without credentials.
+        """
         try:
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
         except Exception:
@@ -117,14 +119,15 @@ class BedrockTokenRefresher(CustomLogger):
                 file=sys.stderr,
             )
             self._ensure_login()
-            return boto3.Session(region_name=self._region)
+            return None  # caller must check for None and skip token generation
 
         credentials = session.get_credentials()
 
         if credentials is None:
             self._ensure_login()
             if self._needs_login:
-                return session  # will be unusable; pre_call_hook will block callers
+                return None
+            # Login completed synchronously (interactive mode) — rebuild session
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
             credentials = session.get_credentials()
             if credentials is None:
@@ -140,7 +143,7 @@ class BedrockTokenRefresher(CustomLogger):
         except Exception:
             self._ensure_login()
             if self._needs_login:
-                return session  # unusable; pre_call_hook will block callers
+                return None
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
             credentials = session.get_credentials()
             if credentials is None:
@@ -157,8 +160,8 @@ class BedrockTokenRefresher(CustomLogger):
 
     def _refresh(self):
         session = self._get_valid_session()
-        if self._needs_login:
-            return  # don't attempt to generate a token with invalid credentials
+        if session is None:
+            return  # login required — server stays up, /auth/status will surface the URL
         credentials = session.get_credentials()
         token = self._generator.get_token(credentials, self._region)
         os.environ["BEDROCK_MANTLE_API_KEY"] = token
