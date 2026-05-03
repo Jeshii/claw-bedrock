@@ -8,7 +8,14 @@ import sys
 import requests
 import subprocess
 import psutil
+import base64
 from typing import Optional, Dict
+
+
+def base64url_decode(s: str) -> str:
+    """Decode a base64url-encoded string."""
+    s += '=' * (4 - len(s) % 4)
+    return base64.b64decode(s.replace('-', '+').replace('_', '/')).decode('utf-8')
 
 import db
 
@@ -261,9 +268,13 @@ async def fetch_bedrock_models():
         raise HTTPException(500, f"Error reading Bedrock models catalog: {str(e)}")
 
 
-@app.delete("/api/models/{model_name}")
-async def delete_model(model_name: str):
+@app.delete("/api/models/{encoded_model_name:path}")
+async def delete_model(encoded_model_name: str):
     """Delete a model from TinyDB."""
+    try:
+        model_name = base64url_decode(encoded_model_name)
+    except Exception:
+        raise HTTPException(400, "Invalid model name encoding")
     if not db.model_name_exists(model_name):
         raise HTTPException(404, f"Model {model_name} not found")
 
@@ -284,9 +295,14 @@ async def add_model(model: Dict):
     return {"status": "success", "model": model, "reloaded": reloaded}
 
 
-@app.put("/api/models/{old_model_name}")
-async def rename_model(old_model_name: str, update: Dict):
+@app.put("/api/models/{encoded_old_name:path}")
+async def rename_model(encoded_old_name: str, update: Dict):
     """Rename a model in TinyDB."""
+    try:
+        old_model_name = base64url_decode(encoded_old_name)
+    except Exception:
+        raise HTTPException(400, "Invalid model name encoding")
+
     new_model_name = update.get("model_name")
     if not new_model_name:
         raise HTTPException(400, "model_name is required")
