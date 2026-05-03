@@ -2,7 +2,7 @@ aws-bedrock-token-generator
 boto3
 botocore[crt]
 litellm[proxy]
-fastapi
+fastapi>=0.115.5
 uvicorn[standard]
 psutil
 pyyaml

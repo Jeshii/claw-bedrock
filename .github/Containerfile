@@ -14,8 +14,8 @@ RUN echo "${VERSION}" > /app/VERSION
 RUN pip install --no-cache-dir awscli
 
 # Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
 
 # Copy application files
 COPY bedrock_models.json .
