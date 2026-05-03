@@ -192,7 +192,7 @@ async def fetch_openrouter_models(include_free: bool = True, search: Optional[st
         if include_free:
             def _is_free(m):
                 try:
-                    return float(m.get("pricing", {}).get("prompt", "1")) == 0
+	                return float(m.get("pricing", {}).get("prompt", "1")) == 0
                 except:
                     return False
             models = [m for m in models if _is_free(m)]
@@ -310,7 +310,6 @@ def reload_litellm() -> bool:
     """Reload LiteLLM config by sending SIGHUP to the process. Returns True on success."""
     pid_file = "/tmp/litellm.pid"
 
-    # Read PID from file
     pid = None
     if os.path.exists(pid_file):
         try:
@@ -320,23 +319,20 @@ def reload_litellm() -> bool:
             print(f"[Reload] Error reading PID file: {e}", file=sys.stderr)
             pid = None
 
-    # Verify PID is running, or find LiteLLM process using psutil
     if pid is not None:
         try:
-            os.kill(pid, 0)  # Check if process exists (signal 0 doesn't actually send a signal)
+            os.kill(pid, 0)
         except OSError:
             print(f"[Reload] PID {pid} is stale, searching for LiteLLM process...")
             pid = None
 
     if pid is None:
-        # Try to find LiteLLM process using psutil
         try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 cmdline = proc.info['cmdline']
                 if cmdline and any('litellm' in arg.lower() for arg in cmdline):
                     pid = proc.info['pid']
                     print(f"[Reload] Found LiteLLM process: PID {pid}")
-                    # Update PID file
                     with open(pid_file, "w") as f:
                         f.write(str(pid))
                     break
@@ -347,13 +343,12 @@ def reload_litellm() -> bool:
         print("[Reload] No LiteLLM process found, skipping reload")
         return False
 
-    # Send SIGHUP to reload config
     try:
-        os.kill(pid, 1)  # SIGHUP = signal 1
+        os.kill(pid, 1)  # SIGHUP
         print(f"[Reload] Sent SIGHUP to LiteLLM (PID {pid})")
         return True
     except OSError as e:
-        if e.errno == 3:  # No such process
+        if e.errno == 3:
             print(f"[Reload] Process {pid} no longer exists", file=sys.stderr)
         else:
             print(f"[Reload] Error reloading LiteLLM: {e}", file=sys.stderr)
@@ -370,7 +365,7 @@ async def dashboard(request: Request):
     config = load_local_config()
     use_prefix = config.get('use_prefix', True)
     return templates.TemplateResponse(
+        request,
         "management.html",
-        request=request,
         context={"version": version, "use_prefix": use_prefix}
     )
