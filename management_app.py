@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from jinja2 import Environment, FileSystemLoader
 import yaml
 import json
 import os
@@ -14,12 +13,7 @@ from typing import Optional, Dict
 import db
 
 app = FastAPI(title="Claw Bedrock Management")
-
-# Jinja2 3.1.6 changed cache key construction to include `globals` (a dict),
-# which is unhashable. Disabling the cache avoids the TypeError entirely.
-_jinja_env = Environment(loader=FileSystemLoader("templates"))
-_jinja_env.cache = None
-templates = Jinja2Templates(env=_jinja_env)
+templates = Jinja2Templates(directory="templates")
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
@@ -375,4 +369,8 @@ async def dashboard(request: Request):
     version = get_version()
     config = load_local_config()
     use_prefix = config.get('use_prefix', True)
-    return templates.TemplateResponse("management.html", {"request": request, "version": version, "use_prefix": use_prefix})
+    return templates.TemplateResponse(
+        "management.html",
+        request=request,
+        context={"version": version, "use_prefix": use_prefix}
+    )
