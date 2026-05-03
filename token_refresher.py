@@ -1,4 +1,3 @@
-import asyncio
 import os
 import subprocess
 import sys
@@ -9,16 +8,9 @@ import boto3
 from aws_bedrock_token_generator import BedrockTokenGenerator
 from litellm.integrations.custom_logger import CustomLogger
 
-_LOGIN_REQUIRED_MSG = (
-    "AWS authentication required — the LiteLLM server needs to be restarted "
-    "and logged in. Run './start.sh' in the repo directory to re-authenticate."
-)
-
 
 class BedrockTokenRefresher(CustomLogger):
     TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
-    EXIT_CODE_LOGIN_REQUIRED = 42  # sentinel: distinguish auth exit from crash
-    EXIT_GRACE_SECONDS = 5  # give in-flight requests time to return the error
 
     def __init__(self):
         self._fetched_at = 0
@@ -34,20 +26,6 @@ class BedrockTokenRefresher(CustomLogger):
 
     def _is_interactive(self) -> bool:
         return sys.stdin.isatty()
-
-    def _schedule_exit(self):
-        """Exit after a grace period so in-flight requests can return their error first."""
-        def _do_exit():
-            time.sleep(self.EXIT_GRACE_SECONDS)
-            print(
-                f"[TokenRefresher] Exiting with code {self.EXIT_CODE_LOGIN_REQUIRED} "
-                f"— AWS login required. Restart start.sh to re-authenticate.",
-                file=sys.stderr,
-            )
-            os._exit(self.EXIT_CODE_LOGIN_REQUIRED)
-
-        t = threading.Thread(target=_do_exit, daemon=True)
-        t.start()
 
     def _capture_auth_url_from_process(self, proc: subprocess.Popen):
         """Read stdout from aws login --remote in a background thread, capture the auth URL."""
