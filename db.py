@@ -7,7 +7,6 @@ import yaml
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 DB_PATH = os.path.join(CONFIG_DIR, "models.db.json")
 LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
-BEDROCK_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.bedrock.yaml")
 
 # Initialize TinyDB with caching for better performance
 db = TinyDB(DB_PATH, indent=2, sort_keys=True)
@@ -93,14 +92,45 @@ def get_settings():
     return {r["key"]: r["value"] for r in records}
 
 
+def get_router_settings():
+    """Get router_settings from DB or return defaults."""
+    settings = get_setting("router_settings", {})
+    if not settings:
+        settings = {"always_include_stream_usage": True}
+    return settings
+
+
+def set_router_settings(router_settings):
+    """Save router_settings to DB."""
+    settings_table.upsert(
+        {"key": "router_settings", "value": router_settings},
+        where("key") == "router_settings"
+    )
+
+
+def get_litellm_settings():
+    """Get litellm_settings with token_refresher baked in."""
+    return {"callbacks": ["token_refresher.BedrockTokenRefresher"]}
+
+
 def model_name_exists(model_name):
     """Check if a model name already exists."""
     return models_table.contains(where("model_name") == model_name)
 
 
 def get_models_for_litellm():
-    """Get models in the format needed for LiteLLM config generation."""
-    return {"model_list": [dict(m) for m in models_table.all()]}
+    """Get full config for LiteLLM including models, router_settings, and litellm_settings."""
+    config = {"model_list": [dict(m) for m in models_table.all()]}
+
+    # Add router_settings from DB
+    router_settings = get_router_settings()
+    if router_settings:
+        config["router_settings"] = router_settings
+
+    # Add litellm_settings (token_refresher is baked in)
+    config["litellm_settings"] = get_litellm_settings()
+
+    return config
 
 
 def close_db():

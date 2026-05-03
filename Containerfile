@@ -18,7 +18,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY config.bedrock.yaml .
+COPY bedrock_models.json .
 COPY token_refresher.py .
 COPY management_app.py .
 COPY start_container.sh .

@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Claw Bedrock Management</title>
+    <script>window.USE_PREFIX = {{ use_prefix|lower }};</script>
+    <style>
+        {% raw %}
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ul { padding-left: 20px; }
+        body { font-family: sans-serif; display: flex; min-height: 100vh; transition: all 0.3s; }
+        body.dark { background: #1a1a1a; color: #e0e0e0; }
+
+        .sidebar { width: 250px; background: #f8f9fa; padding: 20px; display: flex; flex-direction: column; border-right: 1px solid #ddd; transition: all 0.3s; }
+        body.dark .sidebar { background: #252525; border-color: #444; }
+        .sidebar-header { margin-bottom: 30px; }
+        .sidebar-header h2 { font-size: 18px; font-weight: 600; }
+        .sidebar-header .version { font-size: 12px; color: #666; margin-top: 4px; }
+        body.dark .sidebar-header .version { color: #999; }
+        .nav { list-style: none; flex: 1; }
+        .nav li { margin-bottom: 5px; }
+        .nav a { display: block; padding: 10px 15px; text-decoration: none; color: #333; border-radius: 6px; transition: background 0.2s; cursor: pointer; }
+        body.dark .nav a { color: #e0e0e0; }
+        .nav a:hover { background: #e9ecef; }
+        body.dark .nav a:hover { background: #333; }
+        .nav a.active { background: #007bff; color: white; }
+        body.dark .nav a.active { background: #0056b3; }
+        .main a { color: #444; text-decoration: underline; }
+        body.dark .main a { color: #aaa; }
+        .main a:hover { color: #007bff; }
+        body.dark .main a:hover { color: #66b3ff; }
+        .sidebar-footer { margin-top: auto; padding-top: 20px; border-top: 1px solid #ddd; }
+        body.dark .sidebar-footer { border-color: #444; }
+        .theme-toggle { width: 100%; padding: 10px; cursor: pointer; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 14px; transition: all 0.2s; }
+        body.dark .theme-toggle { background: #333; color: #e0e0e0; border-color: #666; }
+        .theme-toggle:hover { background: #f8f9fa; }
+        body.dark .theme-toggle:hover { background: #444; }
+
+        .main { flex: 1; padding: 30px; max-width: 1200px; overflow-y: auto; }
+        .page { display: none; }
+        .page.active { display: block; }
+        h1 { margin-bottom: 20px; font-size: 24px; }
+        h2 { margin-bottom: 15px; font-size: 20px; }
+        h3 { margin-bottom: 10px; font-size: 16px; }
+
+        .section { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+        body.dark .section { border-color: #444; background: #2a2a2a; }
+        .auth-needed { background: #fff3cd; border-color: #ffc107; }
+        body.dark .auth-needed { background: #3d3000; border-color: #ffc107; }
+
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 14px; }
+        body.dark button { background: #444; color: #e0e0e0; border-color: #666; }
+        button:hover { background: #f8f9fa; }
+        body.dark button:hover { background: #555; }
+
+        input, select { padding: 8px; margin: 5px; width: 300px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        body.dark input, body.dark select { background: #333; color: #e0e0e0; border-color: #666; }
+
+        .model-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px; }
+        body.dark .model-item { border-color: #444; }
+        body.dark pre { background: #2a2a2a !important; color: #e0e0e0; }
+        .model-name { cursor: pointer; flex: 1; }
+        .model-name:hover { text-decoration: underline; }
+        .delete-btn { padding: 2px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        body.dark .delete-btn { background: #842029; }
+        .model-item.deleting { background: #ffe6e6; }
+        body.dark .model-item.deleting { background: #3d1a1a; }
+        .confirm-btn { padding: 2px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        body.dark .confirm-btn { background: #842029; }
+        .confirm-btn:disabled { background: #999; cursor: not-allowed; opacity: 0.6; }
+        body.dark .confirm-btn:disabled { background: #555; }
+
+        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+        .toast { padding: 12px 20px; border-radius: 6px; color: white; font-size: 14px; animation: fadeIn 0.3s ease-in; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .toast-success { background: #28a745; }
+        .toast-error { background: #dc3545; }
+        .toast-info { background: #17a2b8; }
+        .toast-warning { background: #fd7e14; }
+
+        .help-section { line-height: 1.6; }
+        .help-section pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; margin: 10px 0; }
+        body.dark .help-section pre { background: #333; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        {% endraw %}
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>claw-bedrock</h2>
+            <div class="version">v{{ version }}</div>
+        </div>
+        <ul class="nav">
+            <li><a onclick="showPage('dashboard')" class="active">Dashboard</a></li>
+            <li><a onclick="showPage('auth')">Authentication</a></li>
+            <li><a onclick="showPage('models')">Models</a></li>
+            <li><a onclick="showPage('logs')">Logs</a></li>
+            <li><a onclick="showPage('help')">Help</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <button class="theme-toggle" onclick="toggleTheme()"></button>
+        </div>
+    </div>
+
+    <div class="main">
+        <div id="toast-container"></div>
+
+        <!-- Dashboard Page -->
+        <div id="page-dashboard" class="page active">
+            <h1>Dashboard</h1>
+            <div class="section" id="dashboard-info">
+                <h2>Server Information</h2>
+                <div id="server-status">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Authentication Page -->
+        <div id="page-auth" class="page">
+            <h1>Authentication</h1>
+            <div class="section" id="auth-section">
+                <div id="auth-status"></div>
+            </div>
+        </div>
+
+        <!-- Models Page -->
+        <div id="page-models" class="page">
+            <h1>Models</h1>
+            <div class="section">
+                <h2>Configured Models</h2>
+                <div id="models-list"></div>
+                <button onclick="showAddModel()">Add New Model</button>
+                <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Reload LiteLLM</button>
+            </div>
+            <div class="section" id="add-model-section" style="display:none;">
+                <h2>Add New Model <button onclick="closeAddModel()" style="float: right;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Close</button></h2>
+                <select id="provider-select" onchange="loadProviderUI()">
+                    <option value="">Select Provider</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="ollama">Ollama (Remote)</option>
+                    <option value="bedrock">Bedrock (Mantle)</option>
+                    <option value="manual">Manual</option>
+                </select>
+                <div id="provider-ui"></div>
+            </div>
+            <div class="section">
+                <label style="display: block;"><input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()"> Add <code>claw-bedrock/</code> prefix to model names</label>
+                <label style="display: block; margin-top: 10px;"><input type="checkbox" id="stream-usage-toggle" onchange="toggleStreamUsage()"> Include stream usage in router responses (always_include_stream_usage)</label>
+            </div>
+        </div>
+
+        <!-- Logs Page -->
+        <div id="page-logs" class="page">
+            <h1>Logs</h1>
+            <div class="section">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                    <h2 style="margin:0;">LiteLLM Logs</h2>
+                    <button
+                        onclick="copyLogs()"
+                        id="copy-logs-btn"
+                        title="Copy log contents"
+                        style="padding:4px 6px; background:none; border:1px solid #ccc; border-radius:4px; cursor:pointer; line-height:0;"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Copy logs">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                    </button>
+                </div>
+                <button onclick="loadLogs()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Refresh Logs</button>
+                <select id="log-lines" onchange="loadLogs()">
+                    <option value="50">Last 50 lines</option>
+                    <option value="100">Last 100 lines</option>
+                    <option value="200">Last 200 lines</option>
+                </select>
+                <pre id="logs-output" style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; font-size: 12px;"></pre>
+            </div>
+        </div>
+
+        <!-- Help Page -->
+        <div id="page-help" class="page">
+            <h1>Help</h1>
+            <div class="section help-section">
+                <h2>About</h2>
+                <p>A LiteLLM proxy server that exposes AWS Bedrock Mantle models and other providers via a single OpenAI-compatible API. Useful for <a href="https://github.com/ultraworkers/claw-code">claw-code</a>, <a href="https://github.com/anomalyco/opencode">opencode</a>, or other apps expecting an OpenAI response.</p>
+                <p>GitHub: <a href="https://github.com/jeshii/claw-bedrock">https://github.com/jeshii/claw-bedrock</a></p>
+            </div>
+            <div class="section help-section">
+                <h2>Endpoints</h2>
+                <p><strong>LiteLLM API:</strong> <code id="litellm-url">detecting...</code> (OpenAI-compatible)</p>
+                <p><strong>Management UI:</strong> <code id="mgmt-url">detecting...</code> (this page)</p>
+                <p><strong>List models:</strong> <code id="models-curl">detecting...</code></p>
+            </div>
+            <div class="section help-section">
+                <h2>Client Integrations</h2>
+                <p><strong>opencode.ai:</strong> Set baseURL to <code id="opencode-url">detecting...</code> in <code>~/.config/opencode/opencode.json</code></p>
+                <p><strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</code></p>
+                <p>Model names use the <code>claw-bedrock/</code> prefix (e.g., <code>claw-bedrock/qwen3-235b</code>)</p>
+            </div>
+            <div class="section help-section">
+                <h2>Adding Models</h2>
+                <p>Use the Models page to add from Bedrock, OpenRouter, Ollama, or manually. Changes auto-reload LiteLLM via SIGHUP.</p>
+                <p><strong>Required Environment Variables:</strong></p>
+                <ul>
+                    <li>OpenRouter: <code>OPENROUTER_API_KEY</code></li>
+                    <li>Ollama: <code>OLLAMA_API_BASE</code> (default: <code>http://localhost:11434</code>)</li>
+                    <li>Bedrock: <code>AWS_PROFILE</code>, <code>AWS_REGION</code>, <code>BEDROCK_MANTLE_API_BASE</code></li>
+                </ul>
+            </div>
+            <div class="section help-section">
+                <h2>Managing Models</h2>
+                <ul>
+                    <li>Click model name to rename</li>
+                    <li>Click Delete for confirmation flow (line turns red, wait 1s, then confirm)</li>
+                    <li>Models auto-reload via SIGHUP</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+        <script>
+            const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+            const X_CIRCLE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+            const RELOAD_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>';
+            const CHEVRON_RIGHT_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle"><path d="M9 18l6-6-6-6"/></svg>';
+            const CHEVRON_DOWN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle"><path d="M6 9l6 6 6-6"/></svg>';
+            const CLOSE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            const FREE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/></svg>';
+            const WARNING_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+            let ALWAYS_INCLUDE_STREAM_USAGE = true;
+
+            function ansiToHtml(text) {
+                const colorMap = {
+                    '30': 'black', '31': 'red', '32': 'green', '33': 'yellow',
+                    '34': 'blue', '35': 'magenta', '36': 'cyan', '37': 'white',
+                    '90': '#808080', '91': '#ff5555', '92': '#55ff55', '93': '#ffff55',
+                    '94': '#5555ff', '95': '#ff55ff', '96': '#55ffff', '97': '#ffffff'
+                };
+                let result = '';
+                let openSpan = false;
+                const regex = /\x1b\[([0-9;]*)m/g;
+                let lastIndex = 0;
+                let match;
+                while ((match = regex.exec(text)) !== null) {
+                    result += text.slice(lastIndex, match.index).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const codes = match[1].split(';');
+                    for (const code of codes) {
+                        if (code === '0' || code === '') {
+                            if (openSpan) { result += '</span>'; openSpan = false; }
+                        } else if (colorMap[code]) {
+                            if (openSpan) { result += '</span>'; }
+                            result += `<span style="color:${colorMap[code]}">`;
+                            openSpan = true;
+                        }
+                    }
+                    lastIndex = regex.lastIndex;
+                }
+                result += text.slice(lastIndex).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                if (openSpan) result += '</span>';
+                return result.replace(/\n/g, '<br>');
+            }
+
+            function showPage(pageId) {
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.getElementById('page-' + pageId).classList.add('active');
+                document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+                event.target.classList.add('active');
+                if (pageId === 'dashboard') loadDashboard();
+                if (pageId === 'models') loadModels();
+                if (pageId === 'logs') loadLogs();
+                if (pageId === 'auth') loadAuth();
+            }
+
+            async function loadDashboard() {
+                const res = await fetch('/api/dashboard');
+                const data = await res.json();
+                const serverStatus = document.getElementById('server-status');
+                let html = `<p><strong>Version:</strong> ${data.version}</p>`;
+                html += `<p><strong>Configured Models:</strong> ${data.model_count}</p>`;
+                if (Object.keys(data.providers).length > 0) {
+                    html += '<p><strong>Providers:</strong></p><ul>';
+                    for (const [provider, count] of Object.entries(data.providers)) {
+                        html += `<li>${provider}: ${count} model(s)</li>`;
+                    }
+                    html += '</ul>';
+                }
+                serverStatus.innerHTML = html;
+            }
+
+            const MOON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+            const SUN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+
+            function toggleTheme() {
+                const body = document.body;
+                const btn = document.querySelector('.theme-toggle');
+                body.classList.toggle('dark');
+                const isDark = body.classList.contains('dark');
+                btn.innerHTML = isDark ? SUN_SVG + 'Light' : MOON_SVG + 'Dark';
+                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            }
+            if (localStorage.getItem('theme') === 'dark') {
+                document.body.classList.add('dark');
+                document.addEventListener('DOMContentLoaded', () => {
+                    document.querySelector('.theme-toggle').innerHTML = SUN_SVG + 'Light';
+                });
+            }
+
+            function showToast(message, type = 'success', duration = 3000) {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                toast.className = `toast toast-${type}`;
+                toast.textContent = message;
+                container.appendChild(toast);
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transition = 'opacity 0.3s';
+                    setTimeout(() => toast.remove(), 300);
+                }, duration);
+            }
+
+            function showReloadToast(reloaded) {
+                if (reloaded) {
+                    showToast('LiteLLM reloaded', 'info');
+                } else {
+                    showToast('LiteLLM reload failed - try restarting the container', 'warning', 6000);
+                }
+            }
+
+            async function loadAuth() {
+                const res = await fetch('/api/auth/status');
+                const data = await res.json();
+                const authDiv = document.getElementById('auth-status');
+                let html = '';
+                if (data.auth_needed) {
+                    html += '<div class="auth-needed"><p><strong>Authentication Required</strong></p>';
+                    if (data.auth_url) {
+                        html += `<p>Click <a href="${data.auth_url}" target="_blank">here to authenticate</a> with AWS.</p>`;
+                    } else {
+                        html += '<p>Please authenticate with AWS (SAML/SSO required).</p>';
+                    }
+                    html += '</div>';
+                } else {
+                    html += '<p>' + CHECK_SVG + ' AWS authentication configured.</p>';
+                }
+                if (data.openrouter.configured) {
+                    html += '<p>' + CHECK_SVG + ' OpenRouter API key configured.</p>';
+                } else {
+                    html += '<p>' + X_CIRCLE_SVG + ' OpenRouter not configured (set OPENROUTER_API_KEY).</p>';
+                }
+                if (data.ollama.configured) {
+                    html += `<p>` + CHECK_SVG + ` Ollama configured (${data.ollama.host}).</p>`;
+                } else {
+                    html += '<p>' + X_CIRCLE_SVG + ' Ollama not configured (set OLLAMA_API_BASE).</p>';
+                }
+                authDiv.innerHTML = html;
+            }
+
+            async function loadModels() {
+                const res = await fetch('/api/models');
+                const settingsRes = await fetch('/api/settings');
+                const settingsData = await settingsRes.json();
+                ALWAYS_INCLUDE_STREAM_USAGE = settingsData.always_include_stream_usage !== false;
+
+                const data = await res.json();
+                const modelsDiv = document.getElementById('models-list');
+                if (data.models.length === 0) {
+                    modelsDiv.innerHTML = '<p>No models configured yet.</p>';
+                    return;
+                }
+                const groups = {};
+                data.models.forEach(m => {
+                    const provider = m.litellm_params.model.split('/')[0] || 'other';
+                    if (!groups[provider]) groups[provider] = [];
+                    groups[provider].push(m);
+                });
+                modelsDiv.innerHTML = Object.entries(groups).map(([provider, models]) => `
+                    <div class="provider-group" style="margin-bottom: 10px;">
+                            <h3 onclick="toggleGroup('${provider}')" style="cursor: pointer; user-select: none;">
+                                <span id="arrow-${provider}">` + CHEVRON_RIGHT_SVG + `</span> ${provider} (${models.length})
+                            </h3>
+                        <div id="group-${provider}" style="display: none; padding-left: 20px;">
+                            ${models.map(m => `
+                            <div class="model-item" data-model-name="${m.model_name}">
+                                <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'")}', this)">${m.model_name}</span>
+                                <span>: ${m.litellm_params.model}</span>
+                                <button class="delete-btn" onclick="deleteModel(this, '${m.model_name.replace(/'/g, "\\'")}')">Delete</button>
+                            </div>`).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            function toggleGroup(provider) {
+                const group = document.getElementById(`group-${provider}`);
+                const arrow = document.getElementById(`arrow-${provider}`);
+                if (group.style.display === 'none') {
+                    group.style.display = 'block';
+                    arrow.innerHTML = CHEVRON_DOWN_SVG;
+                } else {
+                    group.style.display = 'none';
+                    arrow.innerHTML = CHEVRON_RIGHT_SVG;
+                }
+            }
+
+            function startRename(oldName, element) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = oldName;
+                input.style.flex = '1';
+                input.onkeydown = (e) => {
+                    if (e.key === 'Enter') submitRename(oldName, input.value, element);
+                    if (e.key === 'Escape') cancelRename(oldName, element);
+                };
+                input.onblur = () => cancelRename(oldName, element);
+                element.parentNode.replaceChild(input, element);
+                input.focus();
+                input.select();
+            }
+
+            function cancelRename(oldName, originalElement) {
+                const input = originalElement.parentNode ? originalElement.parentNode.querySelector('input') : null;
+                if (input) {
+                    const span = document.createElement('span');
+                    span.className = 'model-name';
+                    span.textContent = oldName;
+                    span.onclick = () => startRename(oldName, span);
+                    input.parentNode.replaceChild(span, input);
+                }
+            }
+
+            async function submitRename(oldName, newName, originalElement) {
+                if (!newName || newName === oldName) { cancelRename(oldName, originalElement); return; }
+                try {
+                    const res = await fetch(`/api/models/${encodeURIComponent(oldName)}`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({model_name: newName})
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        showToast('Model renamed successfully');
+                        showReloadToast(data.reloaded);
+                        loadModels();
+                    } else {
+                        const error = await res.json();
+                        showToast(`Error: ${error.detail || 'Failed to rename model'}`, 'error');
+                        cancelRename(oldName, originalElement);
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                    cancelRename(oldName, originalElement);
+                }
+            }
+
+            async function deleteModel(btn, modelName) {
+                const modelItem = btn.closest('.model-item');
+                if (!btn || !modelItem) return;
+
+                if (btn.dataset.confirming === 'true') return;
+
+                btn.dataset.confirming = 'true';
+                modelItem.classList.add('deleting');
+                btn.textContent = 'Confirm';
+                btn.className = 'confirm-btn';
+                btn.disabled = true;
+
+                setTimeout(() => { btn.disabled = false; }, 1000);
+
+                btn.onclick = async () => {
+                    try {
+                        const res = await fetch(`/api/models/${encodeURIComponent(modelName)}`, { method: 'DELETE' });
+                        if (res.ok) {
+                            const data = await res.json();
+                            showToast('Model deleted successfully');
+                            showReloadToast(data.reloaded);
+                            loadModels();
+                        } else {
+                            const error = await res.json();
+                            showToast(`Error: ${error.detail || 'Failed to delete model'}`, 'error');
+                            resetDeleteBtn(btn, modelItem, modelName);
+                        }
+                    } catch (e) {
+                        showToast(`Error: ${e.message}`, 'error');
+                        resetDeleteBtn(btn, modelItem, modelName);
+                    }
+                };
+            }
+
+            function resetDeleteBtn(btn, modelItem, modelName) {
+                btn.dataset.confirming = 'false';
+                modelItem.classList.remove('deleting');
+                btn.textContent = 'Delete';
+                btn.className = 'delete-btn';
+                btn.disabled = false;
+                btn.onclick = () => deleteModel(btn, modelName);
+            }
+
+            function showAddModel() { document.getElementById('add-model-section').style.display = 'block'; }
+
+            function closeAddModel() {
+                document.getElementById('add-model-section').style.display = 'none';
+                document.getElementById('provider-ui').innerHTML = '';
+                document.getElementById('provider-select').value = '';
+            }
+
+            async function addManualModel() {
+                const name = document.getElementById('manual-name').value;
+                const modelPath = document.getElementById('manual-model-path').value;
+                const apiBase = document.getElementById('manual-api-base').value;
+                if (!name || !modelPath) return showToast('Model Name and Model Path are required', 'error');
+                const modelConfig = {
+                    model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + name,
+                    litellm_params: { model: modelPath }
+                };
+                if (apiBase) modelConfig.litellm_params.api_base = apiBase;
+                await addModelCommon(modelConfig, 'manual');
+            }
+
+            async function addOpenRouterModel() {
+                const name = document.getElementById('or-name').value;
+                if (!name) return showToast('Model Name is required', 'error');
+                const modelConfig = {
+                    model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + name,
+                    litellm_params: { model: `openrouter/${name}` }
+                };
+                await addModelCommon(modelConfig, 'openrouter');
+            }
+
+            async function addOllamaModel() {
+                const name = document.getElementById('ollama-name').value;
+                const host = document.getElementById('ollama-host').value;
+                if (!name) return showToast('Model Name is required', 'error');
+                const modelConfig = {
+                    model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + name,
+                    litellm_params: { model: `ollama/${name}`, api_base: host || 'http://localhost:11434' }
+                };
+                await addModelCommon(modelConfig, 'ollama');
+            }
+
+            async function loadBedrockModels() {
+                try {
+                    const res = await fetch('/api/providers/bedrock/models');
+                    const data = await res.json();
+                    const select = document.getElementById('bedrock-select');
+                    select.innerHTML = '<option value="">-- Select a model --</option>';
+                    data.models.forEach(m => {
+                        const option = document.createElement('option');
+                        option.value = JSON.stringify(m);
+                        option.textContent = m.model;
+                        select.appendChild(option);
+                    });
+                } catch (e) {
+                    showToast('Failed to load Bedrock models catalog', 'error');
+                }
+            }
+
+            async function addBedrockModel() {
+                const select = document.getElementById('bedrock-select');
+                const selected = select.value;
+                if (!selected) return showToast('Please select a model', 'error');
+                const modelData = JSON.parse(selected);
+                const modelConfig = {
+                    model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + modelData.model,
+                    litellm_params: {
+                        model: `bedrock_mantle/${modelData.model}`,
+                        api_base: 'os.environ/BEDROCK_MANTLE_API_BASE',
+                        max_tokens: modelData.max_tokens
+                    }
+                };
+                await addModelCommon(modelConfig, 'bedrock');
+                select.selectedIndex = 0;
+            }
+
+            async function addModelCommon(modelConfig, provider) {
+                try {
+                    const res = await fetch('/api/models', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(modelConfig)
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        showToast('Model added successfully');
+                        showReloadToast(data.reloaded);
+                        closeAddModel();
+                        loadModels();
+                    } else {
+                        const error = await res.json();
+                        showToast(`Error: ${error.detail || 'Failed to add model'}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            function loadProviderUI() {
+                const provider = document.getElementById('provider-select').value;
+                const ui = document.getElementById('provider-ui');
+                if (provider === 'openrouter') {
+                    ui.innerHTML = `
+                        <h3>Add OpenRouter Model</h3>
+                        <input id="or-name" placeholder="e.g., google/gemini-2.0-flash-001" style="width: 400px;" />
+                        <button onclick="addOpenRouterModel()">Add Model</button>
+                        <p style="font-size: 12px; color: #666; margin-top: 5px;">See <a href="https://openrouter.ai/models" target="_blank">OpenRouter models</a>.</p>
+                    `;
+                } else if (provider === 'ollama') {
+                    ui.innerHTML = `
+                        <h3>Add Ollama Model</h3>
+                        <input id="ollama-name" placeholder="e.g., qwen2.5:14b" style="width: 400px;" />
+                        <input id="ollama-host" placeholder="http://localhost:11434 (default)" style="width: 400px;" />
+                        <button onclick="addOllamaModel()">Add Model</button>
+                        <p style="font-size: 12px; color: #666; margin-top: 5px;">Ensure Ollama is running and accessible.</p>
+                    `;
+                } else if (provider === 'bedrock') {
+                    ui.innerHTML = `
+                        <h3>Add Bedrock Model</h3>
+                        <select id="bedrock-select" style="width: 400px; padding: 5px;"></select>
+                        <button onclick="addBedrockModel()">Add Model</button>
+                        <p style="font-size: 12px; color: #666; margin-top: 5px;">Mantle must be running. See <a href="https://github.com/pyroprompts/mantle" target="_blank">Mantle</a>.</p>
+                    `;
+                    loadBedrockModels();
+                } else if (provider === 'manual') {
+                    ui.innerHTML = `
+                        <h3>Add Model Manually</h3>
+                        <input id="manual-name" placeholder="Model Name (e.g., my-model)" style="width: 400px;" /><br>
+                        <input id="manual-model-path" placeholder="Model Path (e.g., openrouter/google/gemini-2.0-flash-001)" style="width: 400px;" /><br>
+                        <input id="manual-api-base" placeholder="API Base (optional, e.g., https://openrouter.ai/api/v1)" style="width: 400px;" /><br>
+                        <button onclick="addManualModel()">Add Model</button>
+                    `;
+                } else {
+                    ui.innerHTML = '';
+                }
+            }
+
+            async function reloadLiteLLM() {
+                try {
+                    const res = await fetch('/api/models/reload', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.reloaded) {
+                        showToast('LiteLLM reloaded successfully', 'success');
+                    } else {
+                        showToast('LiteLLM reload failed - try restarting the container', 'warning', 6000);
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            async function loadLogs() {
+                const lines = document.getElementById('log-lines').value;
+                const res = await fetch(`/api/logs?lines=${lines}`);
+                const data = await res.json();
+                const logsDiv = document.getElementById('logs-output');
+                logsDiv.innerHTML = ansiToHtml(data.logs);
+                logsDiv.scrollTop = logsDiv.scrollHeight;
+            }
+
+            async function copyLogs() {
+                const logsText = document.getElementById('logs-output').innerText;
+                if (!logsText) return showToast('No logs to copy', 'warning');
+                try {
+                    await navigator.clipboard.writeText(logsText);
+                    showToast('Logs copied to clipboard');
+                } catch (err) {
+                    showToast('Failed to copy logs', 'error');
+                }
+            }
+
+            loadDashboard();
+            loadAuth();
+            loadModels();
+            setInterval(loadAuth, 30000);
+
+            // Initialize prefix toggle
+            const prefixToggle = document.getElementById('use-prefix-toggle');
+            if (prefixToggle) {
+                prefixToggle.checked = window.USE_PREFIX !== false;
+            }
+
+            async function togglePrefix() {
+                const toggle = document.getElementById('use-prefix-toggle');
+                const usePrefix = toggle.checked;
+                const res = await fetch(`/api/settings?use_prefix=${usePrefix}&always_include_stream_usage=${ALWAYS_INCLUDE_STREAM_USAGE}`, { method: 'POST' });
+                if (res.ok) {
+                    window.USE_PREFIX = usePrefix;
+                    showToast(`Model prefix ${usePrefix ? 'enabled' : 'disabled'}`);
+                } else {
+                    showToast('Failed to update setting', 'error');
+                    toggle.checked = !usePrefix;
+                }
+            }
+
+            // Initialize always_include_stream_usage toggle
+            const streamUsageToggle = document.getElementById('stream-usage-toggle');
+            if (streamUsageToggle) {
+                streamUsageToggle.checked = ALWAYS_INCLUDE_STREAM_USAGE;
+            }
+
+            async function toggleStreamUsage() {
+                const toggle = document.getElementById('stream-usage-toggle');
+                const alwaysIncludeStreamUsage = toggle.checked;
+                const res = await fetch(`/api/settings?use_prefix=${window.USE_PREFIX !== false}&always_include_stream_usage=${alwaysIncludeStreamUsage}`, { method: 'POST' });
+                if (res.ok) {
+                    ALWAYS_INCLUDE_STREAM_USAGE = alwaysIncludeStreamUsage;
+                    showToast(`Stream usage ${alwaysIncludeStreamUsage ? 'enabled' : 'disabled'}`);
+                } else {
+                    showToast('Failed to update setting', 'error');
+                    toggle.checked = !alwaysIncludeStreamUsage;
+                }
+            }
+
+            // Detect and update URLs based on actual access location
+            (function() {
+                const mgmtUrl = window.location.origin;
+                const apiHost = window.location.hostname;
+                const apiUrl = `${window.location.protocol}//${apiHost}:4000`;
+                const apiUrlV1 = `${apiUrl}/v1`;
+                document.getElementById('mgmt-url').textContent = mgmtUrl;
+                document.getElementById('litellm-url').textContent = apiUrl;
+                document.getElementById('models-curl').textContent = `curl ${apiUrl}/models`;
+                document.getElementById('opencode-url').textContent = apiUrlV1;
+                document.getElementById('clawcode-url').textContent = apiUrlV1;
+            })();
+        </script>
+</body>
+</html>
