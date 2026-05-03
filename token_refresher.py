@@ -8,6 +8,31 @@ import boto3
 from aws_bedrock_token_generator import BedrockTokenGenerator
 from litellm.integrations.custom_logger import CustomLogger
 
+_TMP_AUTH_URL = "/tmp/auth_url"
+_TMP_AUTH_NEEDED = "/tmp/auth_needed"
+
+
+def _write_auth_tmp(url: str):
+    """Write auth URL and auth_needed flag to /tmp for management UI."""
+    try:
+        with open(_TMP_AUTH_URL, "w") as f:
+            f.write(url)
+        with open(_TMP_AUTH_NEEDED, "w") as f:
+            f.write("1")
+    except Exception as e:
+        print(f"[TokenRefresher] WARNING: Could not write auth tmp files: {e}", file=sys.stderr)
+
+
+def _clear_auth_tmp():
+    """Remove /tmp auth files once login completes."""
+    for path in (_TMP_AUTH_URL, _TMP_AUTH_NEEDED):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            print(f"[TokenRefresher] WARNING: Could not remove {path}: {e}", file=sys.stderr)
+
 
 class BedrockTokenRefresher(CustomLogger):
     TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
@@ -47,10 +72,12 @@ class BedrockTokenRefresher(CustomLogger):
                     # Prefer the autofill URL with user_code embedded
                     if "user_code=" in line and line.startswith("https://"):
                         self._auth_url = line
+                        _write_auth_tmp(line)
                         print(f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}")
                     elif line.startswith("https://") and self._auth_url is None:
                         # Fallback: first https URL seen (base device auth URL)
                         self._auth_url = line
+                        _write_auth_tmp(line)
                         print(f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}")
                 proc.wait()
                 if proc.returncode == 0:
@@ -58,6 +85,7 @@ class BedrockTokenRefresher(CustomLogger):
                     self._needs_login = False
                     self._auth_url = None
                     self._login_process = None
+                    _clear_auth_tmp()
                     self._refresh()
                 else:
                     print(
