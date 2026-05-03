@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 import threading
+import re
 
 import boto3
 from aws_bedrock_token_generator import BedrockTokenGenerator
@@ -10,22 +11,29 @@ from litellm.integrations.custom_logger import CustomLogger
 
 _TMP_AUTH_URL = "/tmp/auth_url"
 _TMP_AUTH_NEEDED = "/tmp/auth_needed"
+_TMP_AUTH_CODE = "/tmp/auth_code"
+
+# Matches the XXXX-XXXX verification code in aws sso login output
+_CODE_RE = re.compile(r'\b([A-Z0-9]{4}-[A-Z0-9]{4})\b')
 
 
-def _write_auth_tmp(url: str):
-    """Write auth URL and auth_needed flag to /tmp for management UI."""
+def _write_auth_tmp(url: str, code: str | None = None):
+    """Write auth URL, auth_needed flag, and optional code to /tmp for management UI."""
     try:
         with open(_TMP_AUTH_URL, "w") as f:
             f.write(url)
         with open(_TMP_AUTH_NEEDED, "w") as f:
             f.write("1")
+        if code:
+            with open(_TMP_AUTH_CODE, "w") as f:
+                f.write(code)
     except Exception as e:
         print(f"[TokenRefresher] WARNING: Could not write auth tmp files: {e}", file=sys.stderr)
 
 
 def _clear_auth_tmp():
     """Remove /tmp auth files once login completes."""
-    for path in (_TMP_AUTH_URL, _TMP_AUTH_NEEDED):
+    for path in (_TMP_AUTH_URL, _TMP_AUTH_NEEDED, _TMP_AUTH_CODE):
         try:
             os.remove(path)
         except FileNotFoundError:
@@ -42,6 +50,7 @@ class BedrockTokenRefresher(CustomLogger):
         self._force_refresh = False
         self._needs_login = False  # set True when login required in non-interactive mode
         self._auth_url: str | None = None  # captured aws sso login --no-browser URL for web UI
+        self._auth_code: str | None = None  # captured XXXX-XXXX verification code
         self._login_process: subprocess.Popen | None = None  # background aws login process
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
@@ -63,27 +72,48 @@ class BedrockTokenRefresher(CustomLogger):
             Alternatively, you may visit the following URL which will autofill the code:
             https://device.sso.ap-northeast-1.amazonaws.com/?user_code=XXXX-XXXX
 
-        We capture the autofill URL (contains '?user_code=') as it's directly usable.
+        We capture the autofill URL (contains '?user_code=') as it's directly usable,
+        and also capture the standalone XXXX-XXXX code for display in the web UI.
         """
         def _read():
             try:
                 for line in proc.stdout:
                     line = line.strip()
+
+                    # Capture standalone verification code (XXXX-XXXX)
+                    # Only match lines that are JUST the code (not inside a URL)
+                    if not line.startswith("https://") and self._auth_code is None:
+                        m = _CODE_RE.search(line)
+                        if m:
+                            self._auth_code = m.group(1)
+                            print(f"[TokenRefresher] Auth code captured: {self._auth_code}")
+                            # Write code to tmp even if URL not yet known
+                            if self._auth_url:
+                                _write_auth_tmp(self._auth_url, self._auth_code)
+                            else:
+                                try:
+                                    with open(_TMP_AUTH_CODE, "w") as f:
+                                        f.write(self._auth_code)
+                                except Exception:
+                                    pass
+
                     # Prefer the autofill URL with user_code embedded
                     if "user_code=" in line and line.startswith("https://"):
                         self._auth_url = line
-                        _write_auth_tmp(line)
+                        _write_auth_tmp(line, self._auth_code)
                         print(f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}")
                     elif line.startswith("https://") and self._auth_url is None:
                         # Fallback: first https URL seen (base device auth URL)
                         self._auth_url = line
-                        _write_auth_tmp(line)
+                        _write_auth_tmp(line, self._auth_code)
                         print(f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}")
+
                 proc.wait()
                 if proc.returncode == 0:
                     print("[TokenRefresher] AWS login completed — refreshing token...")
                     self._needs_login = False
                     self._auth_url = None
+                    self._auth_code = None
                     self._login_process = None
                     _clear_auth_tmp()
                     self._refresh()
@@ -221,6 +251,7 @@ class BedrockTokenRefresher(CustomLogger):
                 return JSONResponse({
                     "needs_login": self._needs_login,
                     "auth_url": self._auth_url,
+                    "auth_code": self._auth_code,
                     "profile": self._profile,
                 })
 

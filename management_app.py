@@ -103,12 +103,18 @@ async def update_settings(
 
 @app.get("/api/auth/status")
 async def auth_status():
-    """Check if AWS auth is needed and get auth URL."""
+    """Check if AWS auth is needed and get auth URL + verification code."""
     auth_needed = os.path.exists("/tmp/auth_needed")
     auth_url = None
+    auth_code = None
+
     if os.path.exists("/tmp/auth_url"):
         with open("/tmp/auth_url", "r") as f:
             auth_url = f.read().strip()
+
+    if os.path.exists("/tmp/auth_code"):
+        with open("/tmp/auth_code", "r") as f:
+            auth_code = f.read().strip()
 
     openrouter_key = bool(os.environ.get("OPENROUTER_API_KEY"))
     ollama_host = os.environ.get("OLLAMA_API_BASE", "")
@@ -116,6 +122,7 @@ async def auth_status():
     return {
         "auth_needed": auth_needed,
         "auth_url": auth_url,
+        "auth_code": auth_code,
         "openrouter": {"configured": openrouter_key},
         "ollama": {"configured": bool(ollama_host), "host": ollama_host}
     }
@@ -254,7 +261,7 @@ async def fetch_bedrock_models():
         raise HTTPException(500, f"Error reading Bedrock models catalog: {str(e)}")
 
 
-@app.delete("/api/models/{model_name:path}")
+@app.delete("/api/models/{model_name}")
 async def delete_model(model_name: str):
     """Delete a model from TinyDB."""
     if not db.model_name_exists(model_name):
@@ -277,7 +284,7 @@ async def add_model(model: Dict):
     return {"status": "success", "model": model, "reloaded": reloaded}
 
 
-@app.put("/api/models/{old_model_name:path}")
+@app.put("/api/models/{old_model_name}")
 async def rename_model(old_model_name: str, update: Dict):
     """Rename a model in TinyDB."""
     new_model_name = update.get("model_name")

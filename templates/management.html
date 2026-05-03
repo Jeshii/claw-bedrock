@@ -81,6 +81,21 @@
         .help-section pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; margin: 10px 0; }
         body.dark .help-section pre { background: #333; }
 
+        /* AWS SSO auth flow styles */
+        .auth-steps { margin-top: 16px; }
+        .auth-step { display: flex; gap: 12px; margin-bottom: 16px; align-items: flex-start; }
+        .auth-step-num { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: #ffc107; color: #333; font-weight: bold; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+        .auth-step-body { flex: 1; }
+        .auth-step-body p { margin-bottom: 6px; }
+        .auth-code-box { display: inline-flex; align-items: center; gap: 10px; background: #fff8e1; border: 2px solid #ffc107; border-radius: 6px; padding: 10px 16px; margin-top: 4px; }
+        body.dark .auth-code-box { background: #2a2000; border-color: #ffc107; }
+        .auth-code-value { font-family: monospace; font-size: 22px; font-weight: bold; letter-spacing: 3px; color: #333; }
+        body.dark .auth-code-value { color: #ffe082; }
+        .copy-code-btn { padding: 4px 10px; font-size: 12px; background: #ffc107; color: #333; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
+        .copy-code-btn:hover { background: #e0a800; }
+        .auth-url-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+        .auth-url-link { word-break: break-all; }
+
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         {% endraw %}
     </style>
@@ -332,17 +347,51 @@
                 const data = await res.json();
                 const authDiv = document.getElementById('auth-status');
                 let html = '';
+
                 if (data.auth_needed) {
-                    html += '<div class="auth-needed"><p><strong>Authentication Required</strong></p>';
+                    html += '<div class="auth-needed"><p><strong>&#9888; AWS Authentication Required</strong></p>';
+                    html += '<div class="auth-steps">';
+
+                    // Step 1: open the URL
+                    html += '<div class="auth-step">';
+                    html += '<div class="auth-step-num">1</div>';
+                    html += '<div class="auth-step-body">';
                     if (data.auth_url) {
-                        html += `<p>Click <a href="${data.auth_url}" target="_blank">here to authenticate</a> with AWS.</p>`;
+                        html += '<p>Open this URL in your browser:</p>';
+                        html += `<div class="auth-url-row"><a class="auth-url-link" href="${data.auth_url}" target="_blank">${data.auth_url}</a></div>`;
                     } else {
-                        html += '<p>Please authenticate with AWS (SAML/SSO required).</p>';
+                        html += '<p>Waiting for AWS SSO login URL&hellip; (refresh in a moment)</p>';
                     }
+                    html += '</div></div>';
+
+                    // Step 2: enter the code
+                    html += '<div class="auth-step">';
+                    html += '<div class="auth-step-num">2</div>';
+                    html += '<div class="auth-step-body">';
+                    if (data.auth_code) {
+                        html += '<p>Enter this verification code when prompted:</p>';
+                        html += `<div class="auth-code-box">`;
+                        html += `<span class="auth-code-value" id="auth-code-val">${data.auth_code}</span>`;
+                        html += `<button class="copy-code-btn" onclick="copyAuthCode('${data.auth_code}')">Copy</button>`;
+                        html += `</div>`;
+                    } else if (data.auth_url) {
+                        html += '<p>The URL above already contains your code &mdash; just open it to auto-fill.</p>';
+                    } else {
+                        html += '<p>Verification code will appear here once the login process starts.</p>';
+                    }
+                    html += '</div></div>';
+
+                    // Step 3: wait
+                    html += '<div class="auth-step">';
+                    html += '<div class="auth-step-num">3</div>';
+                    html += '<div class="auth-step-body"><p>Approve the request in AWS, then this page will refresh automatically.</p></div>';
                     html += '</div>';
+
+                    html += '</div></div>'; // .auth-steps + .auth-needed
                 } else {
                     html += '<p>' + CHECK_SVG + ' AWS authentication configured.</p>';
                 }
+
                 if (data.openrouter.configured) {
                     html += '<p>' + CHECK_SVG + ' OpenRouter API key configured.</p>';
                 } else {
@@ -354,6 +403,14 @@
                     html += '<p>' + X_CIRCLE_SVG + ' Ollama not configured (set OLLAMA_API_BASE).</p>';
                 }
                 authDiv.innerHTML = html;
+            }
+
+            function copyAuthCode(code) {
+                navigator.clipboard.writeText(code).then(() => {
+                    showToast('Code copied to clipboard');
+                }).catch(() => {
+                    showToast('Failed to copy code', 'error');
+                });
             }
 
             async function loadModels() {
@@ -493,7 +550,7 @@
                 btn.textContent = 'Delete';
                 btn.className = 'delete-btn';
                 btn.disabled = false;
-                btn.onclick = () => deleteModel(btn, modelName);
+                btn.onclick = () => deleteModel(btn, modelItem, modelName);
             }
 
             function showAddModel() { document.getElementById('add-model-section').style.display = 'block'; }
@@ -670,7 +727,8 @@
             loadDashboard();
             loadAuth();
             loadModels();
-            setInterval(loadAuth, 30000);
+            // Poll auth status every 10s so UI updates automatically after login completes
+            setInterval(loadAuth, 10000);
 
             // Initialize prefix toggle
             const prefixToggle = document.getElementById('use-prefix-toggle');
