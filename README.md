@@ -1,4 +1,4 @@
-# claw-bedrock
+# 🦞🪨claw-bedrock🪨🦞
 
 A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as a way to expose [AWS Bedrock Mantle](https://docs.aws.amazon.com/bedrock/) models to claw-code. Now it is more of containerized LiteLLM with a webapp front end for exposing models from multiple providers via a single OpenAI-compatible API. Useful for [claw-code](https://github.com/ultraworkers/claw-code), [opencode](https://github.com/anomalyco/opencode), or other apps that expect an OpenAI response.
 
