@@ -525,7 +525,20 @@ async def dashboard():
         <div id="page-logs" class="page">
             <h1>Logs</h1>
             <div class="section">
-                <h2>LiteLLM Logs</h2>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                    <h2 style="margin:0;">LiteLLM Logs</h2>
+                    <button
+                        onclick="copyLogs()"
+                        id="copy-logs-btn"
+                        title="Copy log contents"
+                        style="padding:4px 6px; background:none; border:1px solid #ccc; border-radius:4px; cursor:pointer; line-height:0;"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Copy logs">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                    </button>
+                </div>
                 <button onclick="loadLogs()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Refresh Logs</button>
                 <select id="log-lines" onchange="loadLogs()">
                     <option value="50">Last 50 lines</option>
@@ -1070,8 +1083,23 @@ git push origin v0.1.0</pre>
         loadBedrockModels();
     }
 
+    function copyLogs() {
+        const text = document.getElementById('logs-output').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.getElementById('copy-logs-btn');
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(() => {
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Copy logs"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+            }, 1500);
+        }).catch(() => showToast('Failed to copy logs', 'error'));
+    }
+
     async function loadLogs() {
         const lines = document.getElementById('log-lines').value;
+        const res = await fetch(`/api/logs?lines=${lines}`);
+        const data = await res.json();
+        const logsDiv = document.getElementById('logs-output');
+        logsDiv.textContent = data.logs;
         const res = await fetch(`/api/logs?lines=${lines}`);
         const data = await res.json();
         const logsDiv = document.getElementById('logs-output');
