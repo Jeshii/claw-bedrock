@@ -48,6 +48,19 @@
         .auth-needed { background: #fff3cd; border-color: #ffc107; }
         body.dark .auth-needed { background: #3d3000; border-color: #ffc107; }
 
+        /* Dashboard auth banner — compact alert strip */
+        #dashboard-auth-banner { display: none; margin-bottom: 20px; padding: 14px 18px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; }
+        body.dark #dashboard-auth-banner { background: #3d3000; border-color: #ffc107; }
+        #dashboard-auth-banner .banner-title { font-weight: 600; margin-bottom: 6px; }
+        #dashboard-auth-banner .banner-url { word-break: break-all; font-size: 13px; margin-top: 4px; }
+        #dashboard-auth-banner .banner-code { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; background: #fff8e1; border: 1px solid #ffc107; border-radius: 4px; padding: 4px 10px; }
+        body.dark #dashboard-auth-banner .banner-code { background: #2a2000; }
+        #dashboard-auth-banner .banner-code-val { font-family: monospace; font-size: 18px; font-weight: bold; letter-spacing: 2px; }
+        body.dark #dashboard-auth-banner .banner-code-val { color: #ffe082; }
+        #dashboard-auth-banner .banner-actions { margin-top: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        #dashboard-auth-banner .go-auth-btn { padding: 5px 12px; font-size: 13px; background: #ffc107; color: #333; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
+        #dashboard-auth-banner .go-auth-btn:hover { background: #e0a800; }
+
         button { padding: 8px 16px; margin: 5px; cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: white; font-size: 14px; }
         body.dark button { background: #444; color: #e0e0e0; border-color: #666; }
         button:hover { background: #f8f9fa; }
@@ -124,6 +137,14 @@
         <!-- Dashboard Page -->
         <div id="page-dashboard" class="page active">
             <h1>Dashboard</h1>
+            <!-- Auth banner: shown on dashboard whenever AWS login is needed -->
+            <div id="dashboard-auth-banner">
+                <div class="banner-title">&#9888; AWS Authentication Required</div>
+                <div id="banner-body"></div>
+                <div class="banner-actions">
+                    <button class="go-auth-btn" onclick="showPage2('auth')">Go to Authentication &rarr;</button>
+                </div>
+            </div>
             <div class="section" id="dashboard-info">
                 <h2>Server Information</h2>
                 <div id="server-status">Loading...</div>
@@ -287,6 +308,16 @@
                 if (pageId === 'auth') loadAuth();
             }
 
+            // showPage2: navigate without requiring a click event (used by banner button)
+            function showPage2(pageId) {
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.getElementById('page-' + pageId).classList.add('active');
+                document.querySelectorAll('.nav a').forEach(a => {
+                    a.classList.toggle('active', a.getAttribute('onclick') === `showPage('${pageId}')`);
+                });
+                if (pageId === 'auth') loadAuth();
+            }
+
             async function loadDashboard() {
                 const res = await fetch('/api/dashboard');
                 const data = await res.json();
@@ -342,11 +373,34 @@
                 }
             }
 
+            function updateDashboardBanner(data) {
+                const banner = document.getElementById('dashboard-auth-banner');
+                const bannerBody = document.getElementById('banner-body');
+                if (!data.auth_needed) {
+                    banner.style.display = 'none';
+                    return;
+                }
+                banner.style.display = 'block';
+                let html = '';
+                if (data.auth_url) {
+                    html += `<div class="banner-url">Open in browser: <a href="${data.auth_url}" target="_blank">${data.auth_url}</a></div>`;
+                } else {
+                    html += '<div class="banner-url">Waiting for AWS SSO login URL&hellip;</div>';
+                }
+                if (data.auth_code) {
+                    html += `<div class="banner-code"><span class="banner-code-val">${data.auth_code}</span><button class="copy-code-btn" onclick="copyAuthCode('${data.auth_code}')">Copy code</button></div>`;
+                }
+                bannerBody.innerHTML = html;
+            }
+
             async function loadAuth() {
                 const res = await fetch('/api/auth/status');
                 const data = await res.json();
                 const authDiv = document.getElementById('auth-status');
                 let html = '';
+
+                // Update dashboard banner regardless of which page is active
+                updateDashboardBanner(data);
 
                 if (data.auth_needed) {
                     html += '<div class="auth-needed"><p><strong>&#9888; AWS Authentication Required</strong></p>';
