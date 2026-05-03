@@ -254,7 +254,7 @@ async def fetch_bedrock_models():
         raise HTTPException(500, f"Error reading Bedrock models catalog: {str(e)}")
 
 
-@app.delete("/api/models/{model_name}")
+@app.delete("/api/models/{model_name:path}")
 async def delete_model(model_name: str):
     """Delete a model from TinyDB."""
     if not db.model_name_exists(model_name):
@@ -277,7 +277,7 @@ async def add_model(model: Dict):
     return {"status": "success", "model": model, "reloaded": reloaded}
 
 
-@app.put("/api/models/{old_model_name}")
+@app.put("/api/models/{old_model_name:path}")
 async def rename_model(old_model_name: str, update: Dict):
     """Rename a model in TinyDB."""
     new_model_name = update.get("model_name")
