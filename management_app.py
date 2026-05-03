@@ -199,7 +199,7 @@ async def fetch_openrouter_models(include_free: bool = True, search: Optional[st
         if include_free:
             def _is_free(m):
                 try:
-	                return float(m.get("pricing", {}).get("prompt", "1")) == 0
+                    return float(m.get("pricing", {}).get("prompt", "1")) == 0
                 except:
                     return False
             models = [m for m in models if _is_free(m)]
