@@ -100,7 +100,7 @@ def model_name_exists(model_name):
 
 def get_models_for_litellm():
     """Get models in the format needed for LiteLLM config generation."""
-    return {"model_list": models_table.all()}
+    return {"model_list": [dict(m) for m in models_table.all()]}
 
 
 def close_db():
