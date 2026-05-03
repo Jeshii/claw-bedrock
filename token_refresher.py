@@ -55,7 +55,15 @@ class BedrockTokenRefresher(CustomLogger):
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
         self._profile = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
-        self._refresh()
+        # Wrap startup refresh so a login/credential failure never crashes LiteLLM
+        try:
+            self._refresh()
+        except Exception as e:
+            print(
+                f"[TokenRefresher] WARNING: Initial token refresh failed ({e}). "
+                "Server will start without Bedrock credentials — authenticate via the web UI.",
+                file=sys.stderr,
+            )
         self._register_auth_endpoint()
 
     def _is_interactive(self) -> bool:
@@ -116,14 +124,24 @@ class BedrockTokenRefresher(CustomLogger):
                     self._auth_code = None
                     self._login_process = None
                     _clear_auth_tmp()
-                    self._refresh()
+                    try:
+                        self._refresh()
+                    except Exception as e:
+                        print(
+                            f"[TokenRefresher] WARNING: Token refresh after login failed: {e}",
+                            file=sys.stderr,
+                        )
                 else:
                     print(
-                        f"[TokenRefresher] aws sso login exited with code {proc.returncode}.",
+                        f"[TokenRefresher] aws sso login exited with code {proc.returncode}. "
+                        "Login did not complete — auth still required.",
                         file=sys.stderr,
                     )
+                    # Keep _needs_login=True and auth URL visible so user can retry
+                    self._login_process = None
             except Exception as e:
                 print(f"[TokenRefresher] Error reading aws sso login output: {e}", file=sys.stderr)
+                self._login_process = None
 
         t = threading.Thread(target=_read, daemon=True)
         t.start()
@@ -193,20 +211,27 @@ class BedrockTokenRefresher(CustomLogger):
             self._ensure_login()
             return None  # caller must check for None and skip token generation
 
-        credentials = session.get_credentials()
+        try:
+            credentials = session.get_credentials()
+        except Exception as e:
+            print(f"[TokenRefresher] Could not get credentials for profile '{self._profile}': {e}", file=sys.stderr)
+            self._ensure_login()
+            return None
 
         if credentials is None:
             self._ensure_login()
             if self._needs_login:
                 return None
             # Login completed synchronously (interactive mode) — rebuild session
-            session = boto3.Session(profile_name=self._profile, region_name=self._region)
-            credentials = session.get_credentials()
+            try:
+                session = boto3.Session(profile_name=self._profile, region_name=self._region)
+                credentials = session.get_credentials()
+            except Exception as e:
+                print(f"[TokenRefresher] Failed to rebuild session after login: {e}", file=sys.stderr)
+                return None
             if credentials is None:
-                raise RuntimeError(
-                    "Could not obtain AWS credentials even after login. "
-                    "Check your AWS config and profile name."
-                )
+                print("[TokenRefresher] Could not obtain credentials after login.", file=sys.stderr)
+                return None
             return session
 
         # Attempt to resolve credentials to catch expired tokens early
@@ -216,17 +241,16 @@ class BedrockTokenRefresher(CustomLogger):
             self._ensure_login()
             if self._needs_login:
                 return None
-            session = boto3.Session(profile_name=self._profile, region_name=self._region)
-            credentials = session.get_credentials()
-            if credentials is None:
-                raise RuntimeError(
-                    "Could not obtain AWS credentials even after login. "
-                    "Check your AWS config and profile name."
-                )
             try:
+                session = boto3.Session(profile_name=self._profile, region_name=self._region)
+                credentials = session.get_credentials()
+                if credentials is None:
+                    print("[TokenRefresher] Could not obtain credentials after login.", file=sys.stderr)
+                    return None
                 credentials.get_frozen_credentials()
             except Exception as e:
-                raise RuntimeError(f"Credentials still invalid after login: {e}") from e
+                print(f"[TokenRefresher] Credentials still invalid after login: {e}", file=sys.stderr)
+                return None
 
         return session
 
@@ -234,11 +258,15 @@ class BedrockTokenRefresher(CustomLogger):
         session = self._get_valid_session()
         if session is None:
             return  # login required — server stays up, /auth/status will surface the URL
-        credentials = session.get_credentials()
-        token = self._generator.get_token(credentials, self._region)
-        os.environ["BEDROCK_MANTLE_API_KEY"] = token
-        self._fetched_at = time.time()
-        print(f"[TokenRefresher] Token refreshed at {time.strftime('%H:%M:%S')}")
+        try:
+            credentials = session.get_credentials()
+            token = self._generator.get_token(credentials, self._region)
+            os.environ["BEDROCK_MANTLE_API_KEY"] = token
+            self._fetched_at = time.time()
+            print(f"[TokenRefresher] Token refreshed at {time.strftime('%H:%M:%S')}")
+        except Exception as e:
+            print(f"[TokenRefresher] Token generation failed: {e}", file=sys.stderr)
+            # Don't re-raise — server stays up, will retry on next request
 
     def _register_auth_endpoint(self):
         """Register GET /auth/status on LiteLLM's FastAPI app."""
@@ -269,7 +297,10 @@ class BedrockTokenRefresher(CustomLogger):
                   "Client must re-authenticate.", file=sys.stderr)
         if self._force_refresh or time.time() - self._fetched_at > self.TOKEN_TTL:
             print("[TokenRefresher] Refreshing token before call...")
-            self._refresh()
+            try:
+                self._refresh()
+            except Exception as e:
+                print(f"[TokenRefresher] Token refresh failed in pre_call_hook: {e}", file=sys.stderr)
             self._force_refresh = False
         return data
 
@@ -282,7 +313,10 @@ class BedrockTokenRefresher(CustomLogger):
                 f"  Error: {exception}"
             )
             self._force_refresh = True
-            self._refresh()
+            try:
+                self._refresh()
+            except Exception as e:
+                print(f"[TokenRefresher] Token refresh failed in failure_event hook: {e}", file=sys.stderr)
 
 
 token_refresher = BedrockTokenRefresher()
