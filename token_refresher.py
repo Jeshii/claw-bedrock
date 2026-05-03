@@ -16,7 +16,7 @@ class BedrockTokenRefresher(CustomLogger):
         self._fetched_at = 0
         self._force_refresh = False
         self._needs_login = False  # set True when login required in non-interactive mode
-        self._auth_url: str | None = None  # captured aws login --remote URL for web UI
+        self._auth_url: str | None = None  # captured aws sso login --no-browser URL for web UI
         self._login_process: subprocess.Popen | None = None  # background aws login process
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
@@ -28,12 +28,28 @@ class BedrockTokenRefresher(CustomLogger):
         return sys.stdin.isatty()
 
     def _capture_auth_url_from_process(self, proc: subprocess.Popen):
-        """Read stdout from aws login --remote in a background thread, capture the auth URL."""
+        """Read stdout from aws sso login --no-browser in a background thread.
+
+        The command outputs lines like:
+            Please visit the following URL:
+            https://device.sso.ap-northeast-1.amazonaws.com/
+            Then enter the code:
+            XXXX-XXXX
+            Alternatively, you may visit the following URL which will autofill the code:
+            https://device.sso.ap-northeast-1.amazonaws.com/?user_code=XXXX-XXXX
+
+        We capture the autofill URL (contains '?user_code=') as it's directly usable.
+        """
         def _read():
             try:
                 for line in proc.stdout:
                     line = line.strip()
-                    if line.startswith("https://"):
+                    # Prefer the autofill URL with user_code embedded
+                    if "user_code=" in line and line.startswith("https://"):
+                        self._auth_url = line
+                        print(f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}")
+                    elif line.startswith("https://") and self._auth_url is None:
+                        # Fallback: first https URL seen (base device auth URL)
                         self._auth_url = line
                         print(f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}")
                 proc.wait()
@@ -45,21 +61,21 @@ class BedrockTokenRefresher(CustomLogger):
                     self._refresh()
                 else:
                     print(
-                        f"[TokenRefresher] aws login exited with code {proc.returncode}.",
+                        f"[TokenRefresher] aws sso login exited with code {proc.returncode}.",
                         file=sys.stderr,
                     )
             except Exception as e:
-                print(f"[TokenRefresher] Error reading aws login output: {e}", file=sys.stderr)
+                print(f"[TokenRefresher] Error reading aws sso login output: {e}", file=sys.stderr)
 
         t = threading.Thread(target=_read, daemon=True)
         t.start()
 
     def _ensure_login(self):
-        """Trigger aws login --remote for SSH-safe authentication.
+        """Trigger aws sso login --no-browser for headless authentication.
 
-        In interactive mode: prints a URL, prompts for authorization code.
-        In non-interactive mode: launches aws login --remote in the background,
-        captures the URL, sets _needs_login, and surfaces it via /auth/status.
+        In interactive mode: falls back to normal aws sso login (opens browser).
+        In non-interactive mode: launches aws sso login --no-browser in the background,
+        captures the autofill URL, sets _needs_login, and surfaces it via /auth/status.
         """
         if not self._is_interactive():
             print(
@@ -71,12 +87,12 @@ class BedrockTokenRefresher(CustomLogger):
 
             # Only start one login process at a time
             if self._login_process is not None and self._login_process.poll() is None:
-                print("[TokenRefresher] aws login --remote already running, skipping duplicate launch.")
+                print("[TokenRefresher] aws sso login already running, skipping duplicate launch.")
                 return
 
             try:
                 proc = subprocess.Popen(
-                    ["aws", "login", "--profile", self._profile, "--region", self._region, "--remote"],
+                    ["aws", "sso", "login", "--profile", self._profile, "--no-browser"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -86,25 +102,23 @@ class BedrockTokenRefresher(CustomLogger):
             except FileNotFoundError:
                 print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
             except Exception as e:
-                print(f"[TokenRefresher] ERROR: failed to launch aws login --remote: {e}", file=sys.stderr)
+                print(f"[TokenRefresher] ERROR: failed to launch aws sso login: {e}", file=sys.stderr)
             return  # do not block — background thread handles the rest
 
         print(
             f"[TokenRefresher] AWS session expired or missing. "
-            f"Launching login for profile '{self._profile}'...\n"
-            f"A URL will be printed — open it in any browser, "
-            f"then paste the authorization code back into this terminal."
+            f"Launching login for profile '{self._profile}'..."
         )
         try:
             subprocess.run(
-                ["aws", "login", "--profile", self._profile, "--region", self._region, "--remote"],
+                ["aws", "sso", "login", "--profile", self._profile],
                 check=True,
             )
         except FileNotFoundError:
             print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
             raise
         except subprocess.CalledProcessError as e:
-            print(f"[TokenRefresher] ERROR: aws login failed (exit {e.returncode}).", file=sys.stderr)
+            print(f"[TokenRefresher] ERROR: aws sso login failed (exit {e.returncode}).", file=sys.stderr)
             raise
 
     def _get_valid_session(self) -> boto3.Session | None:
