@@ -760,9 +760,9 @@ git push origin v0.1.0</pre>
                 <div id="group-${provider}" style="display: none; padding-left: 20px;">
                     ${models.map(m => `
                     <div class="model-item" data-model-name="${m.model_name}">
-                        <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'") }', this)">${m.model_name}</span>
+                        <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'")}', this)">${m.model_name}</span>
                         <span>: ${m.litellm_params.model}</span>
-                        <button class="delete-btn" onclick="deleteModel('${m.model_name.replace(/'/g, "\\'")}')" >Delete</button>
+                        <button class="delete-btn" onclick="deleteModel('${m.model_name.replace(/'/g, "\\'")}')">Delete</button>
                     </div>`).join('')}
                 </div>
             </div>
@@ -1096,10 +1096,6 @@ git push origin v0.1.0</pre>
 
     async function loadLogs() {
         const lines = document.getElementById('log-lines').value;
-        const res = await fetch(`/api/logs?lines=${lines}`);
-        const data = await res.json();
-        const logsDiv = document.getElementById('logs-output');
-        logsDiv.textContent = data.logs;
         const res = await fetch(`/api/logs?lines=${lines}`);
         const data = await res.json();
         const logsDiv = document.getElementById('logs-output');
