@@ -65,6 +65,7 @@ def _clear_auth_tmp():
 
 class BedrockTokenRefresher(CustomLogger):
     TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
+    LOGIN_RETRY_COOLDOWN = 60  # seconds between login retries after failure
 
     def __init__(self):
         _debug(
@@ -85,6 +86,8 @@ class BedrockTokenRefresher(CustomLogger):
         self._awaiting_code = (
             False  # True when CLI is waiting for authorization code on stdin
         )
+        self._login_failed_time = 0  # timestamp of last login failure
+        self._login_error = None  # error message from last failure
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
         self._profile = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
@@ -214,11 +217,20 @@ class BedrockTokenRefresher(CustomLogger):
                             file=sys.stderr,
                         )
                 else:
+                    error_msg = f"aws login --remote exited with code {proc.returncode}"
                     print(
-                        f"[TokenRefresher] aws login --remote exited with code {proc.returncode}. "
+                        f"[TokenRefresher] {error_msg}. "
                         "Login did not complete — auth still required.",
                         file=sys.stderr,
                     )
+                    self._login_failed_time = time.time()
+                    self._login_error = error_msg
+                    self._auth_url = None
+                    # Remove stale auth_url file so UI doesn't show old URL
+                    try:
+                        os.remove(_TMP_AUTH_URL)
+                    except FileNotFoundError:
+                        pass
                     self._login_process = None
             except Exception as e:
                 print(
@@ -267,6 +279,18 @@ class BedrockTokenRefresher(CustomLogger):
             )
             return
 
+        # Cooldown: don't retry too soon after failure
+        if self._login_failed_time > 0:
+            elapsed = time.time() - self._login_failed_time
+            if elapsed < self.LOGIN_RETRY_COOLDOWN:
+                _debug(
+                    f"Login cooldown: {elapsed:.0f}s < {self.LOGIN_RETRY_COOLDOWN}s, skipping"
+                )
+                return
+            # Cooldown expired, reset failure state
+            self._login_failed_time = 0
+            self._login_error = None
+
         try:
             _debug(
                 f"Starting aws command: aws login --remote --profile {self._profile}"
@@ -289,6 +313,21 @@ class BedrockTokenRefresher(CustomLogger):
             _debug(f"ERROR: failed to launch aws login: {e}")
             self._auth_error = f"Failed to launch aws login: {e}"
             print(f"[TokenRefresher] ERROR: {self._auth_error}", file=sys.stderr)
+
+    def retry_login(self):
+        """Reset failure state and start a new login process."""
+        _debug("retry_login() called")
+        self._login_failed_time = 0
+        self._login_error = None
+        self._auth_url = None
+        self._awaiting_code = False
+        if self._login_process is not None:
+            try:
+                self._login_process.kill()
+            except Exception:
+                pass
+            self._login_process = None
+        self._ensure_login()
 
     def _get_valid_session(self) -> boto3.Session | None:
         """Return a boto3 Session with valid credentials, triggering login if needed.

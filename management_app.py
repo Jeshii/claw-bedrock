@@ -143,6 +143,13 @@ async def submit_auth_code(body: dict):
     return {"success": True}
 
 
+@app.post("/api/auth/retry")
+async def retry_auth():
+    """Reset failure state and start a new aws login --remote process."""
+    token_refresher.token_refresher.retry_login()
+    return {"success": True}
+
+
 @app.get("/api/version")
 async def version_endpoint():
     """Return the current version of claw-bedrock."""
