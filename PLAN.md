@@ -94,3 +94,53 @@ When LiteLLM is reloaded (via add/delete/rename model or manual reload), the API
    - Persist toggle state + interval in `localStorage`
    - Clear intervals when navigating away from Logs page, restore on return
    - Visual indicator: toggle button gets green background when active
+
+## Task 4: Add timestamps to logs
+
+Add timestamps to each log line in both LiteLLM and debug logs for better troubleshooting.
+
+## Task 5: Clean up messy looking python errors in the management UI and replace with user-friendly messages
+
+```
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/site-packages/litellm/proxy/proxy_server.py", line 5785, in async_data_generator
+    async for chunk in proxy_logging_obj.async_post_call_streaming_iterator_hook(
+  File "/usr/local/lib/python3.12/site-packages/litellm/proxy/utils.py", line 2235, in async_post_call_streaming_iterator_hook
+    async for chunk in current_response:
+  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
+    async for item in response:
+  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
+    async for item in response:
+  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
+    async for item in response:
+  File "/usr/local/lib/python3.12/site-packages/litellm/proxy/hooks/responses_id_security.py", line 286, in async_post_call_streaming_iterator_hook
+    async for chunk in response:
+  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
+    async for item in response:
+  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
+    async for item in response:
+  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
+    async for item in response:
+  [Previous line repeated 2 more times]
+  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 1793, in __anext__
+    return await self._async_generator.__anext__()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 1878, in stream_with_fallbacks
+    raise fallback_error
+  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 1845, in stream_with_fallbacks
+    await self.async_function_with_fallbacks_common_utils(
+  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 5520, in async_function_with_fallbacks_common_utils
+    raise original_exception
+  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 1798, in stream_with_fallbacks
+    async for item in model_response:
+  File "/usr/local/lib/python3.12/site-packages/litellm/litellm_core_utils/streaming_handler.py", line 2240, in __anext__
+    self._handle_stream_fallback_error(e)
+  File "/usr/local/lib/python3.12/site-packages/litellm/litellm_core_utils/streaming_handler.py", line 2308, in _handle_stream_fallback_error
+    raise MidStreamFallbackError(
+litellm.exceptions.MidStreamFallbackError: litellm.MidStreamFallbackError: litellm.RateLimitError: RateLimitError: OpenrouterException - Message: Provider returned error, Metadata: {'error_type': 'rate_limit_exceeded'}, User ID: . Received Model Group=openrouter/owl-alpha
+Available Model Group Fallbacks=None Original exception: RateLimitError: litellm.RateLimitError: RateLimitError: OpenrouterException - Message: Provider returned error, Metadata: {'error_type': 'rate_limit_exceeded'}, User ID: 
+```
+
+Should be replaced with something like:
+
+"OpenRouter rate limit exceeded for model owl-alpha. Please try again later or switch to a different model."

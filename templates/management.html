@@ -540,6 +540,13 @@
                 }
             }
 
+            function formatContextLength(ctx) {
+                if (!ctx) return '';
+                if (ctx >= 1048576) return `${ctx / 1048576}M ctx`;
+                if (ctx >= 1024) return `${ctx / 1024}k ctx`;
+                return `${ctx} ctx`;
+            }
+
             async function loadModels() {
                 const res = await fetch('/api/models');
                 const settingsRes = await fetch('/api/settings');
@@ -564,12 +571,16 @@
                                 <span id="arrow-${provider}">` + CHEVRON_RIGHT_SVG + `</span> ${provider} (${models.length})
                             </h3>
                         <div id="group-${provider}" style="display: none; padding-left: 20px;">
-                            ${models.map(m => `
+                            ${models.map(m => {
+                                const ctx = m.litellm_params.context_length;
+                                const ctxStr = formatContextLength(ctx);
+                                return `
                             <div class="model-item" data-model-name="${m.model_name}">
                                 <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'")}', this)">${m.model_name}</span>
                                 <span>: ${m.litellm_params.model}</span>
+                                ${ctxStr ? `<span style="color: #888; font-size: 12px; margin-left: 8px;">— ${ctxStr}</span>` : ''}
                                 <button class="delete-btn" onclick="deleteModel(this, '${m.model_name.replace(/'/g, "\\'")}')">Delete</button>
-                            </div>`).join('')}
+                            </div>`}).join('')}
                         </div>
                     </div>
                 `).join('');
@@ -703,33 +714,39 @@
                 const name = document.getElementById('manual-name').value;
                 const modelPath = document.getElementById('manual-model-path').value;
                 const apiBase = document.getElementById('manual-api-base').value;
+                const contextLength = document.getElementById('manual-context-length').value;
                 if (!name || !modelPath) return showToast('Model Name and Model Path are required', 'error');
                 const modelConfig = {
                     model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + name,
                     litellm_params: { model: modelPath }
                 };
                 if (apiBase) modelConfig.litellm_params.api_base = apiBase;
+                if (contextLength) modelConfig.litellm_params.context_length = parseInt(contextLength, 10);
                 await addModelCommon(modelConfig, 'manual');
             }
 
             async function addOpenRouterModel() {
                 const name = document.getElementById('or-name').value;
+                const contextLength = document.getElementById('or-context-length-input').value;
                 if (!name) return showToast('Model Name is required', 'error');
                 const modelConfig = {
                     model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + name,
                     litellm_params: { model: `openrouter/${name}` }
                 };
+                if (contextLength) modelConfig.litellm_params.context_length = parseInt(contextLength, 10);
                 await addModelCommon(modelConfig, 'openrouter');
             }
 
             async function addOllamaModel() {
                 const name = document.getElementById('ollama-name').value;
                 const host = document.getElementById('ollama-host').value;
+                const contextLength = document.getElementById('ollama-context-length').value;
                 if (!name) return showToast('Model Name is required', 'error');
                 const modelConfig = {
                     model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + name,
                     litellm_params: { model: `ollama/${name}`, api_base: host || 'http://localhost:11434' }
                 };
+                if (contextLength) modelConfig.litellm_params.context_length = parseInt(contextLength, 10);
                 await addModelCommon(modelConfig, 'ollama');
             }
 
@@ -760,7 +777,8 @@
                     litellm_params: {
                         model: `bedrock_mantle/${modelData.model}`,
                         api_base: 'os.environ/BEDROCK_MANTLE_API_BASE',
-                        max_tokens: modelData.max_tokens
+                        max_tokens: modelData.max_tokens,
+                        context_length: modelData.context_length
                     }
                 };
                 await addModelCommon(modelConfig, 'bedrock');
@@ -789,21 +807,103 @@
                 }
             }
 
+            let openRouterModels = [];
+
+            async function loadOpenRouterModels() {
+                try {
+                    const res = await fetch('/api/providers/openrouter/models?include_free=false');
+                    const data = await res.json();
+                    openRouterModels = data.models || [];
+                    renderOpenRouterSelect(openRouterModels);
+                } catch (e) {
+                    showToast('Failed to load OpenRouter models', 'error');
+                }
+            }
+
+            function renderOpenRouterSelect(models) {
+                const select = document.getElementById('or-select');
+                if (!select) return;
+                select.innerHTML = models.map(m => {
+                    const ctx = m.context_length ? ` (${formatContextLength(m.context_length)})` : '';
+                    return `<option value="${m.id}" data-context-length="${m.context_length || ''}">${m.id}${ctx}</option>`;
+                }).join('');
+            }
+
+            function filterOpenRouterModels() {
+                const search = document.getElementById('or-search').value.toLowerCase();
+                const filtered = openRouterModels.filter(m =>
+                    m.id.toLowerCase().includes(search) || (m.name || '').toLowerCase().includes(search)
+                );
+                renderOpenRouterSelect(filtered);
+            }
+
+            function onOpenRouterSelect() {
+                const select = document.getElementById('or-select');
+                const selectedOption = select.options[select.selectedIndex];
+                const modelId = selectedOption.value;
+                const contextLength = selectedOption.dataset.contextLength;
+
+                document.getElementById('or-name').value = modelId;
+                if (contextLength) {
+                    document.getElementById('or-context-length-input').value = contextLength;
+                    document.getElementById('or-context-length').textContent = `Context Length: ${formatContextLength(parseInt(contextLength, 10))}`;
+                } else {
+                    document.getElementById('or-context-length-input').value = '';
+                    document.getElementById('or-context-length').textContent = '';
+                }
+            }
+
+            async function fetchOllamaContextLength() {
+                const name = document.getElementById('ollama-name').value;
+                const host = document.getElementById('ollama-host').value;
+                if (!name) return;
+
+                try {
+                    const url = `/api/providers/ollama/model-details?name=${encodeURIComponent(name)}${host ? `&api_base=${encodeURIComponent(host)}` : ''}`;
+                    const res = await fetch(url);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.context_length) {
+                            document.getElementById('ollama-context-length').value = data.context_length;
+                            document.getElementById('ollama-context-info').textContent = `Context Length: ${formatContextLength(data.context_length)}`;
+                        } else {
+                            document.getElementById('ollama-context-info').textContent = 'Context length not available for this model';
+                        }
+                    } else {
+                        document.getElementById('ollama-context-info').textContent = 'Could not fetch model details';
+                    }
+                } catch (e) {
+                    document.getElementById('ollama-context-info').textContent = 'Error fetching model details';
+                }
+            }
+
             function loadProviderUI() {
                 const provider = document.getElementById('provider-select').value;
                 const ui = document.getElementById('provider-ui');
                 if (provider === 'openrouter') {
                     ui.innerHTML = `
                         <h3>Add OpenRouter Model</h3>
-                        <input id="or-name" placeholder="e.g., google/gemini-2.0-flash-001" style="width: 400px;" />
+                        <div style="margin-bottom: 8px;">
+                            <input id="or-search" placeholder="Search OpenRouter models..." style="width: 400px;" oninput="filterOpenRouterModels()" />
+                        </div>
+                        <select id="or-select" style="width: 400px; padding: 5px; margin-bottom: 8px;" size="10" onchange="onOpenRouterSelect()">
+                            <option value="">Loading models...</option>
+                        </select>
+                        <div id="or-context-length" style="font-size: 12px; color: #666; margin-bottom: 8px;"></div>
+                        <input id="or-name" placeholder="Or type model ID manually" style="width: 400px;" />
+                        <input id="or-context-length-input" type="number" placeholder="Context Length (auto-filled from selection)" style="width: 400px;" />
                         <button onclick="addOpenRouterModel()">Add Model</button>
                         <p style="font-size: 12px; color: #666; margin-top: 5px;">See <a href="https://openrouter.ai/models" target="_blank">OpenRouter models</a>.</p>
                     `;
+                    loadOpenRouterModels();
                 } else if (provider === 'ollama') {
                     ui.innerHTML = `
                         <h3>Add Ollama Model</h3>
-                        <input id="ollama-name" placeholder="e.g., qwen2.5:14b" style="width: 400px;" />
+                        <input id="ollama-name" placeholder="e.g., qwen2.5:14b" style="width: 400px;" onblur="fetchOllamaContextLength()" />
+                        <button onclick="fetchOllamaContextLength()" title="Fetch context length from Ollama" style="padding: 8px 12px; margin: 5px;">Get Details</button>
+                        <div id="ollama-context-info" style="font-size: 12px; color: #666; margin: 5px 0;"></div>
                         <input id="ollama-host" placeholder="http://localhost:11434 (default)" style="width: 400px;" />
+                        <input id="ollama-context-length" type="number" placeholder="Context Length (auto-filled)" style="width: 400px;" />
                         <button onclick="addOllamaModel()">Add Model</button>
                         <p style="font-size: 12px; color: #666; margin-top: 5px;">Ensure Ollama is running and accessible.</p>
                     `;
@@ -821,6 +921,7 @@
                         <input id="manual-name" placeholder="Model Name (e.g., my-model)" style="width: 400px;" /><br>
                         <input id="manual-model-path" placeholder="Model Path (e.g., openrouter/google/gemini-2.0-flash-001)" style="width: 400px;" /><br>
                         <input id="manual-api-base" placeholder="API Base (optional, e.g., https://openrouter.ai/api/v1)" style="width: 400px;" /><br>
+                        <input id="manual-context-length" type="number" placeholder="Context Length (e.g., 131072 for 128k)" style="width: 400px;" /><br>
                         <button onclick="addManualModel()">Add Model</button>
                     `;
                 } else {

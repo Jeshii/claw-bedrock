@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import yaml
 import json
@@ -15,8 +14,9 @@ from typing import Optional, Dict
 
 def base64url_decode(s: str) -> str:
     """Decode a base64url-encoded string."""
-    s += '=' * (4 - len(s) % 4)
-    return base64.b64decode(s.replace('-', '+').replace('_', '/')).decode('utf-8')
+    s += "=" * (4 - len(s) % 4)
+    return base64.b64decode(s.replace("-", "+").replace("_", "/")).decode("utf-8")
+
 
 import db
 import token_refresher
@@ -28,7 +28,9 @@ CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
 LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
 VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
-BEDROCK_MODELS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bedrock_models.json")
+BEDROCK_MODELS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "bedrock_models.json"
+)
 
 
 def get_version():
@@ -70,9 +72,9 @@ def load_local_config() -> Dict:
     """Load local config from TinyDB, creating with defaults if needed."""
     config = db.get_settings()
     # Set defaults
-    if 'use_prefix' not in config:
-        config['use_prefix'] = True
-        db.set_setting('use_prefix', True)
+    if "use_prefix" not in config:
+        config["use_prefix"] = True
+        db.set_setting("use_prefix", True)
     return config
 
 
@@ -81,19 +83,20 @@ async def get_settings():
     """Get current settings."""
     config = load_local_config()
     return {
-        "use_prefix": config.get('use_prefix', True),
-        "always_include_stream_usage": db.get_setting("always_include_stream_usage", True)
+        "use_prefix": config.get("use_prefix", True),
+        "always_include_stream_usage": db.get_setting(
+            "always_include_stream_usage", True
+        ),
     }
 
 
 @app.post("/api/settings")
 async def update_settings(
-    use_prefix: bool = Query(...),
-    always_include_stream_usage: bool = Query(...)
+    use_prefix: bool = Query(...), always_include_stream_usage: bool = Query(...)
 ):
     """Update settings."""
-    db.set_setting('use_prefix', use_prefix)
-    db.set_setting('always_include_stream_usage', always_include_stream_usage)
+    db.set_setting("use_prefix", use_prefix)
+    db.set_setting("always_include_stream_usage", always_include_stream_usage)
 
     # Re-merge configs with new settings
     merge_configs()
@@ -101,7 +104,7 @@ async def update_settings(
     return {
         "success": True,
         "use_prefix": use_prefix,
-        "always_include_stream_usage": always_include_stream_usage
+        "always_include_stream_usage": always_include_stream_usage,
     }
 
 
@@ -129,7 +132,7 @@ async def auth_status():
         "auth_code": auth_code,
         "auth_error": token_refresher.token_refresher.get_auth_error(),
         "openrouter": {"configured": openrouter_key},
-        "ollama": {"configured": bool(ollama_host), "host": ollama_host}
+        "ollama": {"configured": bool(ollama_host), "host": ollama_host},
     }
 
 
@@ -155,12 +158,14 @@ async def get_dashboard():
     model_count = len(models)
     providers = {}
     for m in models:
-        provider = m.get("litellm_params", {}).get("model", "").split("/")[0] or "unknown"
+        provider = (
+            m.get("litellm_params", {}).get("model", "").split("/")[0] or "unknown"
+        )
         providers[provider] = providers.get(provider, 0) + 1
     return {
         "model_count": model_count,
         "providers": providers,
-        "version": get_version()
+        "version": get_version(),
     }
 
 
@@ -225,11 +230,19 @@ async def reload_models():
     reloaded = reload_litellm()
     if reloaded:
         return {"status": "success", "message": "LiteLLM restarted with new config"}
-    return {"status": "warning", "message": "LiteLLM restart failed. Try restarting the container manually.", "reloaded": False}
+    return {
+        "status": "warning",
+        "message": "LiteLLM restart failed. Try restarting the container manually.",
+        "reloaded": False,
+    }
 
 
 @app.get("/api/providers/openrouter/models")
-async def fetch_openrouter_models(include_free: bool = True, search: Optional[str] = None, api_key: Optional[str] = None):
+async def fetch_openrouter_models(
+    include_free: bool = True,
+    search: Optional[str] = None,
+    api_key: Optional[str] = None,
+):
     """Fetch available models from OpenRouter with optional filtering."""
     headers = {}
     if api_key:
@@ -238,28 +251,39 @@ async def fetch_openrouter_models(include_free: bool = True, search: Optional[st
         headers["Authorization"] = f"Bearer {os.environ['OPENROUTER_API_KEY']}"
 
     try:
-        resp = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=30)
+        resp = requests.get(
+            "https://openrouter.ai/api/v1/models", headers=headers, timeout=30
+        )
         resp.raise_for_status()
         models = resp.json().get("data", [])
 
         if include_free:
+
             def _is_free(m):
                 try:
                     return float(m.get("pricing", {}).get("prompt", "1")) == 0
                 except:
                     return False
+
             models = [m for m in models if _is_free(m)]
         else:
+
             def _is_not_free(m):
                 try:
                     return float(m.get("pricing", {}).get("prompt", "1")) != 0
                 except:
                     return True
+
             models = [m for m in models if _is_not_free(m)]
 
         if search:
             search_lower = search.lower()
-            models = [m for m in models if search_lower in m.get("id", "").lower() or search_lower in m.get("name", "").lower()]
+            models = [
+                m
+                for m in models
+                if search_lower in m.get("id", "").lower()
+                or search_lower in m.get("name", "").lower()
+            ]
 
         def sort_key(m):
             try:
@@ -267,9 +291,26 @@ async def fetch_openrouter_models(include_free: bool = True, search: Optional[st
             except:
                 cost = float("inf")
             return (cost, m.get("name", "").lower())
+
         models.sort(key=sort_key)
 
-        return {"models": models}
+        # Enrich with context_length from OpenRouter response
+        enriched = []
+        for m in models:
+            ctx = None
+            if m.get("architecture"):
+                ctx = m["architecture"].get("context_length")
+            if not ctx and m.get("top_provider"):
+                ctx = m["top_provider"].get("context_length")
+            enriched.append(
+                {
+                    "id": m.get("id"),
+                    "name": m.get("name"),
+                    "pricing": m.get("pricing"),
+                    "context_length": int(ctx) if ctx else None,
+                }
+            )
+        return {"models": enriched}
     except Exception as e:
         raise HTTPException(500, f"Failed to fetch OpenRouter models: {str(e)}")
 
@@ -279,7 +320,10 @@ async def fetch_ollama_models(api_base: Optional[str] = Query(None)):
     """Fetch models from a remote Ollama instance."""
     api_base = api_base or os.environ.get("OLLAMA_API_BASE", "")
     if not api_base:
-        raise HTTPException(400, "No Ollama API base provided. Set OLLAMA_API_BASE or provide api_base parameter.")
+        raise HTTPException(
+            400,
+            "No Ollama API base provided. Set OLLAMA_API_BASE or provide api_base parameter.",
+        )
 
     try:
         resp = requests.get(f"{api_base.rstrip('/')}/api/tags", timeout=10)
@@ -287,13 +331,45 @@ async def fetch_ollama_models(api_base: Optional[str] = Query(None)):
         models = resp.json().get("models", [])
         return {"models": sorted(models, key=lambda m: m.get("name", "").lower())}
     except requests.exceptions.ConnectionError as e:
-        raise HTTPException(400, f"Cannot connect to Ollama at {api_base}. Check the address and ensure Ollama is running.") from e
+        raise HTTPException(
+            400,
+            f"Cannot connect to Ollama at {api_base}. Check the address and ensure Ollama is running.",
+        ) from e
     except requests.exceptions.Timeout as e:
-        raise HTTPException(400, f"Connection to Ollama at {api_base} timed out. The server may be slow or unreachable.") from e
+        raise HTTPException(
+            400,
+            f"Connection to Ollama at {api_base} timed out. The server may be slow or unreachable.",
+        ) from e
     except requests.exceptions.RequestException as e:
-        raise HTTPException(400, f"Error communicating with Ollama at {api_base}: {str(e)}") from e
+        raise HTTPException(
+            400, f"Error communicating with Ollama at {api_base}: {str(e)}"
+        ) from e
     except Exception as e:
         raise HTTPException(400, f"Failed to fetch Ollama models: {str(e)}") from e
+
+
+@app.get("/api/providers/ollama/model-details")
+async def fetch_ollama_model_details(
+    name: str = Query(...), api_base: Optional[str] = Query(None)
+):
+    """Fetch details for a specific Ollama model including context length."""
+    api_base = api_base or os.environ.get("OLLAMA_API_BASE", "")
+    if not api_base:
+        raise HTTPException(400, "No Ollama API base provided.")
+    try:
+        resp = requests.post(
+            f"{api_base.rstrip('/')}/api/show",
+            json={"name": name},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        ctx = data.get("details", {}).get("context_length")
+        return {"name": name, "context_length": ctx}
+    except Exception as e:
+        raise HTTPException(
+            400, f"Failed to fetch Ollama model details: {str(e)}"
+        ) from e
 
 
 @app.get("/api/providers/bedrock/models")
@@ -353,7 +429,12 @@ async def rename_model(encoded_old_name: str, update: Dict):
     merge_configs()
     reloaded = reload_litellm()
 
-    return {"status": "success", "old_name": old_model_name, "new_name": new_model_name, "reloaded": reloaded}
+    return {
+        "status": "success",
+        "old_name": old_model_name,
+        "new_name": new_model_name,
+        "reloaded": reloaded,
+    }
 
 
 def merge_configs():
@@ -362,7 +443,9 @@ def merge_configs():
 
     try:
         with open(CONFIG_PATH, "w") as f:
-            yaml.dump(merged, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            yaml.dump(
+                merged, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+            )
         print(f"[Merge] Config merged. Total models: {len(merged['model_list'])}")
     except Exception as e:
         print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
@@ -394,10 +477,10 @@ def reload_litellm() -> bool:
     if pid is None:
         # Search for running LiteLLM process
         try:
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                cmdline = proc.info['cmdline']
-                if cmdline and any('litellm' in arg.lower() for arg in cmdline):
-                    pid = proc.info['pid']
+            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                cmdline = proc.info["cmdline"]
+                if cmdline and any("litellm" in arg.lower() for arg in cmdline):
+                    pid = proc.info["pid"]
                     print(f"[Reload] Found LiteLLM process: PID {pid}")
                     break
         except Exception as e:
@@ -414,7 +497,7 @@ def reload_litellm() -> bool:
                     os.kill(pid, 0)
                     time.sleep(0.5)
                 except OSError:
-                    print(f"[Reload] LiteLLM process terminated")
+                    print("[Reload] LiteLLM process terminated")
                     break
         except OSError as e:
             print(f"[Reload] Error stopping LiteLLM: {e}", file=sys.stderr)
@@ -424,10 +507,18 @@ def reload_litellm() -> bool:
         log_path = os.path.join(config_dir, "litellm.log")
         with open(log_path, "a") as log_file:
             process = subprocess.Popen(
-                ["litellm", "--config", config_path, "--port", "4000", "--host", "0.0.0.0"],
+                [
+                    "litellm",
+                    "--config",
+                    config_path,
+                    "--port",
+                    "4000",
+                    "--host",
+                    "0.0.0.0",
+                ],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
-                cwd=config_dir
+                cwd=config_dir,
             )
         new_pid = process.pid
         with open(pid_file, "w") as f:
@@ -444,9 +535,9 @@ async def dashboard(request: Request):
     """Serve the management dashboard."""
     version = get_version()
     config = load_local_config()
-    use_prefix = config.get('use_prefix', True)
+    use_prefix = config.get("use_prefix", True)
     return templates.TemplateResponse(
         request,
         "management.html",
-        context={"version": version, "use_prefix": use_prefix}
+        context={"version": version, "use_prefix": use_prefix},
     )
