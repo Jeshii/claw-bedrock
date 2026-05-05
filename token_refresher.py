@@ -151,28 +151,43 @@ class BedrockTokenRefresher(CustomLogger):
             )
             try:
                 line_count = 0
-                for line in proc.stdout:
-                    line = line.strip()
-                    line_count += 1
-                    print(
-                        f"[TokenRefresher] DEBUG: stdout line #{line_count}: {repr(line)}",
-                        flush=True,
-                    )
-
-                    if line.startswith("https://") and self._auth_url is None:
-                        self._auth_url = line
-                        _write_auth_tmp(line)
+                buffer = ""
+                while True:
+                    char = proc.stdout.read(1)
+                    if not char:
+                        break
+                    buffer += char
+                    if char == "\n":
+                        line = buffer.strip()
+                        buffer = ""
+                        line_count += 1
                         print(
-                            f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}"
+                            f"[TokenRefresher] DEBUG: stdout line #{line_count}: {repr(line)}",
+                            flush=True,
                         )
 
-                    # Detect when the CLI is waiting for the authorization code on stdin
+                        if line.startswith("https://") and self._auth_url is None:
+                            self._auth_url = line
+                            _write_auth_tmp(line)
+                            print(
+                                f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}"
+                            )
+
+                    # Detect prompt in buffer (may not have newline yet)
+                    buffer_lower = buffer.lower()
                     if (
-                        "authorization code" in line.lower()
-                        and "browser" in line.lower()
+                        "enter the authorization code displayed in your browser:"
+                        in buffer_lower
+                        or (
+                            "authorization code" in buffer_lower
+                            and "browser" in buffer_lower
+                        )
                     ):
-                        self._awaiting_code = True
-                        _debug("CLI is awaiting authorization code on stdin")
+                        if not self._awaiting_code:
+                            self._awaiting_code = True
+                            _debug(
+                                f"CLI is awaiting authorization code on stdin (buffer={repr(buffer)})"
+                            )
 
                 print(
                     f"[TokenRefresher] DEBUG: stdout loop exhausted after {line_count} lines.",
