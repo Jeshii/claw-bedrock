@@ -232,12 +232,12 @@ async def list_models():
 @app.post("/api/models/reload")
 async def reload_models():
     """Manually trigger a LiteLLM restart to pick up new config."""
-    reloaded = reload_litellm()
-    if reloaded:
-        return {"status": "success", "message": "LiteLLM restarted with new config"}
+    result = reload_litellm()
+    if result.get("success"):
+        return {"status": "success", "message": result.get("message", "LiteLLM restarted"), "pid": result.get("pid")}
     return {
         "status": "warning",
-        "message": "LiteLLM restart failed. Try restarting the container manually.",
+        "message": f"LiteLLM restart failed: {result.get('error', 'Unknown error')}",
         "reloaded": False,
     }
 
@@ -400,9 +400,9 @@ async def delete_model(encoded_model_name: str):
 
     db.delete_model(model_name)
     merge_configs()
-    reloaded = reload_litellm()
+    result = reload_litellm()
 
-    return {"status": "success", "deleted": model_name, "reloaded": reloaded}
+    return {"status": "success", "deleted": model_name, "reloaded": result.get("success"), "pid": result.get("pid")}
 
 
 @app.post("/api/models")
@@ -410,9 +410,9 @@ async def add_model(model: Dict):
     """Add a new model to TinyDB."""
     db.add_model(model)
     merge_configs()
-    reloaded = reload_litellm()
+    result = reload_litellm()
 
-    return {"status": "success", "model": model, "reloaded": reloaded}
+    return {"status": "success", "model": model, "reloaded": result.get("success"), "pid": result.get("pid")}
 
 
 @app.put("/api/models/{encoded_old_name:path}")
@@ -432,13 +432,14 @@ async def rename_model(encoded_old_name: str, update: Dict):
         raise HTTPException(404, f"Model {old_model_name} not found")
 
     merge_configs()
-    reloaded = reload_litellm()
+    result = reload_litellm()
 
     return {
         "status": "success",
         "old_name": old_model_name,
         "new_name": new_model_name,
-        "reloaded": reloaded,
+        "reloaded": result.get("success"),
+        "pid": result.get("pid"),
     }
 
 
@@ -456,11 +457,26 @@ def merge_configs():
         print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
 
 
-def reload_litellm() -> bool:
-    """Reload LiteLLM by restarting the process to pick up new config. Returns True on success."""
+def validate_config() -> tuple[bool, str]:
+    """Validate the generated YAML config by parsing it. Returns (is_valid, error_message)."""
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            yaml.safe_load(f)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def reload_litellm() -> dict:
+    """Reload LiteLLM by restarting the process. Returns dict with status info."""
     pid_file = "/tmp/litellm.pid"
     config_path = os.environ.get("CONFIG_PATH", "/app/config.yaml")
     config_dir = os.environ.get("CONFIG_DIR", "/app")
+
+    # Validate config before restarting
+    is_valid, error = validate_config()
+    if not is_valid:
+        return {"success": False, "error": f"Invalid config: {error}"}
 
     # Step 1: Find and stop the existing LiteLLM process
     pid = None
@@ -474,13 +490,12 @@ def reload_litellm() -> bool:
 
     if pid is not None:
         try:
-            os.kill(pid, 0)  # Check if process is running
+            os.kill(pid, 0)
         except OSError:
             print(f"[Reload] PID {pid} is stale, will search for process...")
             pid = None
 
     if pid is None:
-        # Search for running LiteLLM process
         try:
             for proc in psutil.process_iter(["pid", "name", "cmdline"]):
                 cmdline = proc.info["cmdline"]
@@ -496,7 +511,6 @@ def reload_litellm() -> bool:
         try:
             os.kill(pid, 15)  # SIGTERM
             print(f"[Reload] Sent SIGTERM to LiteLLM (PID {pid})")
-            # Wait for process to terminate
             for _ in range(10):
                 try:
                     os.kill(pid, 0)
@@ -504,23 +518,21 @@ def reload_litellm() -> bool:
                 except OSError:
                     print("[Reload] LiteLLM process terminated")
                     break
+            else:
+                print("[Reload] Process did not terminate, sending SIGKILL")
+                os.kill(pid, 9)
+                time.sleep(1)
         except OSError as e:
             print(f"[Reload] Error stopping LiteLLM: {e}", file=sys.stderr)
 
     # Step 3: Start new LiteLLM process
     try:
         log_path = os.path.join(config_dir, "litellm.log")
+        cmd = ["litellm", "--config", config_path, "--port", "4000", "--host", "0.0.0.0"]
+        print(f"[Reload] Starting LiteLLM: {' '.join(cmd)}")
         with open(log_path, "a") as log_file:
             process = subprocess.Popen(
-                [
-                    "litellm",
-                    "--config",
-                    config_path,
-                    "--port",
-                    "4000",
-                    "--host",
-                    "0.0.0.0",
-                ],
+                cmd,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 cwd=config_dir,
@@ -528,11 +540,41 @@ def reload_litellm() -> bool:
         new_pid = process.pid
         with open(pid_file, "w") as f:
             f.write(str(new_pid))
-        print(f"[Reload] LiteLLM restarted with PID {new_pid}")
-        return True
+        print(f"[Reload] LiteLLM started with PID {new_pid}")
+
+        # Step 4: Verify process is running
+        time.sleep(2)
+        try:
+            if not psutil.Process(new_pid).is_running():
+                return {"success": False, "error": f"LiteLLM process died shortly after starting (PID {new_pid})"}
+        except psutil.NoSuchProcess:
+            return {"success": False, "error": f"LiteLLM process not found after starting (PID {new_pid})"}
+
+        # Step 5: Health check
+        for _ in range(10):
+            try:
+                resp = requests.get("http://localhost:4000/health", timeout=2)
+                if resp.status_code < 500:
+                    print(f"[Reload] LiteLLM health check passed (PID {new_pid})")
+                    return {"success": True, "pid": new_pid, "message": f"LiteLLM restarted (PID {new_pid})"}
+            except Exception:
+                pass
+            time.sleep(1)
+
+        return {"success": True, "pid": new_pid, "warning": "LiteLLM started but health check timed out"}
     except Exception as e:
         print(f"[Reload] Error starting LiteLLM: {e}", file=sys.stderr)
-        return False
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/health/litellm")
+async def health_litellm():
+    """Proxy health check to LiteLLM."""
+    try:
+        resp = requests.get("http://localhost:4000/health", timeout=5)
+        return {"status": "ok", "litellm_status": resp.status_code}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 
 @app.get("/")
