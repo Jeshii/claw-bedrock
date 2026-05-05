@@ -188,6 +188,20 @@ async def get_debug_logs(lines: int = 100):
         return {"logs": f"Error reading debug logs: {str(e)}"}
 
 
+@app.get("/api/debug/token-refresher")
+async def get_token_refresher_state():
+    """Read and return the TokenRefresher debug log to check internal state."""
+    debug_log = "/tmp/token_refresher_debug.log"
+    try:
+        if os.path.exists(debug_log):
+            with open(debug_log, "r") as f:
+                content = f.read()
+            return {"debug_log": content, "exists": True}
+        return {"debug_log": None, "exists": False, "message": "Debug log not found"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/api/models")
 async def list_models():
     """List all configured models."""

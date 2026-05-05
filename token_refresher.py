@@ -8,6 +8,7 @@ import traceback
 
 # Debug log file for TokenRefresher - bypasses stdout redirection
 _DEBUG_LOG = "/tmp/token_refresher_debug.log"
+_CODE_VERSION = "2025-05-05-v2"  # Update this when making changes to verify code is reloaded
 
 def _debug(msg):
     """Write debug message to a file to bypass stdout redirection."""
@@ -17,7 +18,7 @@ def _debug(msg):
     except Exception:
         pass
 
-_debug(f"Module loaded. Python path: {sys.path[:3]}")
+_debug(f"Module loaded. Version={_CODE_VERSION}, Python path: {sys.path[:3]}")
 
 import boto3
 import botocore.exceptions
@@ -34,15 +35,19 @@ _CODE_RE = re.compile(r'\b([A-Z0-9]{4}-[A-Z0-9]{4})\b')
 
 def _write_auth_tmp(url: str, code: str | None = None):
     """Write auth URL, auth_needed flag, and optional code to /tmp for management UI."""
+    _debug(f"_write_auth_tmp() called. url={url[:50] if url else None}, code={code}")
     try:
         with open(_TMP_AUTH_URL, "w") as f:
             f.write(url)
         with open(_TMP_AUTH_NEEDED, "w") as f:
             f.write("1")
+        _debug(f"Wrote {_TMP_AUTH_URL} and {_TMP_AUTH_NEEDED}")
         if code:
             with open(_TMP_AUTH_CODE, "w") as f:
                 f.write(code)
+            _debug(f"Wrote {_TMP_AUTH_CODE}")
     except Exception as e:
+        _debug(f"WARNING: Could not write auth tmp files: {e}")
         print(f"[TokenRefresher] WARNING: Could not write auth tmp files: {e}", file=sys.stderr)
 
 
@@ -76,6 +81,15 @@ class BedrockTokenRefresher(CustomLogger):
             self._refresh()
         except Exception as e:
             _debug(f"WARNING: Initial token refresh failed ({e})")
+            # Set needs_login flag and write auth_needed file on failure
+            if not self._is_interactive():
+                self._needs_login = True
+                try:
+                    with open(_TMP_AUTH_NEEDED, "w") as f:
+                        f.write("1")
+                    _debug(f"Wrote {_TMP_AUTH_NEEDED} from __init__ failure path")
+                except Exception as e2:
+                    _debug(f"Failed to write auth_needed: {e2}")
             print(
                 f"[TokenRefresher] WARNING: Initial token refresh failed ({e}). "
                 "Server will start without Bedrock credentials — authenticate via the web UI.",
@@ -84,7 +98,9 @@ class BedrockTokenRefresher(CustomLogger):
         self._register_auth_endpoint()
 
     def _is_interactive(self) -> bool:
-        return sys.stdin.isatty()
+        result = sys.stdin.isatty()
+        _debug(f"_is_interactive() -> {result}")
+        return result
 
     def _profile_exists(self, profile_name):
         """Check if the given AWS profile exists in the AWS configuration."""
@@ -201,6 +217,15 @@ class BedrockTokenRefresher(CustomLogger):
             )
             self._needs_login = True
 
+            # Write auth_needed file immediately so UI knows auth is required
+            # (The URL file will be written later when captured from aws output)
+            try:
+                with open(_TMP_AUTH_NEEDED, "w") as f:
+                    f.write("1")
+                _debug(f"Wrote {_TMP_AUTH_NEEDED} file")
+            except Exception as e:
+                _debug(f"WARNING: Could not write auth_needed file: {e}")
+
             # Check if profile exists before attempting login
             if not self._profile_exists(self._profile):
                 print(
@@ -217,14 +242,29 @@ class BedrockTokenRefresher(CustomLogger):
 
             try:
                 _debug(f"Starting aws command: aws login --remote --profile {self._profile}")
-                proc = subprocess.Popen(
-                    ["aws", "login", "--remote", "--profile", self._profile],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    stdin=subprocess.PIPE,
-                    text=True,
-                )
-                _debug(f"aws process started with pid={proc.pid}")
+                # Try `aws login --remote` first, fall back to `aws sso login` if needed
+                try:
+                    proc = subprocess.Popen(
+                        ["aws", "login", "--remote", "--profile", self._profile],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        stdin=subprocess.PIPE,
+                        text=True,
+                    )
+                    _debug(f"aws login --remote process started with pid={proc.pid}")
+                except FileNotFoundError:
+                    _debug("ERROR: 'aws' CLI not found")
+                    raise
+                except Exception as e:
+                    _debug(f"aws login --remote failed ({e}), trying aws sso login...")
+                    proc = subprocess.Popen(
+                        ["aws", "sso", "login", "--profile", self._profile],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        stdin=subprocess.PIPE,
+                        text=True,
+                    )
+                    _debug(f"aws sso login process started with pid={proc.pid}")
                 self._login_process = proc
                 self._capture_auth_url_from_process(proc)
             except FileNotFoundError:
@@ -255,9 +295,11 @@ class BedrockTokenRefresher(CustomLogger):
         """Return a boto3 Session with valid credentials, triggering login if needed.
         Returns None if login is required and the server should continue without credentials.
         """
+        _debug(f"_get_valid_session() called. profile={self._profile}, region={self._region}")
         try:
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
         except botocore.exceptions.ProfileNotFound:
+            _debug(f"AWS profile '{self._profile}' not found")
             print(
                 f"[TokenRefresher] AWS profile '{self._profile}' not found in AWS configuration. "
                 "Please check your AWS config or set the correct profile via AWS_PROFILE environment variable.",
@@ -266,6 +308,7 @@ class BedrockTokenRefresher(CustomLogger):
             self._needs_login = True
             return None
         except Exception as e:
+            _debug(f"Error creating AWS session: {e}")
             print(f"[TokenRefresher] Error creating AWS session: {e}", file=sys.stderr)
             self._ensure_login()
             return None
@@ -314,18 +357,43 @@ class BedrockTokenRefresher(CustomLogger):
         return session
 
     def _refresh(self):
+        _debug(f"_refresh() called. _needs_login={self._needs_login}")
         session = self._get_valid_session()
+        _debug(f"_refresh(): _get_valid_session returned {type(session).__name__ if session else None}")
         if session is None:
+            _debug("_refresh(): session is None, returning")
             return  # login required — server stays up, /auth/status will surface the URL
         try:
             credentials = session.get_credentials()
+            _debug(f"_refresh(): got credentials: {type(credentials).__name__ if credentials else None}")
             token = self._generator.get_token(credentials, self._region)
             os.environ["BEDROCK_MANTLE_API_KEY"] = token
             self._fetched_at = time.time()
             print(f"[TokenRefresher] Token refreshed at {time.strftime('%H:%M:%S')}")
+            # Clear auth_needed flag on successful token refresh
+            self._needs_login = False
+            self._auth_url = None
+            self._auth_code = None
+            try:
+                if os.path.exists(_TMP_AUTH_NEEDED):
+                    os.remove(_TMP_AUTH_NEEDED)
+                _clear_auth_tmp()
+                _debug("Cleared auth_needed flag - token refresh successful")
+            except Exception as e:
+                _debug(f"Error clearing auth tmp files: {e}")
         except Exception as e:
+            _debug(f"Token generation failed: {e}")
             print(f"[TokenRefresher] Token generation failed: {e}", file=sys.stderr)
-            # Don't re-raise — server stays up, will retry on next request
+            # Set needs_login flag and write auth_needed file so UI knows auth is required
+            if not self._is_interactive():
+                self._needs_login = True
+                try:
+                    with open(_TMP_AUTH_NEEDED, "w") as f:
+                        f.write("1")
+                    _debug(f"Wrote {_TMP_AUTH_NEEDED} from _refresh failure path")
+                except Exception as e2:
+                    _debug(f"Failed to write auth_needed: {e2}")
+        # Don't re-raise — server stays up, will retry on next request
 
     def _register_auth_endpoint(self):
         """Register /auth/status and /auth/submit-code endpoints on LiteLLM's FastAPI app."""
@@ -334,8 +402,11 @@ class BedrockTokenRefresher(CustomLogger):
             from fastapi.responses import JSONResponse
             from fastapi import Body
 
+            _debug("_register_auth_endpoint(): Registering /auth/status and /auth/submit-code endpoints")
+
             @app.get("/auth/status", tags=["Authentication"])
             async def auth_status():
+                _debug(f"/auth/status called: needs_login={self._needs_login}, auth_url={'set' if self._auth_url else None}, auth_code={'set' if self._auth_code else None}")
                 return JSONResponse({
                     "needs_login": self._needs_login,
                     "auth_url": self._auth_url,
