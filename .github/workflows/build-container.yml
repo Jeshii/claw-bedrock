@@ -60,10 +60,9 @@ jobs:
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
 
-      - name: Delete old develop package versions
+      - name: Delete old package versions
         uses: actions/delete-package-versions@v5
         with:
           package-name: claw-bedrock
           package-type: container
-          min-versions-to-keep: 1
-          delete-only-untagged-versions: true
+          min-versions-to-keep: 5
