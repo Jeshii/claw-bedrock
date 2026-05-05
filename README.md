@@ -203,6 +203,17 @@ claw-code --model claw-bedrock/<modelname>
 
 ## Available Models
 
+### Bedrock Model Selection Criteria
+
+The baked-in Bedrock models were selected based on the following criteria:
+
+- **Non-marketplace** — models available directly via Bedrock Mantle without a separate AWS Marketplace subscription, making them credits-friendly
+- **Bedrock Mantle compatible** — accessible via the `bedrock_mantle/` provider prefix
+- **Coding-focused** — evaluated for usefulness in code generation and editing tasks; vision-only models are excluded
+- **Region availability** — verified available in `ap-northeast-1`
+
+Models that did not work reliably during testing were removed. If you'd like a model added, open an issue or PR.
+
 ### Bedrock Models Baked In
 Since Bedrock doesn't have a method for discovery via API, the following models have been baked in. If you would like another added, feel free to open an issue or PR.
 
