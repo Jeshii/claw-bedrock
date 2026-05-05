@@ -79,10 +79,9 @@ def load_local_config() -> Dict:
 async def get_settings():
     """Get current settings."""
     config = load_local_config()
-    router_settings = db.get_router_settings()
     return {
         "use_prefix": config.get('use_prefix', True),
-        "always_include_stream_usage": router_settings.get("always_include_stream_usage", True)
+        "always_include_stream_usage": db.get_setting("always_include_stream_usage", True)
     }
 
 
@@ -93,11 +92,7 @@ async def update_settings(
 ):
     """Update settings."""
     db.set_setting('use_prefix', use_prefix)
-
-    # Update router_settings
-    router_settings = db.get_router_settings()
-    router_settings["always_include_stream_usage"] = always_include_stream_usage
-    db.set_router_settings(router_settings)
+    db.set_setting('always_include_stream_usage', always_include_stream_usage)
 
     # Re-merge configs with new settings
     merge_configs()

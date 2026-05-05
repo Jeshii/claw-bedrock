@@ -95,8 +95,8 @@ def get_settings():
 def get_router_settings():
     """Get router_settings from DB or return defaults."""
     settings = get_setting("router_settings", {})
-    if not settings:
-        settings = {"always_include_stream_usage": True}
+    # Remove always_include_stream_usage as it's now in litellm_settings
+    settings.pop('always_include_stream_usage', None)
     return settings
 
 
@@ -110,7 +110,11 @@ def set_router_settings(router_settings):
 
 def get_litellm_settings():
     """Get litellm_settings with token_refresher baked in."""
-    return {"callbacks": ["token_refresher.BedrockTokenRefresher"]}
+    always_stream = get_setting("always_include_stream_usage", True)
+    return {
+        "callbacks": ["token_refresher.BedrockTokenRefresher"],
+        "always_include_stream_usage": always_stream
+    }
 
 
 def model_name_exists(model_name):
