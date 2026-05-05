@@ -380,6 +380,57 @@
             const originalShowPage = showPage;
             // We'll hook into showPage instead
 
+            function simplifyErrorMessage(text) {
+                // Convert Python tracebacks to user-friendly messages
+                const lines = text.split('\n');
+                const simplified = [];
+                let inTraceback = false;
+                let lastError = null;
+
+                for (const line of lines) {
+                    if (line.includes('Traceback (most recent call last):')) {
+                        inTraceback = true;
+                        continue;
+                    }
+                    if (inTraceback) {
+                        // Capture the final error line
+                        if (line.match(/^\w+Error:|^\w+Exception:/)) {
+                            lastError = line.trim();
+                            // Try to make it user-friendly
+                            if (line.includes('RateLimitError') || line.includes('rate_limit')) {
+                                const modelMatch = line.match(/Model Group=([^\s]+)/);
+                                const model = modelMatch ? modelMatch[1].replace('openrouter/', '') : 'unknown';
+                                simplified.push(`⚠️ Rate limit exceeded for model ${model}. Try again later or switch models.`);
+                                lastError = null;
+                            } else if (line.includes('AuthenticationError') || line.includes('auth')) {
+                                simplified.push('⚠️ Authentication failed. Check your API keys.');
+                                lastError = null;
+                            } else if (line.includes('NotFoundError') || line.includes('not found')) {
+                                simplified.push('⚠️ Model not found. It may have been removed or renamed.');
+                                lastError = null;
+                            }
+                        }
+                        // Skip traceback lines
+                        if (line.trim().startsWith('File ') || line.trim().startsWith('  ')) {
+                            continue;
+                        }
+                        // If we hit a non-traceback line, exit traceback mode
+                        if (line.trim() && !line.trim().startsWith('File ') && !line.includes('await ') && !line.includes('async ')) {
+                            inTraceback = false;
+                        }
+                        continue;
+                    }
+                    simplified.push(line);
+                }
+
+                // If we have an unhandled error, show a generic message
+                if (lastError) {
+                    simplified.push(`⚠️ Error: ${lastError.substring(0, 100)}`);
+                }
+
+                return simplified.join('\n');
+            }
+
             function ansiToHtml(text) {
                 const colorMap = {
                     '30': 'black', '31': 'red', '32': 'green', '33': 'yellow',
@@ -1048,7 +1099,8 @@
                     const res = await fetch('/api/logs?lines=20');
                     const data = await res.json();
                     const logs = data.logs || 'No logs available';
-                    alert('Last 20 lines of LiteLLM log:\n\n' + logs.substring(0, 2000));
+                    const simplified = simplifyErrorMessage(logs);
+                    alert('Last 20 lines of LiteLLM log:\n\n' + simplified.substring(0, 2000));
                 } catch (e) {
                     showToast(`Error: ${e.message}`, 'error');
                 }
@@ -1059,7 +1111,8 @@
                 const res = await fetch(`/api/logs?lines=${lines}`);
                 const data = await res.json();
                 const logsDiv = document.getElementById('logs-output');
-                logsDiv.innerHTML = ansiToHtml(data.logs);
+                const simplified = simplifyErrorMessage(data.logs);
+                logsDiv.innerHTML = ansiToHtml(simplified);
                 logsDiv.scrollTop = logsDiv.scrollHeight;
             }
 
@@ -1079,7 +1132,8 @@
                 const res = await fetch(`/api/logs/debug?lines=${lines}`);
                 const data = await res.json();
                 const logsDiv = document.getElementById('debug-logs-output');
-                logsDiv.innerHTML = ansiToHtml(data.logs);
+                const simplified = simplifyErrorMessage(data.logs);
+                logsDiv.innerHTML = ansiToHtml(simplified);
                 logsDiv.scrollTop = logsDiv.scrollHeight;
             }
 
