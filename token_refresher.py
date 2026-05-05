@@ -6,6 +6,19 @@ import threading
 import re
 import traceback
 
+# Debug log file for TokenRefresher - bypasses stdout redirection
+_DEBUG_LOG = "/tmp/token_refresher_debug.log"
+
+def _debug(msg):
+    """Write debug message to a file to bypass stdout redirection."""
+    try:
+        with open(_DEBUG_LOG, "a") as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+    except Exception:
+        pass
+
+_debug(f"Module loaded. Python path: {sys.path[:3]}")
+
 import boto3
 import botocore.exceptions
 from aws_bedrock_token_generator import BedrockTokenGenerator
@@ -48,6 +61,7 @@ class BedrockTokenRefresher(CustomLogger):
     TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
 
     def __init__(self):
+        _debug(f"BedrockTokenRefresher.__init__() called. Profile={os.environ.get('AWS_PROFILE', 'bedrock-openai20b')}")
         self._fetched_at = 0
         self._force_refresh = False
         self._needs_login = False  # set True when login required in non-interactive mode
@@ -61,6 +75,7 @@ class BedrockTokenRefresher(CustomLogger):
         try:
             self._refresh()
         except Exception as e:
+            _debug(f"WARNING: Initial token refresh failed ({e})")
             print(
                 f"[TokenRefresher] WARNING: Initial token refresh failed ({e}). "
                 "Server will start without Bedrock credentials — authenticate via the web UI.",
@@ -97,6 +112,7 @@ class BedrockTokenRefresher(CustomLogger):
         We capture the autofill URL (contains '?user_code=') as it's directly usable,
         and also capture the standalone XXXX-XXXX code for display in the web UI.
         """
+        _debug(f"_capture_auth_url_from_process() called. proc.pid={proc.pid if proc else 'None'}")
         def _read():
             print(f"[TokenRefresher] DEBUG: _read thread started. proc.pid={proc.pid}", flush=True)
             try:
@@ -176,6 +192,7 @@ class BedrockTokenRefresher(CustomLogger):
         In non-interactive mode: launches aws login --remote in the background,
         captures the autofill URL, sets _needs_login, and surfaces it via /auth/status.
         """
+        _debug(f"_ensure_login() called. is_interactive={self._is_interactive()}, profile={self._profile}")
         if not self._is_interactive():
             print(
                 f"[TokenRefresher] AWS session expired or missing for profile '{self._profile}'. "
@@ -199,6 +216,7 @@ class BedrockTokenRefresher(CustomLogger):
                 return
 
             try:
+                _debug(f"Starting aws command: aws login --remote --profile {self._profile}")
                 proc = subprocess.Popen(
                     ["aws", "login", "--remote", "--profile", self._profile],
                     stdout=subprocess.PIPE,
@@ -206,11 +224,14 @@ class BedrockTokenRefresher(CustomLogger):
                     stdin=subprocess.PIPE,
                     text=True,
                 )
+                _debug(f"aws process started with pid={proc.pid}")
                 self._login_process = proc
                 self._capture_auth_url_from_process(proc)
             except FileNotFoundError:
+                _debug("ERROR: 'aws' CLI not found")
                 print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
             except Exception as e:
+                _debug(f"ERROR: failed to launch aws login: {e}")
                 print(f"[TokenRefresher] ERROR: failed to launch aws login: {e}", file=sys.stderr)
             return  # do not block — background thread handles the rest
 
@@ -381,3 +402,4 @@ class BedrockTokenRefresher(CustomLogger):
 
 
 token_refresher = BedrockTokenRefresher()
+_debug(f"Module-level token_refresher instance created: {token_refresher}")

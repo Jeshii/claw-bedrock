@@ -170,6 +170,24 @@ async def get_logs(lines: int = 50):
         return {"logs": f"Error reading logs: {str(e)}"}
 
 
+@app.get("/api/logs/debug")
+async def get_debug_logs(lines: int = 100):
+    """Return the last N lines of the TokenRefresher debug log."""
+    debug_log = "/tmp/token_refresher_debug.log"
+    if not os.path.exists(debug_log):
+        return {"logs": "No debug logs yet. TokenRefresher may not be loaded."}
+    try:
+        result = subprocess.run(
+            ["tail", f"-{lines}", debug_log],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return {"logs": result.stdout or "Log is empty."}
+    except Exception as e:
+        return {"logs": f"Error reading debug logs: {str(e)}"}
+
+
 @app.get("/api/models")
 async def list_models():
     """List all configured models."""
