@@ -6,6 +6,7 @@ import threading
 import re
 
 import boto3
+import botocore.exceptions
 from aws_bedrock_token_generator import BedrockTokenGenerator
 from litellm.integrations.custom_logger import CustomLogger
 
@@ -69,8 +70,20 @@ class BedrockTokenRefresher(CustomLogger):
     def _is_interactive(self) -> bool:
         return sys.stdin.isatty()
 
+    def _profile_exists(self, profile_name):
+        """Check if the given AWS profile exists in the AWS configuration."""
+        try:
+            result = subprocess.run(
+                ["aws", "configure", "list-profiles"],
+                capture_output=True, text=True, check=True
+            )
+            profiles = [p.strip() for p in result.stdout.splitlines() if p.strip()]
+            return profile_name in profiles
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return False
+
     def _capture_auth_url_from_process(self, proc: subprocess.Popen):
-        """Read stdout from aws sso login --no-browser in a background thread.
+        """Read stdout from aws login --remote in a background thread.
 
         The command outputs lines like:
             Please visit the following URL:
@@ -147,10 +160,10 @@ class BedrockTokenRefresher(CustomLogger):
         t.start()
 
     def _ensure_login(self):
-        """Trigger aws sso login --no-browser for headless authentication.
+        """Trigger aws login --remote for headless authentication.
 
         In interactive mode: falls back to normal aws sso login (opens browser).
-        In non-interactive mode: launches aws sso login --no-browser in the background,
+        In non-interactive mode: launches aws login --remote in the background,
         captures the autofill URL, sets _needs_login, and surfaces it via /auth/status.
         """
         if not self._is_interactive():
@@ -161,16 +174,26 @@ class BedrockTokenRefresher(CustomLogger):
             )
             self._needs_login = True
 
+            # Check if profile exists before attempting login
+            if not self._profile_exists(self._profile):
+                print(
+                    f"[TokenRefresher] ERROR: AWS profile '{self._profile}' does not exist. "
+                    "Cannot start login process. Please create the profile first using 'aws configure sso'.",
+                    file=sys.stderr,
+                )
+                return
+
             # Only start one login process at a time
             if self._login_process is not None and self._login_process.poll() is None:
-                print("[TokenRefresher] aws sso login already running, skipping duplicate launch.")
+                print("[TokenRefresher] aws login already running, skipping duplicate launch.")
                 return
 
             try:
                 proc = subprocess.Popen(
-                    ["aws", "sso", "login", "--profile", self._profile, "--no-browser"],
+                    ["aws", "login", "--remote", "--profile", self._profile],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
+                    stdin=subprocess.PIPE,
                     text=True,
                 )
                 self._login_process = proc
@@ -178,7 +201,7 @@ class BedrockTokenRefresher(CustomLogger):
             except FileNotFoundError:
                 print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
             except Exception as e:
-                print(f"[TokenRefresher] ERROR: failed to launch aws sso login: {e}", file=sys.stderr)
+                print(f"[TokenRefresher] ERROR: failed to launch aws login: {e}", file=sys.stderr)
             return  # do not block — background thread handles the rest
 
         print(
@@ -203,13 +226,18 @@ class BedrockTokenRefresher(CustomLogger):
         """
         try:
             session = boto3.Session(profile_name=self._profile, region_name=self._region)
-        except Exception:
+        except botocore.exceptions.ProfileNotFound:
             print(
-                f"[TokenRefresher] AWS profile '{self._profile}' not found. Auth will be required via web UI.",
+                f"[TokenRefresher] AWS profile '{self._profile}' not found in AWS configuration. "
+                "Please check your AWS config or set the correct profile via AWS_PROFILE environment variable.",
                 file=sys.stderr,
             )
+            self._needs_login = True
+            return None
+        except Exception as e:
+            print(f"[TokenRefresher] Error creating AWS session: {e}", file=sys.stderr)
             self._ensure_login()
-            return None  # caller must check for None and skip token generation
+            return None
 
         try:
             credentials = session.get_credentials()
@@ -269,10 +297,11 @@ class BedrockTokenRefresher(CustomLogger):
             # Don't re-raise — server stays up, will retry on next request
 
     def _register_auth_endpoint(self):
-        """Register GET /auth/status on LiteLLM's FastAPI app."""
+        """Register /auth/status and /auth/submit-code endpoints on LiteLLM's FastAPI app."""
         try:
             from litellm.proxy.proxy_server import app
             from fastapi.responses import JSONResponse
+            from fastapi import Body
 
             @app.get("/auth/status", tags=["Authentication"])
             async def auth_status():
@@ -283,9 +312,31 @@ class BedrockTokenRefresher(CustomLogger):
                     "profile": self._profile,
                 })
 
-            print("[TokenRefresher] Registered /auth/status endpoint on LiteLLM proxy.")
+            @app.post("/auth/submit-code", tags=["Authentication"])
+            async def submit_code(code: str = Body(..., embed=True)):
+                if self._login_process is None or self._login_process.poll() is not None:
+                    return JSONResponse(
+                        {"error": "No active login process. Please restart the auth flow."},
+                        status_code=400
+                    )
+                try:
+                    if self._login_process.stdin:
+                        self._login_process.stdin.write(code + "\n")
+                        self._login_process.stdin.flush()
+                        print(f"[TokenRefresher] Submitted code to login process.")
+                        return JSONResponse({"success": True})
+                    else:
+                        return JSONResponse(
+                            {"error": "Login process stdin is not available."},
+                            status_code=500
+                        )
+                except Exception as e:
+                    print(f"[TokenRefresher] Error submitting code: {e}", file=sys.stderr)
+                    return JSONResponse({"error": str(e)}, status_code=500)
+
+            print("[TokenRefresher] Registered /auth/status and /auth/submit-code endpoints on LiteLLM proxy.")
         except Exception as e:
-            print(f"[TokenRefresher] WARNING: Could not register /auth/status endpoint: {e}", file=sys.stderr)
+            print(f"[TokenRefresher] WARNING: Could not register auth endpoints: {e}", file=sys.stderr)
 
     def _is_expired_error(self, exception) -> bool:
         error_str = str(exception).lower()
