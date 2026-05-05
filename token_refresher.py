@@ -401,6 +401,25 @@ class BedrockTokenRefresher(CustomLogger):
                     _debug(f"Failed to write auth_needed: {e2}")
         # Don't re-raise — server stays up, will retry on next request
 
+    def submit_code(self, code: str) -> dict:
+        """Submit an authorization code to the running aws login process.
+
+        This can be called directly (e.g., from the management app) without going through HTTP.
+        """
+        if self._login_process is None or self._login_process.poll() is not None:
+            return {"error": "No active login process. Please restart the auth flow."}
+        try:
+            if self._login_process.stdin:
+                self._login_process.stdin.write(code + "\n")
+                self._login_process.stdin.flush()
+                print(f"[TokenRefresher] Submitted code to login process.")
+                return {"success": True}
+            else:
+                return {"error": "Login process stdin is not available."}
+        except Exception as e:
+            print(f"[TokenRefresher] Error submitting code: {e}", file=sys.stderr)
+            return {"error": str(e)}
+
     def _register_auth_endpoint(self):
         """Register /auth/status and /auth/submit-code endpoints on LiteLLM's FastAPI app."""
         try:

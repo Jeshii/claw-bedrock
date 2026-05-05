@@ -19,6 +19,7 @@ def base64url_decode(s: str) -> str:
     return base64.b64decode(s.replace('-', '+').replace('_', '/')).decode('utf-8')
 
 import db
+import token_refresher
 
 app = FastAPI(title="Claw Bedrock Management")
 templates = Jinja2Templates(directory="templates")
@@ -129,6 +130,15 @@ async def auth_status():
         "openrouter": {"configured": openrouter_key},
         "ollama": {"configured": bool(ollama_host), "host": ollama_host}
     }
+
+
+@app.post("/api/auth/submit-code")
+async def submit_auth_code(code: str = Query(...)):
+    """Submit an authorization code to the running aws login process."""
+    result = token_refresher.token_refresher.submit_code(code)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return {"success": True}
 
 
 @app.get("/api/version")

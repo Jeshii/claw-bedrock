@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Claw Bedrock Management</title>
-    <script>window.USE_PREFIX = {{ use_prefix|lower }};</script>
+    <script id="config-data" type="application/json">{"use_prefix": {{ use_prefix|lower }}}</script>
+    <script>window.USE_PREFIX = JSON.parse(document.getElementById('config-data').textContent).use_prefix;</script>
     <style>
-        {% raw %}
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ul { padding-left: 20px; }
         body { font-family: sans-serif; display: flex; min-height: 100vh; transition: all 0.3s; }
@@ -108,9 +108,16 @@
         .copy-code-btn:hover { background: #e0a800; }
         .auth-url-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
         .auth-url-link { word-break: break-all; }
+        .auth-code-input-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+        .auth-code-input { flex: 1; padding: 8px 12px; font-size: 16px; font-family: monospace; letter-spacing: 2px; border: 2px solid #ffc107; border-radius: 6px; background: #fff8e1; color: #333; }
+        body.dark .auth-code-input { background: #2a2000; color: #ffe082; border-color: #ffc107; }
+        .auth-code-input:focus { outline: none; border-color: #e0a800; }
+        .submit-code-btn { padding: 8px 16px; font-size: 14px; background: #ffc107; color: #333; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+        .submit-code-btn:hover { background: #e0a800; }
+        .auth-note { font-size: 12px; color: #666; margin-top: 8px; font-style: italic; }
+        body.dark .auth-note { color: #999; }
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-        {% endraw %}
     </style>
 </head>
 <body>
@@ -183,7 +190,7 @@
                 <h2>Settings</h2>
                 <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 10px;">
                     <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()" style="margin-top: 3px; flex-shrink: 0;">
+                        <input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()" style="margin-top: 3px; flex-shrink: 0; width: 16px;">
                         <span>Add <code>claw-bedrock/</code> prefix to model names</span>
                     </label>
                     <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
@@ -461,10 +468,22 @@
                     }
                     html += '</div></div>';
 
-                    // Step 3: wait
+                    // Step 3: enter code from AWS
                     html += '<div class="auth-step">';
                     html += '<div class="auth-step-num">3</div>';
-                    html += '<div class="auth-step-body"><p>Approve the request in AWS, then this page will refresh automatically.</p></div>';
+                    html += '<div class="auth-step-body">';
+                    html += '<p>After approving in AWS, enter the code displayed in your browser:</p>';
+                    html += '<div class="auth-code-input-row">';
+                    html += '<input type="text" id="aws-code-input" class="auth-code-input" placeholder="Enter code from AWS..." />';
+                    html += '<button class="submit-code-btn" onclick="submitAWSCode()">Submit Code</button>';
+                    html += '</div>';
+                    html += '<p class="auth-note">Or paste the code back in the terminal if running interactively.</p>';
+                    html += '</div></div>';
+
+                    // Step 4: wait
+                    html += '<div class="auth-step">';
+                    html += '<div class="auth-step-num">4</div>';
+                    html += '<div class="auth-step-body"><p>This page will refresh automatically once authentication completes.</p></div>';
                     html += '</div>';
 
                     html += '</div></div>'; // .auth-steps + .auth-needed
@@ -491,6 +510,31 @@
                 }).catch(() => {
                     showToast('Failed to copy code', 'error');
                 });
+            }
+
+            async function submitAWSCode() {
+                const input = document.getElementById('aws-code-input');
+                const code = input.value.trim();
+                if (!code) {
+                    showToast('Please enter a code', 'error');
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/auth/submit-code?code=${encodeURIComponent(code)}`, {
+                        method: 'POST'
+                    });
+                    if (res.ok) {
+                        showToast('Code submitted successfully');
+                        input.value = '';
+                        // Reload auth status after a short delay
+                        setTimeout(loadAuth, 1000);
+                    } else {
+                        const data = await res.json();
+                        showToast(`Error: ${data.detail || 'Failed to submit code'}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
             }
 
             async function loadModels() {
