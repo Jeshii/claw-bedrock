@@ -4,6 +4,7 @@ import sys
 import time
 import threading
 import re
+import traceback
 
 import boto3
 import botocore.exceptions
@@ -97,9 +98,13 @@ class BedrockTokenRefresher(CustomLogger):
         and also capture the standalone XXXX-XXXX code for display in the web UI.
         """
         def _read():
+            print(f"[TokenRefresher] DEBUG: _read thread started. proc.pid={proc.pid}", flush=True)
             try:
+                line_count = 0
                 for line in proc.stdout:
                     line = line.strip()
+                    line_count += 1
+                    print(f"[TokenRefresher] DEBUG: stdout line #{line_count}: {repr(line)}", flush=True)
 
                     # Capture standalone verification code (XXXX-XXXX)
                     # Only match lines that are JUST the code (not inside a URL)
@@ -129,7 +134,10 @@ class BedrockTokenRefresher(CustomLogger):
                         _write_auth_tmp(line, self._auth_code)
                         print(f"[TokenRefresher] Auth URL captured for web UI: {self._auth_url}")
 
+                print(f"[TokenRefresher] DEBUG: stdout loop exhausted after {line_count} lines.", flush=True)
+                print(f"[TokenRefresher] DEBUG: calling proc.wait()...", flush=True)
                 proc.wait()
+                print(f"[TokenRefresher] DEBUG: proc.wait() returned. returncode={proc.returncode}", flush=True)
                 if proc.returncode == 0:
                     print("[TokenRefresher] AWS login completed — refreshing token...")
                     self._needs_login = False
@@ -154,10 +162,12 @@ class BedrockTokenRefresher(CustomLogger):
                     self._login_process = None
             except Exception as e:
                 print(f"[TokenRefresher] Error reading aws sso login output: {e}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
                 self._login_process = None
 
         t = threading.Thread(target=_read, daemon=True)
         t.start()
+        print(f"[TokenRefresher] DEBUG: _read thread launched. thread.is_alive={t.is_alive()}", flush=True)
 
     def _ensure_login(self):
         """Trigger aws login --remote for headless authentication.
