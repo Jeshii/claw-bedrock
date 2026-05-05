@@ -226,14 +226,8 @@ class BedrockTokenRefresher(CustomLogger):
             except Exception as e:
                 _debug(f"WARNING: Could not write auth_needed file: {e}")
 
-            # Check if profile exists before attempting login
-            if not self._profile_exists(self._profile):
-                print(
-                    f"[TokenRefresher] ERROR: AWS profile '{self._profile}' does not exist. "
-                    "Cannot start login process. Please create the profile first using 'aws configure sso'.",
-                    file=sys.stderr,
-                )
-                return
+            # NOTE: aws login --remote doesn't need an existing profile, so we skip the profile check
+            # and let the command handle authentication directly
 
             # Only start one login process at a time
             if self._login_process is not None and self._login_process.poll() is None:
@@ -361,7 +355,15 @@ class BedrockTokenRefresher(CustomLogger):
         session = self._get_valid_session()
         _debug(f"_refresh(): _get_valid_session returned {type(session).__name__ if session else None}")
         if session is None:
-            _debug("_refresh(): session is None, returning")
+            _debug(f"_refresh(): session is None, _needs_login={self._needs_login}")
+            # Write auth_needed file if login is needed so UI can detect it
+            if self._needs_login and not self._is_interactive():
+                try:
+                    with open(_TMP_AUTH_NEEDED, "w") as f:
+                        f.write("1")
+                    _debug(f"Wrote {_TMP_AUTH_NEEDED} from _refresh (session=None path)")
+                except Exception as e:
+                    _debug(f"Failed to write auth_needed: {e}")
             return  # login required — server stays up, /auth/status will surface the URL
         try:
             credentials = session.get_credentials()
