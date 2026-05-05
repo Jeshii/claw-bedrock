@@ -45,8 +45,8 @@
 
         .section { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
         body.dark .section { border-color: #444; background: #2a2a2a; }
-        .auth-needed { background: #fff3cd; border-color: #ffc107; }
-        body.dark .auth-needed { background: #3d3000; border-color: #ffc107; }
+        .auth-needed { background: #fff3cd; border-color: #ffc107; padding: 14px 18px; border-radius: 8px; }
+        body.dark .auth-needed { background: #3d3000; border-color: #ffc107; padding: 14px 18px; border-radius: 8px; }
 
         /* Dashboard auth banner — compact alert strip */
         #dashboard-auth-banner { display: none; margin-bottom: 20px; padding: 14px 18px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; }
@@ -414,16 +414,16 @@
                     return;
                 }
                 banner.style.display = 'block';
-                let html = '';
-                if (data.auth_url) {
-                    html += `<div class="banner-url">Open in browser: <a href="${data.auth_url}" target="_blank">${data.auth_url}</a></div>`;
-                } else {
-                    html += '<div class="banner-url">Waiting for AWS SSO login URL&hellip;</div>';
-                }
-                if (data.auth_code) {
-                    html += `<div class="banner-code"><span class="banner-code-val">${data.auth_code}</span><button class="copy-code-btn" onclick="copyAuthCode('${data.auth_code}')">Copy code</button></div>`;
-                }
-                bannerBody.innerHTML = html;
+                 let html = '';
+                 if (data.auth_error) {
+                     html += `<div class="banner-error" style="color: #dc3545; font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
+                 } else if (!data.auth_url) {
+                     html += '<div class="banner-url">Waiting for AWS SSO login URL&hellip;</div>';
+                 }
+                 if (data.auth_code) {
+                     html += `<div class="banner-code"><span class="banner-code-val">${data.auth_code}</span><button class="copy-code-btn" onclick="copyAuthCode('${data.auth_code}')">Copy code</button></div>`;
+                 }
+                 bannerBody.innerHTML = html;
             }
 
             async function loadAuth() {
@@ -437,6 +437,9 @@
 
                 if (data.auth_needed) {
                     html += '<div class="auth-needed"><p><strong>&#9888; AWS Authentication Required</strong></p>';
+                    if (data.auth_error) {
+                        html += `<p style="color: #dc3545; margin-top: 8px;"><strong>Error:</strong> ${data.auth_error}</p>`;
+                    }
                     html += '<div class="auth-steps">';
 
                     // Step 1: open the URL
@@ -477,7 +480,7 @@
                     html += '<input type="text" id="aws-code-input" class="auth-code-input" placeholder="Enter code from AWS..." />';
                     html += '<button class="submit-code-btn" onclick="submitAWSCode()">Submit Code</button>';
                     html += '</div>';
-                    html += '<p class="auth-note">Or paste the code back in the terminal if running interactively.</p>';
+                     // Note removed as per PLAN Task 3
                     html += '</div></div>';
 
                     // Step 4: wait

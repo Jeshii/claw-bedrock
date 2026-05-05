@@ -72,6 +72,7 @@ class BedrockTokenRefresher(CustomLogger):
         self._needs_login = False  # set True when login required in non-interactive mode
         self._auth_url: str | None = None  # captured aws sso login --no-browser URL for web UI
         self._auth_code: str | None = None  # captured XXXX-XXXX verification code
+        self._auth_error: str | None = None  # captured auth error message for UI
         self._login_process: subprocess.Popen | None = None  # background aws login process
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
@@ -263,10 +264,12 @@ class BedrockTokenRefresher(CustomLogger):
                 self._capture_auth_url_from_process(proc)
             except FileNotFoundError:
                 _debug("ERROR: 'aws' CLI not found")
-                print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
+                self._auth_error = "'aws' CLI not found. Is it installed and on PATH?"
+                print(f"[TokenRefresher] ERROR: {self._auth_error}", file=sys.stderr)
             except Exception as e:
                 _debug(f"ERROR: failed to launch aws login: {e}")
-                print(f"[TokenRefresher] ERROR: failed to launch aws login: {e}", file=sys.stderr)
+                self._auth_error = f"Failed to launch aws login: {e}"
+                print(f"[TokenRefresher] ERROR: {self._auth_error}", file=sys.stderr)
             return  # do not block — background thread handles the rest
 
         print(
@@ -278,12 +281,14 @@ class BedrockTokenRefresher(CustomLogger):
                 ["aws", "sso", "login", "--profile", self._profile],
                 check=True,
             )
-        except FileNotFoundError:
-            print("[TokenRefresher] ERROR: 'aws' CLI not found. Is it installed and on PATH?", file=sys.stderr)
-            raise
-        except subprocess.CalledProcessError as e:
-            print(f"[TokenRefresher] ERROR: aws sso login failed (exit {e.returncode}).", file=sys.stderr)
-            raise
+            except FileNotFoundError:
+                self._auth_error = "'aws' CLI not found. Is it installed and on PATH?"
+                print(f"[TokenRefresher] ERROR: {self._auth_error}", file=sys.stderr)
+                raise
+            except subprocess.CalledProcessError as e:
+                self._auth_error = f"aws sso login failed (exit {e.returncode})"
+                print(f"[TokenRefresher] ERROR: {self._auth_error}.", file=sys.stderr)
+                raise
 
     def _get_valid_session(self) -> boto3.Session | None:
         """Return a boto3 Session with valid credentials, triggering login if needed.
@@ -401,6 +406,12 @@ class BedrockTokenRefresher(CustomLogger):
                     _debug(f"Failed to write auth_needed: {e2}")
         # Don't re-raise — server stays up, will retry on next request
 
+    def get_auth_error(self) -> str | None:
+        """Return and clear the current auth error message."""
+        error = self._auth_error
+        self._auth_error = None
+        return error
+
     def submit_code(self, code: str) -> dict:
         """Submit an authorization code to the running aws login process.
 
@@ -436,6 +447,7 @@ class BedrockTokenRefresher(CustomLogger):
                     "needs_login": self._needs_login,
                     "auth_url": self._auth_url,
                     "auth_code": self._auth_code,
+                    "auth_error": self._auth_error,
                     "profile": self._profile,
                 })
 

@@ -127,6 +127,7 @@ async def auth_status():
         "auth_needed": auth_needed,
         "auth_url": auth_url,
         "auth_code": auth_code,
+        "auth_error": token_refresher.token_refresher.get_auth_error(),
         "openrouter": {"configured": openrouter_key},
         "ollama": {"configured": bool(ollama_host), "host": ollama_host}
     }
