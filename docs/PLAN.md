@@ -142,3 +142,8 @@ Should be replaced with something like:
 
 ## Task 6: Collapse Log windows by default, with option to expand
 
+In the management UI, the LiteLLM Logs and Debug Logs sections can be quite long and overwhelming. By default, these sections should be collapsed with only the title and "Show Logs" button visible. When the user clicks "Show Logs", the section expands to show the log content and the button changes to "Hide Logs". This allows users to focus on the main management features without being distracted by long logs, while still providing easy access to logs when needed.
+
+## Task 7: Reorganize project structure
+
+See `docs/FILE_STRUCTURE.md` for proposed new structure and file moves. Update all imports, Dockerfile paths, and documentation references accordingly.

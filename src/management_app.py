@@ -10,6 +10,8 @@ import subprocess
 import psutil
 import base64
 from typing import Optional, Dict
+import db
+import token_refresher
 
 
 def base64url_decode(s: str) -> str:
@@ -17,9 +19,6 @@ def base64url_decode(s: str) -> str:
     s += "=" * (4 - len(s) % 4)
     return base64.b64decode(s.replace("-", "+").replace("_", "/")).decode("utf-8")
 
-
-import db
-import token_refresher
 
 app = FastAPI(title="Claw Bedrock Management")
 templates = Jinja2Templates(directory="templates")
@@ -38,7 +37,7 @@ def get_version():
     try:
         with open(VERSION_PATH, "r") as f:
             return f.read().strip()
-    except:
+    except FileNotFoundError:
         return "unknown"
 
 
@@ -234,7 +233,11 @@ async def reload_models():
     """Manually trigger a LiteLLM restart to pick up new config."""
     result = reload_litellm()
     if result.get("success"):
-        return {"status": "success", "message": result.get("message", "LiteLLM restarted"), "pid": result.get("pid")}
+        return {
+            "status": "success",
+            "message": result.get("message", "LiteLLM restarted"),
+            "pid": result.get("pid"),
+        }
     return {
         "status": "warning",
         "message": f"LiteLLM restart failed: {result.get('error', 'Unknown error')}",
@@ -267,7 +270,7 @@ async def fetch_openrouter_models(
             def _is_free(m):
                 try:
                     return float(m.get("pricing", {}).get("prompt", "1")) == 0
-                except:
+                except (ValueError, TypeError):
                     return False
 
             models = [m for m in models if _is_free(m)]
@@ -276,7 +279,7 @@ async def fetch_openrouter_models(
             def _is_not_free(m):
                 try:
                     return float(m.get("pricing", {}).get("prompt", "1")) != 0
-                except:
+                except (ValueError, TypeError):
                     return True
 
             models = [m for m in models if _is_not_free(m)]
@@ -293,7 +296,7 @@ async def fetch_openrouter_models(
         def sort_key(m):
             try:
                 cost = float(m.get("pricing", {}).get("prompt", "inf"))
-            except:
+            except (ValueError, TypeError):
                 cost = float("inf")
             return (cost, m.get("name", "").lower())
 
@@ -402,7 +405,12 @@ async def delete_model(encoded_model_name: str):
     merge_configs()
     result = reload_litellm()
 
-    return {"status": "success", "deleted": model_name, "reloaded": result.get("success"), "pid": result.get("pid")}
+    return {
+        "status": "success",
+        "deleted": model_name,
+        "reloaded": result.get("success"),
+        "pid": result.get("pid"),
+    }
 
 
 @app.post("/api/models")
@@ -412,7 +420,12 @@ async def add_model(model: Dict):
     merge_configs()
     result = reload_litellm()
 
-    return {"status": "success", "model": model, "reloaded": result.get("success"), "pid": result.get("pid")}
+    return {
+        "status": "success",
+        "model": model,
+        "reloaded": result.get("success"),
+        "pid": result.get("pid"),
+    }
 
 
 @app.put("/api/models/{encoded_old_name:path}")
@@ -528,7 +541,15 @@ def reload_litellm() -> dict:
     # Step 3: Start new LiteLLM process
     try:
         log_path = os.path.join(config_dir, "litellm.log")
-        cmd = ["litellm", "--config", config_path, "--port", "4000", "--host", "0.0.0.0"]
+        cmd = [
+            "litellm",
+            "--config",
+            config_path,
+            "--port",
+            "4000",
+            "--host",
+            "0.0.0.0",
+        ]
         print(f"[Reload] Starting LiteLLM: {' '.join(cmd)}")
         with open(log_path, "a") as log_file:
             process = subprocess.Popen(
@@ -546,9 +567,15 @@ def reload_litellm() -> dict:
         time.sleep(2)
         try:
             if not psutil.Process(new_pid).is_running():
-                return {"success": False, "error": f"LiteLLM process died shortly after starting (PID {new_pid})"}
+                return {
+                    "success": False,
+                    "error": f"LiteLLM process died shortly after starting (PID {new_pid})",
+                }
         except psutil.NoSuchProcess:
-            return {"success": False, "error": f"LiteLLM process not found after starting (PID {new_pid})"}
+            return {
+                "success": False,
+                "error": f"LiteLLM process not found after starting (PID {new_pid})",
+            }
 
         # Step 5: Health check
         for _ in range(10):
@@ -556,12 +583,20 @@ def reload_litellm() -> dict:
                 resp = requests.get("http://localhost:4000/health", timeout=2)
                 if resp.status_code < 500:
                     print(f"[Reload] LiteLLM health check passed (PID {new_pid})")
-                    return {"success": True, "pid": new_pid, "message": f"LiteLLM restarted (PID {new_pid})"}
+                    return {
+                        "success": True,
+                        "pid": new_pid,
+                        "message": f"LiteLLM restarted (PID {new_pid})",
+                    }
             except Exception:
                 pass
             time.sleep(1)
 
-        return {"success": True, "pid": new_pid, "warning": "LiteLLM started but health check timed out"}
+        return {
+            "success": True,
+            "pid": new_pid,
+            "warning": "LiteLLM started but health check timed out",
+        }
     except Exception as e:
         print(f"[Reload] Error starting LiteLLM: {e}", file=sys.stderr)
         return {"success": False, "error": str(e)}

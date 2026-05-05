@@ -11,7 +11,6 @@
 ## Python Style
 - Python 3.12+ — use `match`, `type X = ...`, and modern union syntax (`X | Y`)
 - Prefer `except FileNotFoundError` over bare `except Exception` where specific errors are expected
-- Indent `except`/`finally` to align with their `try` block — never over-indent
 
 ## Git Workflow
 - Never push directly to `main`, just push to `develop` first, PRs unnecessary for now
@@ -20,6 +19,7 @@
 
 ## General Practices
 - Compact when you hit 80% of your context window
+- Skills are located in `skills/` and should be self-contained with their own dependencies if possible
 
 ## Project Map
 - `management_app.py` — Management UI (uvicorn on port 8282)

@@ -1,6 +1,4 @@
-from tinydb import TinyDB, Query, where
-from tinydb.middlewares import CachingMiddleware
-from tinydb.storages import JSONStorage
+from tinydb import TinyDB, where
 import os
 import yaml
 
@@ -10,8 +8,8 @@ LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 
 # Initialize TinyDB with caching for better performance
 db = TinyDB(DB_PATH, indent=2, sort_keys=True)
-models_table = db.table('models')
-settings_table = db.table('settings')
+models_table = db.table("models")
+settings_table = db.table("settings")
 
 
 def _migrate_yaml_to_db():
@@ -33,10 +31,10 @@ def _migrate_yaml_to_db():
             print(f"[DB] Migrated {len(model_list)} models from YAML to TinyDB")
 
         # Migrate settings
-        if 'use_prefix' in config:
+        if "use_prefix" in config:
             settings_table.upsert(
-                {"key": "use_prefix", "value": config['use_prefix']},
-                where("key") == "use_prefix"
+                {"key": "use_prefix", "value": config["use_prefix"]},
+                where("key") == "use_prefix",
             )
     except Exception as e:
         print(f"[DB] Migration error: {e}")
@@ -61,8 +59,7 @@ def delete_model(model_name):
 def rename_model(old_name, new_name):
     """Rename a model. Returns True if renamed."""
     result = models_table.update(
-        {"model_name": new_name},
-        where("model_name") == old_name
+        {"model_name": new_name}, where("model_name") == old_name
     )
     return len(result) > 0
 
@@ -80,10 +77,7 @@ def get_setting(key, default=None):
 
 def set_setting(key, value):
     """Set a setting value."""
-    settings_table.upsert(
-        {"key": key, "value": value},
-        where("key") == key
-    )
+    settings_table.upsert({"key": key, "value": value}, where("key") == key)
 
 
 def get_settings():
@@ -96,7 +90,7 @@ def get_router_settings():
     """Get router_settings from DB or return defaults."""
     settings = get_setting("router_settings", {})
     # Remove always_include_stream_usage as it's now in litellm_settings
-    settings.pop('always_include_stream_usage', None)
+    settings.pop("always_include_stream_usage", None)
     return settings
 
 
@@ -104,7 +98,7 @@ def set_router_settings(router_settings):
     """Save router_settings to DB."""
     settings_table.upsert(
         {"key": "router_settings", "value": router_settings},
-        where("key") == "router_settings"
+        where("key") == "router_settings",
     )
 
 
@@ -113,7 +107,7 @@ def get_litellm_settings():
     always_stream = get_setting("always_include_stream_usage", True)
     return {
         "callbacks": ["token_refresher.BedrockTokenRefresher"],
-        "always_include_stream_usage": always_stream
+        "always_include_stream_usage": always_stream,
     }
 
 

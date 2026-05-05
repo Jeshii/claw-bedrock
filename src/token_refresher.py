@@ -4,6 +4,10 @@ import sys
 import time
 import threading
 import traceback
+import boto3
+import botocore.exceptions
+from aws_bedrock_token_generator import BedrockTokenGenerator
+from litellm.integrations.custom_logger import CustomLogger
 
 # Debug log file for TokenRefresher - bypasses stdout redirection
 _DEBUG_LOG = "/tmp/token_refresher_debug.log"
@@ -22,11 +26,6 @@ def _debug(msg):
 
 
 _debug(f"Module loaded. Version={_CODE_VERSION}, Python path: {sys.path[:3]}")
-
-import boto3
-import botocore.exceptions
-from aws_bedrock_token_generator import BedrockTokenGenerator
-from litellm.integrations.custom_logger import CustomLogger
 
 _TMP_AUTH_URL = "/tmp/auth_url"
 _TMP_AUTH_NEEDED = "/tmp/auth_needed"
