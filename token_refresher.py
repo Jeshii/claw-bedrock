@@ -356,14 +356,18 @@ class BedrockTokenRefresher(CustomLogger):
         _debug(f"_refresh(): _get_valid_session returned {type(session).__name__ if session else None}")
         if session is None:
             _debug(f"_refresh(): session is None, _needs_login={self._needs_login}")
-            # Write auth_needed file if login is needed so UI can detect it
-            if self._needs_login and not self._is_interactive():
+            # Start the login process if we're in non-interactive mode
+            if self._needs_login:
                 try:
                     with open(_TMP_AUTH_NEEDED, "w") as f:
                         f.write("1")
                     _debug(f"Wrote {_TMP_AUTH_NEEDED} from _refresh (session=None path)")
                 except Exception as e:
                     _debug(f"Failed to write auth_needed: {e}")
+                # Actually start the aws login process to get the auth URL
+                if self._login_process is None or self._login_process.poll() is not None:
+                    _debug("_refresh(): calling _ensure_login() to start aws login process")
+                    self._ensure_login()
             return  # login required — server stays up, /auth/status will surface the URL
         try:
             credentials = session.get_credentials()
