@@ -16,7 +16,7 @@ def _debug(msg):
     """Write debug message to a file to bypass stdout redirection."""
     try:
         with open(_DEBUG_LOG, "a") as f:
-            f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
     except Exception:
         pass
 
