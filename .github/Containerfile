@@ -10,8 +10,13 @@ ENV CONFIG_DIR=/app
 ARG VERSION=dev
 RUN echo "${VERSION}" > /app/VERSION
 
-# Install AWS CLI
-RUN pip install --no-cache-dir awscli
+# Install AWS CLI v2
+RUN apt-get update && apt-get install -y curl unzip && \
+    curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip && \
+    unzip -q awscliv2.zip && \
+    ./aws/install && \
+    rm -rf awscliv2.zip aws/ && \
+    apt-get purge -y curl unzip && apt-get autoremove -y
 
 # Copy requirements and install dependencies
 COPY requirements.txt requirements.lock ./
