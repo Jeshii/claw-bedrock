@@ -281,14 +281,14 @@ class BedrockTokenRefresher(CustomLogger):
                 ["aws", "sso", "login", "--profile", self._profile],
                 check=True,
             )
-            except FileNotFoundError:
-                self._auth_error = "'aws' CLI not found. Is it installed and on PATH?"
-                print(f"[TokenRefresher] ERROR: {self._auth_error}", file=sys.stderr)
-                raise
-            except subprocess.CalledProcessError as e:
-                self._auth_error = f"aws sso login failed (exit {e.returncode})"
-                print(f"[TokenRefresher] ERROR: {self._auth_error}.", file=sys.stderr)
-                raise
+        except FileNotFoundError:
+            self._auth_error = "'aws' CLI not found. Is it installed and on PATH?"
+            print(f"[TokenRefresher] ERROR: {self._auth_error}", file=sys.stderr)
+            raise
+        except subprocess.CalledProcessError as e:
+            self._auth_error = f"aws sso login failed (exit {e.returncode})"
+            print(f"[TokenRefresher] ERROR: {self._auth_error}.", file=sys.stderr)
+            raise
 
     def _get_valid_session(self) -> boto3.Session | None:
         """Return a boto3 Session with valid credentials, triggering login if needed.
