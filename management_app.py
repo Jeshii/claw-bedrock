@@ -110,18 +110,13 @@ async def update_settings(
 
 @app.get("/api/auth/status")
 async def auth_status():
-    """Check if AWS auth is needed and get auth URL + verification code."""
+    """Check if AWS auth is needed and get auth URL."""
     auth_needed = os.path.exists("/tmp/auth_needed")
     auth_url = None
-    auth_code = None
 
     if os.path.exists("/tmp/auth_url"):
         with open("/tmp/auth_url", "r") as f:
             auth_url = f.read().strip()
-
-    if os.path.exists("/tmp/auth_code"):
-        with open("/tmp/auth_code", "r") as f:
-            auth_code = f.read().strip()
 
     openrouter_key = bool(os.environ.get("OPENROUTER_API_KEY"))
     ollama_host = os.environ.get("OLLAMA_API_BASE", "")
@@ -129,7 +124,7 @@ async def auth_status():
     return {
         "auth_needed": auth_needed,
         "auth_url": auth_url,
-        "auth_code": auth_code,
+        "awaiting_code": token_refresher.token_refresher._awaiting_code,
         "auth_error": token_refresher.token_refresher.get_auth_error(),
         "openrouter": {"configured": openrouter_key},
         "ollama": {"configured": bool(ollama_host), "host": ollama_host},
@@ -137,8 +132,11 @@ async def auth_status():
 
 
 @app.post("/api/auth/submit-code")
-async def submit_auth_code(code: str = Query(...)):
+async def submit_auth_code(body: dict):
     """Submit an authorization code to the running aws login process."""
+    code = body.get("code", "")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing 'code' in request body")
     result = token_refresher.token_refresher.submit_code(code)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])

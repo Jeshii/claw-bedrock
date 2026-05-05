@@ -415,15 +415,12 @@
                 }
                 banner.style.display = 'block';
                  let html = '';
-                 if (data.auth_error) {
-                     html += `<div class="banner-error" style="color: #dc3545; font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
-                 } else if (!data.auth_url) {
-                     html += '<div class="banner-url">Waiting for AWS SSO login URL&hellip;</div>';
-                 }
-                 if (data.auth_code) {
-                     html += `<div class="banner-code"><span class="banner-code-val">${data.auth_code}</span><button class="copy-code-btn" onclick="copyAuthCode('${data.auth_code}')">Copy code</button></div>`;
-                 }
-                 bannerBody.innerHTML = html;
+                  if (data.auth_error) {
+                      html += `<div class="banner-error" style="color: #dc3545; font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
+                  } else if (!data.auth_url) {
+                      html += '<div class="banner-url">Waiting for AWS login URL&hellip;</div>';
+                  }
+                  bannerBody.innerHTML = html;
             }
 
             async function loadAuth() {
@@ -450,42 +447,31 @@
                         html += '<p>Open this URL in your browser:</p>';
                         html += `<div class="auth-url-row"><a class="auth-url-link" href="${data.auth_url}" target="_blank">${data.auth_url}</a></div>`;
                     } else {
-                        html += '<p>Waiting for AWS SSO login URL&hellip; (refresh in a moment)</p>';
+                        html += '<p>Waiting for AWS login URL&hellip; (refresh in a moment)</p>';
                     }
                     html += '</div></div>';
 
-                    // Step 2: enter the code
+                    // Step 2: paste authorization code
                     html += '<div class="auth-step">';
                     html += '<div class="auth-step-num">2</div>';
                     html += '<div class="auth-step-body">';
-                    if (data.auth_code) {
-                        html += '<p>Enter this verification code when prompted:</p>';
-                        html += `<div class="auth-code-box">`;
-                        html += `<span class="auth-code-value" id="auth-code-val">${data.auth_code}</span>`;
-                        html += `<button class="copy-code-btn" onclick="copyAuthCode('${data.auth_code}')">Copy</button>`;
-                        html += `</div>`;
+                    if (data.awaiting_code) {
+                        html += '<p>After approving in your browser, paste the authorization code shown:</p>';
+                        html += '<div class="auth-code-input-row">';
+                        html += '<input type="text" id="aws-code-input" class="auth-code-input" placeholder="Paste authorization code..." />';
+                        html += '<button class="submit-code-btn" onclick="submitAWSCode()">Submit Code</button>';
+                        html += '</div>';
+                        html += '<p class="auth-note">The code is displayed on the AWS authorization page after you approve access.</p>';
                     } else if (data.auth_url) {
-                        html += '<p>The URL above already contains your code &mdash; just open it to auto-fill.</p>';
+                        html += '<p>Awaiting authorization&hellip; (the code input will appear here once the login process is ready)</p>';
                     } else {
-                        html += '<p>Verification code will appear here once the login process starts.</p>';
+                        html += '<p>Authorization code input will appear here once the login process starts.</p>';
                     }
                     html += '</div></div>';
 
-                    // Step 3: enter code from AWS
+                    // Step 3: wait
                     html += '<div class="auth-step">';
                     html += '<div class="auth-step-num">3</div>';
-                    html += '<div class="auth-step-body">';
-                    html += '<p>After approving in AWS, enter the code displayed in your browser:</p>';
-                    html += '<div class="auth-code-input-row">';
-                    html += '<input type="text" id="aws-code-input" class="auth-code-input" placeholder="Enter code from AWS..." />';
-                    html += '<button class="submit-code-btn" onclick="submitAWSCode()">Submit Code</button>';
-                    html += '</div>';
-                     // Note removed as per PLAN Task 3
-                    html += '</div></div>';
-
-                    // Step 4: wait
-                    html += '<div class="auth-step">';
-                    html += '<div class="auth-step-num">4</div>';
                     html += '<div class="auth-step-body"><p>This page will refresh automatically once authentication completes.</p></div>';
                     html += '</div>';
 
@@ -523,13 +509,14 @@
                     return;
                 }
                 try {
-                    const res = await fetch(`/api/auth/submit-code?code=${encodeURIComponent(code)}`, {
-                        method: 'POST'
+                    const res = await fetch('/api/auth/submit-code', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({code: code})
                     });
                     if (res.ok) {
                         showToast('Code submitted successfully');
                         input.value = '';
-                        // Reload auth status after a short delay
                         setTimeout(loadAuth, 1000);
                     } else {
                         const data = await res.json();

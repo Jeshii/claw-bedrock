@@ -43,17 +43,12 @@ Note: Previous `max_tokens` values in bedrock_models.json were incorrect (all se
 
 ### Changes
 
-1. **`bedrock_models.json`** — Updated with accurate `max_tokens` and new `context_length` field per model (done).
-
-2. **`db.py`** — No changes needed. `add_model()` already stores the full dict, and `get_models_for_litellm()` already includes all fields including `context_length`.
-
-3. **`management_app.py`**:
+1. **`management_app.py`**:
    - **OpenRouter**: Extract `context_length` from API response. The OpenRouter `/v1/models` response includes `architecture.context_length` or `top_provider.context_length` per model. Include it in the filtered response.
    - **Ollama**: The `/api/tags` response doesn't include context length. Add a new endpoint `/api/providers/ollama/model-details?name=<name>` that calls `/api/show` and returns `details.context_length`. Also add `context_length` input when manually adding Ollama models.
-   - **Bedrock**: `context_length` already in `bedrock_models.json` (done).
    - **Manual**: Add "Context Length" numeric input in add-model form.
 
-4. **`templates/management.html`**:
+2. **`templates/management.html`**:
    - In `loadModels()`: display context length next to model name (e.g., `— 128k ctx`)
    - In add-model flow: show context length field for all providers (auto-populated for OpenRouter when model is selected)
    - For manual entry: numeric input field
@@ -144,3 +139,6 @@ Available Model Group Fallbacks=None Original exception: RateLimitError: litellm
 Should be replaced with something like:
 
 "OpenRouter rate limit exceeded for model owl-alpha. Please try again later or switch to a different model."
+
+## Task 6: Collapse Log windows by default, with option to expand
+
