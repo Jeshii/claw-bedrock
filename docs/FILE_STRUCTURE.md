@@ -1,12 +1,12 @@
-# claw-bedrock Reorganization Plan
+# claw-bedrock File Structure
 
 ## Overview
 
-This plan moves all files from the flat root structure into logical subdirectories, keeping only conventional root-level files at the top level.
+All files are organized into logical subdirectories, keeping only conventional root-level files at the top level.
 
 ---
 
-## Target Structure
+## Current Structure
 
 ```
 claw-bedrock/
@@ -25,7 +25,7 @@ claw-bedrock/
 ├── templates/
 ├── skills/
 ├── docs/
-│   └── PLAN.md
+│   └── FILE_STRUCTURE.md
 ├── Dockerfile
 ├── requirements.txt
 ├── requirements.lock
@@ -36,74 +36,50 @@ claw-bedrock/
 
 ---
 
-## File Moves
+## Directory Descriptions
 
-| File | From | To | Notes |
-|------|------|----|-------|
-| `db.py` | `/` | `src/` | |
-| `management_app.py` | `/` | `src/` | |
-| `token_refresher.py` | `/` | `src/` | |
-| `bedrock_models.json` | `/` | `config/` | |
-| `policy.json` | `/` | `config/` | |
-| `docker-compose.yml` | `/` | `deploy/` | |
-| `start_container.sh` | `/` | `deploy/` | |
-| `claw-bedrock.container.example` | `/` | `deploy/` | |
-| `PLAN.md` | `/` | `docs/` | |
+### `src/`
+Contains all Python source files for the application:
+- `db.py` — Database models and connection logic
+- `management_app.py` — Management UI (uvicorn on port 8282)
+- `token_refresher.py` — AWS SSO token refresh logic, imported at startup
 
----
+### `config/`
+Configuration and data files:
+- `bedrock_models.json` — Bedrock model definitions
+- `policy.json` — LiteLLM policy configuration
 
-## Required Code Updates
+### `deploy/`
+Deployment and container-related files:
+- `claw-bedrock.container.example` — Example container configuration
+- `docker-compose.yml` — Docker Compose setup
+- `start_container.sh` — Container startup script
 
-After moving files, update the following references:
+### `templates/`
+HTML templates for the management UI.
 
-### Dockerfile
-- Update `COPY` paths for any Python files copied from root
-- Update `CMD` or `ENTRYPOINT` if they reference root-level `.py` files directly
-- Example: `COPY db.py .` → `COPY src/db.py .`
+### `skills/`
+Self-contained skills with their own dependencies when possible.
 
-### Python imports
-- If any file imports from another using relative paths or `sys.path` assumptions, update accordingly
-- If using a package structure, add `src/__init__.py`
+### `docs/`
+Project documentation including this file structure reference.
 
-### docker-compose.yml
-- If `docker-compose.yml` references `start_container.sh` or any root paths, update to `deploy/` prefix
+### `Dockerfile`
+Container build instructions at root (standard convention).
 
-### AGENTS.md / README.md
-- Update any file path references in documentation
+### `requirements.txt` / `requirements.lock`
+Python dependencies at root (standard pip convention).
 
----
+### `AGENTS.md`
+Agent rules and instructions for AI tooling.
 
-## Git Commands
-
-```bash
-# Create directories
-mkdir -p src config deploy docs
-
-# Move Python source files
-git mv db.py src/
-git mv management_app.py src/
-git mv token_refresher.py src/
-
-# Move config/data files
-git mv bedrock_models.json config/
-git mv policy.json config/
-
-# Move deployment files
-git mv docker-compose.yml deploy/
-git mv start_container.sh deploy/
-git mv claw-bedrock.container.example deploy/
-
-# Move internal docs
-git mv PLAN.md docs/
-
-# Commit
-git commit -m "refactor: reorganize files into src/, config/, deploy/, docs/"
-```
+### `README.md`
+Project overview and documentation.
 
 ---
 
 ## Notes
 
-- `Dockerfile`, `requirements.txt`, `requirements.lock`, `README.md`, and `AGENTS.md` stay at root — these are standard conventions expected by Docker, pip, and AI tooling.
-- `templates/` and `skills/` are already subdirectories and need no change.
-- Do the Dockerfile/import updates **before** committing, or in the same commit, to avoid breaking the build.
+- `Dockerfile`, `requirements.txt`, `requirements.lock`, `README.md`, and `AGENTS.md` remain at root — these are standard conventions expected by Docker, pip, and AI tooling.
+- `templates/` and `skills/` are subdirectories that require no changes.
+- The Dockerfile and Python imports have been updated to reflect the new file locations.

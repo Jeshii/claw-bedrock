@@ -1,4 +1,4 @@
-# Troubleshooting Plan: Models Unavailable After Rename/Reload
+# Task 1: Troubleshoot Models Unavailable After Rename/Reload
 
 ## Problem Statement
 Renaming a model (or reloading LiteLLM) causes models to become unavailable. This document outlines the investigation steps and proposed fixes.
@@ -343,3 +343,30 @@ If issues are found:
 1. Check `git log develop` for commit `f8c16d0`
 2. Revert with: `git revert f8c16d0`
 3. Rebuild and redeploy container
+
+
+# Task 2: Fix Management UI AWS Auth Link Bug
+
+## Root Cause Investigation
+- Inspect `token_refresher.py` to confirm `auth_url` is overwritten on new login attempts and cleared when processes end.
+- Check `management_app.py` for the `/api/auth/status` endpoint implementation and verify if the frontend polls this endpoint periodically to refresh the auth link.
+- Correlate the state mismatch error to a stale URL being displayed in the UI (not updated after login retry).
+
+---
+
+## Proposed Fixes
+- **Add Frontend Polling**: If missing, add a 2-3 second poll to `/api/auth/status` in the UI to update the auth link when new login flows start.
+- **Reset Auth URL**: In `token_refresher.py`, clear `auth_url` before starting a new login process, only setting it when the new URL is captured from stdout.
+- **Validate URLs**: Add basic validation for captured auth URLs to ensure they include required parameters (`state`, `client_id`).
+
+---
+
+## Testing
+- Verify UI link matches the stdout URL on new auth flow start.
+- Trigger auth retry, confirm UI updates to the new URL.
+- Use the UI link to complete authentication, validate success.
+
+---
+
+## Pre-Commit Checks
+- Run `ruff check --fix`, `ruff format`, and `python -m py_compile` on modified files.

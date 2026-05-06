@@ -593,8 +593,8 @@ def reload_litellm() -> dict:
                 "error": f"LiteLLM process not found after starting (PID {new_pid})",
             }
 
-        # Step 5: Health check
-        for i in range(30):  # Increase retries from 10 to 30
+        # Step 5: Health check (wait up to 60s for slow LiteLLM startup)
+        for i in range(60):
             try:
                 resp = requests.get("http://localhost:4000/health", timeout=2)
                 if resp.status_code < 500:

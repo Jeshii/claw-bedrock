@@ -45,6 +45,19 @@ LITELLM_PID=$!
 echo "${LITELLM_PID}" > "${PID_FILE}"
 echo "LiteLLM started with PID ${LITELLM_PID}"
 
+# Wait for LiteLLM to be healthy (up to 60s)
+echo "Waiting for LiteLLM to become healthy..."
+for i in $(seq 1 60); do
+    if curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/health --max-time 2 | grep -q "200"; then
+        echo "LiteLLM is healthy after ${i}s"
+        break
+    fi
+    if [ $i -eq 60 ]; then
+        echo "Warning: LiteLLM did not become healthy within 60s, continuing anyway"
+    fi
+    sleep 1
+done
+
 # Start Management UI (foreground)
 echo "Starting Management UI on port 8282..."
 export CONFIG_DIR="${CONFIG_DIR}"
