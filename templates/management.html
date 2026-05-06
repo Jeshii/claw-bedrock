@@ -1068,7 +1068,9 @@
 
             async function loadOpenRouterModels() {
                 try {
-                    const res = await fetch('/api/providers/openrouter/models?include_free=false');
+                    const freeOnly = document.getElementById('or-free-only')?.checked;
+                    const url = freeOnly ? '/api/providers/openrouter/models?include_free=true' : '/api/providers/openrouter/models';
+                    const res = await fetch(url);
                     const data = await res.json();
                     openRouterModels = data.models || [];
                     renderOpenRouterSelect(openRouterModels);
@@ -1143,6 +1145,10 @@
                         <div style="margin-bottom: 8px;">
                             <input id="or-search" placeholder="Search OpenRouter models..." style="width: 400px;" oninput="filterOpenRouterModels()" />
                         </div>
+                        <label style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; cursor: pointer;">
+                            <input type="checkbox" id="or-free-only" onchange="loadOpenRouterModels()" />
+                            <span>Show free models only</span>
+                        </label>
                         <select id="or-select" style="width: 400px; padding: 5px; margin-bottom: 8px;" size="10" onchange="onOpenRouterSelect()">
                             <option value="">Loading models...</option>
                         </select>

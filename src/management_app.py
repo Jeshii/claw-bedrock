@@ -247,11 +247,14 @@ async def reload_models():
 
 @app.get("/api/providers/openrouter/models")
 async def fetch_openrouter_models(
-    include_free: bool = True,
+    include_free: Optional[str] = None,
     search: Optional[str] = None,
     api_key: Optional[str] = None,
 ):
-    """Fetch available models from OpenRouter with optional filtering."""
+    """Fetch available models from OpenRouter with optional filtering.
+
+    include_free: None (all), 'true' (free only), 'false' (non-free only)
+    """
     headers = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -265,7 +268,7 @@ async def fetch_openrouter_models(
         resp.raise_for_status()
         models = resp.json().get("data", [])
 
-        if include_free:
+        if include_free == "true":
 
             def _is_free(m):
                 try:
@@ -274,7 +277,7 @@ async def fetch_openrouter_models(
                     return False
 
             models = [m for m in models if _is_free(m)]
-        else:
+        elif include_free == "false":
 
             def _is_not_free(m):
                 try:
