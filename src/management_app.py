@@ -489,8 +489,8 @@ def validate_config() -> tuple[bool, str]:
 def reload_litellm() -> dict:
     """Reload LiteLLM by restarting the process. Returns dict with status info."""
     pid_file = "/tmp/litellm.pid"
-    config_path = os.environ.get("CONFIG_PATH", "/app/config.yaml")
-    config_dir = os.environ.get("CONFIG_DIR", "/app")
+    config_path = CONFIG_PATH  # Use module-level correct config path
+    config_dir = CONFIG_DIR  # Use module-level correct config directory
 
     # Validate config before restarting
     is_valid, error = validate_config()

@@ -4,6 +4,7 @@ set -euo pipefail
 # Support CONFIG_DIR environment variable (default: /app)
 CONFIG_DIR="${CONFIG_DIR:-/app}"
 CONFIG_PATH="${CONFIG_DIR}/config.yaml"
+export CONFIG_PATH  # Make available to child processes
 BEDROCK_MODELS="${CONFIG_DIR}/bedrock_models.json"
 DB_PATH="${CONFIG_DIR}/models.db.json"
 PID_FILE="/tmp/litellm.pid"
