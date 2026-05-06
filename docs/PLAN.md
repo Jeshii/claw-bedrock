@@ -345,34 +345,18 @@ If issues are found:
 3. Rebuild and redeploy container
 
 
-# Task 2: Fix Management UI AWS Auth Link Bug
+# Task 2: Fix Management UI Entry Text Box Reload Bug
 
-## Root Cause Investigation
-- Inspect `token_refresher.py` to confirm `auth_url` is overwritten on new login attempts and cleared when processes end.
-- Check `management_app.py` for the `/api/auth/status` endpoint implementation and verify if the frontend polls this endpoint periodically to refresh the auth link.
-- Correlate the state mismatch error to a stale URL being displayed in the UI (not updated after login retry).
-
----
-
-## Proposed Fixes
-- **Add Frontend Polling**: If missing, add a 2-3 second poll to `/api/auth/status` in the UI to update the auth link when new login flows start.
-- **Reset Auth URL**: In `token_refresher.py`, clear `auth_url` before starting a new login process, only setting it when the new URL is captured from stdout.
-- **Validate URLs**: Add basic validation for captured auth URLs to ensure they include required parameters (`state`, `client_id`).
-
----
-
-## Testing
-- Verify UI link matches the stdout URL on new auth flow start.
-- Trigger auth retry, confirm UI updates to the new URL.
-- Use the UI link to complete authentication, validate success.
-
----
-
-## Pre-Commit Checks
-- Run `ruff check --fix`, `ruff format`, and `python -m py_compile` on modified files.
+When entering the verification code into the text box on the Authentication page of the Mananagement UI, the page reloads and clears the input before it can be submitted.
 
 # Task 3: Clean up logs page in Management UI
 
 - The Hide Logs link should be a button
 - The auto-refresh icon should be a clock or refresh icon, not a weird arc
 - Hide Logs link should say "Show Logs" when logs are hidden, and "Hide Logs" when logs are visible
+- Logs should be hidden by default, and only shown when the user clicks "Show Logs"
+- Remove the word "Debug" from the Token Refresher logs section
+
+## Task 4: Renaming model bug
+
+When renaming a model, pressing enter does not make the text box return to non-edit mode. Even clicking elsewhere on the page does not exit edit mode. The user has to wait 45 seconds for the LiteLLM reload to complete before the text box exits edit mode. This is a bad user experience and should be fixed so that pressing enter or clicking outside the text box immediately exits edit mode, and the reload happens in the background without blocking the UI. A visual indicator (like a spinner) can show that the reload is in progress, but the user should be able to continue using the UI while waiting for the reload to complete.
