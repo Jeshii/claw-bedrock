@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, RedirectResponse
 import yaml
 import json
 import os
@@ -12,6 +13,7 @@ import base64
 from typing import Optional, Dict
 import db
 import token_refresher
+import hashlib
 
 
 def base64url_decode(s: str) -> str:
@@ -39,6 +41,78 @@ def get_version():
             return f.read().strip()
     except FileNotFoundError:
         return "unknown"
+
+
+# Authentication
+MANAGEMENT_PASSWORD = os.environ.get("MANAGEMENT_UI_PASSWORD")
+AUTH_COOKIE = "management_auth"
+AUTH_TOKEN = (
+    hashlib.sha256(MANAGEMENT_PASSWORD.encode()).hexdigest()
+    if MANAGEMENT_PASSWORD
+    else None
+)
+
+
+def is_auth_required():
+    """Return True if password protection is enabled."""
+    return MANAGEMENT_PASSWORD is not None
+
+
+def verify_auth(request: Request) -> bool:
+    """Verify authentication from cookie."""
+    if not is_auth_required():
+        return True
+    token = request.cookies.get(AUTH_COOKIE)
+    return token == AUTH_TOKEN
+
+
+@app.post("/api/login")
+async def login(body: Dict):
+    """Login with password. Returns success or error."""
+    if not is_auth_required():
+        return {"success": True, "message": "Auth not required"}
+    password = body.get("password", "")
+    if hashlib.sha256(password.encode()).hexdigest() == AUTH_TOKEN:
+        response = RedirectResponse(url="/", status_code=302)
+        response.set_cookie(key=AUTH_COOKIE, value=AUTH_TOKEN, httponly=True, path="/")
+        return response
+    raise HTTPException(401, "Invalid password")
+
+
+@app.post("/api/logout")
+async def logout():
+    """Logout by clearing the auth cookie."""
+    response = {"success": True}
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie(key=AUTH_COOKIE, path="/")
+    return response
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Middleware to check authentication for all routes."""
+    # Skip auth for login page, login API, and static assets
+    path = request.url.path
+    if (
+        not is_auth_required()
+        or path in ["/login", "/api/login"]
+        or path.startswith("/static")
+    ):
+        return await call_next(request)
+    if not verify_auth(request):
+        if path.startswith("/api/"):
+            raise HTTPException(401, "Unauthorized")
+        return RedirectResponse(url="/login", status_code=302)
+    return await call_next(request)
+
+
+@app.get("/login")
+async def login_page(request: Request):
+    """Serve the login page."""
+    if not is_auth_required():
+        return RedirectResponse(url="/", status_code=302)
+    with open("templates/login.html", "r") as f:
+        return HTMLResponse(content=f.read())
 
 
 @app.on_event("startup")

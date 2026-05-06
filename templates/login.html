@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>claw-bedrock - Login</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height:100vh; margin:0; background: #f5f5f5; }
+        .login-box { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+        h1 { margin-top: 0; }
+        input { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; width: 200px; margin-bottom: 10px; }
+        button { padding: 8px 20px; font-size: 14px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .error { color: #dc3545; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>claw-bedrock</h1>
+        <p>Enter password to access the management UI.</p>
+        <input type="password" id="password" placeholder="Password" onkeydown="if(event.key==='Enter') login()" />
+        <br />
+        <button onclick="login()">Login</button>
+        <div class="error" id="error" style="display:none;"></div>
+    </div>
+    <script>
+        async function login() {
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error');
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: password})
+                });
+                if (res.ok) {
+                    window.location.href = '/';
+                } else {
+                    const data = await res.json();
+                    errorDiv.textContent = data.detail || 'Invalid password';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Error: ' + e.message;
+                errorDiv.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
