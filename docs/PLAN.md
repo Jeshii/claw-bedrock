@@ -247,3 +247,99 @@ python3 -c "from tinydb import TinyDB; db = TinyDB('/app/models.db.json'); print
 - When `reload_litellm()` is called, it starts a new process without ensuring the Python path includes CONFIG_DIR
 - The `token_refresher.BedrockTokenRefresher` callback in `litellm_settings` requires the module to be importable
 - If the import fails, LiteLLM may start but without the token refresher, or may fail to start entirely
+
+---
+
+## Testing Plan
+
+### Prerequisites
+- Container can be rebuilt and redeployed with the new changes
+- Access to the Management UI at http://localhost:8282
+- Ability to check container logs
+
+### Test 1: Verify PYTHONPATH Fix (Fix 1)
+
+**Goal:** Confirm `token_refresher` is importable after reload
+
+1. Build and start the updated container
+2. Check the LiteLLM log after container start:
+   ```bash
+   docker logs <container_name> | grep -A5 -B5 "token_refresher"
+   ```
+3. Via Management UI, click "Reload LiteLLM"
+4. Check the LiteLLM log for import errors:
+   ```bash
+   curl -s http://localhost:8282/api/logs?lines=100 | grep -i "import\|token_refresher\|error"
+   ```
+5. **Expected:** No import errors related to `token_refresher`
+
+### Test 2: Verify Config Write Verification (Fix 2)
+
+**Goal:** Confirm `config.yaml` is written and verified correctly
+
+1. Add a new model via the Management UI
+2. Check the Management UI logs for verification message:
+   ```bash
+   curl -s http://localhost:8282/api/logs?lines=50 | grep "merged and verified"
+   ```
+3. **Expected:** Log shows `"[Merge] Config merged and verified. Total models: N"` with correct count
+
+### Test 3: Verify Health Check Improvement (Fix 3)
+
+**Goal:** Confirm health check waits longer and logs debug info
+
+1. Trigger a reload from the Management UI
+2. Watch the logs during reload:
+   ```bash
+   curl -s http://localhost:8282/api/logs?lines=200 | grep "Health check"
+   ```
+3. **Expected:** If health check has issues, there should be a log entry at attempt 5
+
+### Test 4: Complete Flow - Rename Model
+
+**Goal:** Verify the full flow works without models becoming unavailable
+
+1. Add a model via the Management UI (note the model name, e.g., `bedrock/us.anthropic.claude-3`)
+2. Verify the model appears in the API:
+   ```bash
+   curl http://localhost:4000/v1/models -H "Authorization: Bearer test-key" | python3 -m json.tool
+   ```
+3. Rename the model via the UI (e.g., to `claude-3`)
+4. Check that `config.yaml` was updated:
+   ```bash
+   docker exec <container_name> cat /app/config.yaml | grep -A2 "model_name"
+   ```
+5. Click "Reload LiteLLM" in the UI
+6. Wait for the reload to complete (check the UI for success message)
+7. Verify the renamed model is accessible:
+   ```bash
+   curl http://localhost:4000/v1/chat/completions \
+     -H "Authorization: Bearer test-key" \
+     -H "Content-Type: application/json" \
+     -d '{"model": "claude-3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 10}'
+   ```
+8. **Expected:** The API call should succeed with the renamed model
+
+### Test 5: Multiple Reloads
+
+**Goal:** Ensure stability across multiple reloads
+
+1. After Test 4, click "Reload LiteLLM" again
+2. Verify models are still accessible
+3. Repeat 2-3 times
+4. **Expected:** Models remain available after each reload
+
+### Success Criteria
+
+- [ ] No import errors for `token_refresher` in LiteLLM logs
+- [ ] Config verification message appears in logs after merge
+- [ ] Health check logs appear (if there are issues)
+- [ ] Renamed models remain accessible after reload
+- [ ] Multiple consecutive reloads work without issues
+
+### Rollback Plan
+
+If issues are found:
+1. Check `git log develop` for commit `f8c16d0`
+2. Revert with: `git revert f8c16d0`
+3. Rebuild and redeploy container
