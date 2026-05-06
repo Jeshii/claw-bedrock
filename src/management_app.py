@@ -11,6 +11,7 @@ import time
 import subprocess
 import psutil
 import base64
+import threading
 from typing import Optional, Dict
 import db
 import token_refresher
@@ -122,6 +123,25 @@ async def startup_event():
     db._migrate_yaml_to_db()
     merge_configs()
     print(f"[Startup] Merged configs on startup (CONFIG_DIR={CONFIG_DIR})")
+    # Start watchdog in background thread
+    t = threading.Thread(target=litellm_watchdog, daemon=True)
+    t.start()
+    print("[Startup] LiteLLM watchdog started")
+
+
+def litellm_watchdog():
+    """Monitor LiteLLM process and restart if it crashes."""
+    pid_file = "/tmp/litellm.pid"
+    while True:
+        try:
+            if os.path.exists(pid_file):
+                pid = int(open(pid_file).read().strip())
+                if not psutil.pid_exists(pid):
+                    print(f"[Watchdog] LiteLLM (PID {pid}) crashed, restarting...")
+                    reload_litellm()
+        except Exception as e:
+            print(f"[Watchdog] Error: {e}", file=sys.stderr)
+        time.sleep(10)
 
 
 @app.on_event("shutdown")
