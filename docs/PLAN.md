@@ -370,3 +370,9 @@ If issues are found:
 
 ## Pre-Commit Checks
 - Run `ruff check --fix`, `ruff format`, and `python -m py_compile` on modified files.
+
+# Task 3: Clean up logs page in Management UI
+
+- The Hide Logs link should be a button
+- The auto-refresh icon should be a clock or refresh icon, not a weird arc
+- Hide Logs link should say "Show Logs" when logs are hidden, and "Hide Logs" when logs are visible
