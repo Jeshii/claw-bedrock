@@ -5,7 +5,6 @@ import time
 import threading
 import traceback
 import boto3
-import botocore.exceptions
 from aws_bedrock_token_generator import BedrockTokenGenerator
 from litellm.integrations.custom_logger import CustomLogger
 
@@ -115,20 +114,6 @@ class BedrockTokenRefresher(CustomLogger):
         result = sys.stdin.isatty()
         _debug(f"_is_interactive() -> {result}")
         return result
-
-    def _profile_exists(self, profile_name):
-        """Check if the given AWS profile exists in the AWS configuration."""
-        try:
-            result = subprocess.run(
-                ["aws", "configure", "list-profiles"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            profiles = [p.strip() for p in result.stdout.splitlines() if p.strip()]
-            return profile_name in profiles
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            return False
 
     def _capture_auth_url_from_process(self, proc: subprocess.Popen):
         """Read stdout from aws login --remote in a background thread.
@@ -335,85 +320,28 @@ class BedrockTokenRefresher(CustomLogger):
         _debug(
             f"_get_valid_session() called. profile={self._profile}, region={self._region}"
         )
+
+        self._ensure_login()
+        if self._needs_login:
+            return None
+        # Login completed synchronously (interactive mode) — rebuild session
         try:
             session = boto3.Session(
                 profile_name=self._profile, region_name=self._region
             )
-        except botocore.exceptions.ProfileNotFound:
-            _debug(f"AWS profile '{self._profile}' not found")
-            print(
-                f"[TokenRefresher] AWS profile '{self._profile}' not found in AWS configuration. "
-                "Please check your AWS config or set the correct profile via AWS_PROFILE environment variable.",
-                file=sys.stderr,
-            )
-            self._needs_login = True
-            return None
-        except Exception as e:
-            _debug(f"Error creating AWS session: {e}")
-            print(f"[TokenRefresher] Error creating AWS session: {e}", file=sys.stderr)
-            self._ensure_login()
-            return None
-
-        try:
             credentials = session.get_credentials()
         except Exception as e:
             print(
-                f"[TokenRefresher] Could not get credentials for profile '{self._profile}': {e}",
+                f"[TokenRefresher] Failed to rebuild session after login: {e}",
                 file=sys.stderr,
             )
-            self._ensure_login()
             return None
-
         if credentials is None:
-            self._ensure_login()
-            if self._needs_login:
-                return None
-            # Login completed synchronously (interactive mode) — rebuild session
-            try:
-                session = boto3.Session(
-                    profile_name=self._profile, region_name=self._region
-                )
-                credentials = session.get_credentials()
-            except Exception as e:
-                print(
-                    f"[TokenRefresher] Failed to rebuild session after login: {e}",
-                    file=sys.stderr,
-                )
-                return None
-            if credentials is None:
-                print(
-                    "[TokenRefresher] Could not obtain credentials after login.",
-                    file=sys.stderr,
-                )
-                return None
-            return session
-
-        # Attempt to resolve credentials to catch expired tokens early
-        try:
-            credentials.get_frozen_credentials()
-        except Exception:
-            self._ensure_login()
-            if self._needs_login:
-                return None
-            try:
-                session = boto3.Session(
-                    profile_name=self._profile, region_name=self._region
-                )
-                credentials = session.get_credentials()
-                if credentials is None:
-                    print(
-                        "[TokenRefresher] Could not obtain credentials after login.",
-                        file=sys.stderr,
-                    )
-                    return None
-                credentials.get_frozen_credentials()
-            except Exception as e:
-                print(
-                    f"[TokenRefresher] Credentials still invalid after login: {e}",
-                    file=sys.stderr,
-                )
-                return None
-
+            print(
+                "[TokenRefresher] Could not obtain credentials after login.",
+                file=sys.stderr,
+            )
+            return None
         return session
 
     def _refresh(self):

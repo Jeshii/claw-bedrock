@@ -27,7 +27,9 @@ def base64url_decode(s: str) -> str:
 app = FastAPI(title="Claw Bedrock Management")
 templates = Jinja2Templates(directory="templates")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+app.mount(
+    "/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static"
+)
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
