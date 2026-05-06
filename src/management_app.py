@@ -26,15 +26,14 @@ def base64url_decode(s: str) -> str:
 
 app = FastAPI(title="Claw Bedrock Management")
 templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="src/static"), name="static")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
 LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
-VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
-BEDROCK_MODELS_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "bedrock_models.json"
-)
+VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
+BEDROCK_MODELS_PATH = os.path.join(BASE_DIR, "bedrock_models.json")
 
 
 def get_version():
@@ -114,7 +113,7 @@ async def login_page(request: Request):
     """Serve the login page."""
     if not is_auth_required():
         return RedirectResponse(url="/", status_code=302)
-    with open("templates/login.html", "r") as f:
+    with open(os.path.join(BASE_DIR, "templates", "login.html"), "r") as f:
         return HTMLResponse(content=f.read())
 
 
