@@ -360,3 +360,7 @@ When entering the verification code into the text box on the Authentication page
 ## Task 4: Renaming model bug
 
 When renaming a model, pressing enter does not make the text box return to non-edit mode. Even clicking elsewhere on the page does not exit edit mode. The user has to wait 45 seconds for the LiteLLM reload to complete before the text box exits edit mode. This is a bad user experience and should be fixed so that pressing enter or clicking outside the text box immediately exits edit mode, and the reload happens in the background without blocking the UI. A visual indicator (like a spinner) can show that the reload is in progress, but the user should be able to continue using the UI while waiting for the reload to complete.
+
+## Task 5: Make a Free Filter for OpenRouter models
+
+Add a check box that allows the user to filter for only free OpenRouter models.
