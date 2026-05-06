@@ -364,3 +364,15 @@ When renaming a model, pressing enter does not make the text box return to non-e
 ## Task 5: Make a Free Filter for OpenRouter models
 
 Add a check box that allows the user to filter for only free OpenRouter models.
+
+## Task 6: Add reasoning effort levels as a dropdown next to each model
+
+In passing API calls ot LiteLLM, we can add a `reasoning_effort` parameter that tells the system how much time/effort to put into reasoning for that call. This can be used to save costs on calls that don't need a lot of reasoning, while allowing more effort for calls that do. We can add a dropdown next to each model in the Management UI that allows the user to select the reasoning effort level for that model (e.g. Low, Medium, High). This selection would then be passed as a parameter in API calls that use that model.
+
+```
+response = litellm.completion(
+    model="o3-mini",
+    messages=[{"role": "user", "content": "..."}],
+    reasoning_effort="medium"  # "low", "medium", or "high"
+)
+```
