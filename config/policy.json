@@ -29,7 +29,9 @@
 			"Effect": "Allow",
 			"Action": [
 				"bedrock-mantle:ListModels",
-				"bedrock-mantle:GetModel"
+				"bedrock-mantle:GetModel",
+				"bedrock:ListFoundationModels",
+        		"bedrock:GetFoundationModel"
 			],
 			"Resource": "*"
 		},
