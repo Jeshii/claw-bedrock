@@ -123,7 +123,7 @@
 <body>
     <div class="sidebar">
         <div class="sidebar-header">
-            <h2>claw-bedrock</h2>
+            <h2>🦞claw-bedrock🪨</h2>
             <div class="version">v{{ version }}</div>
         </div>
         <ul class="nav">
@@ -591,6 +591,9 @@
                 const res = await fetch('/api/auth/status');
                 const data = await res.json();
                 const authDiv = document.getElementById('auth-status');
+                // Preserve input value if user is typing
+                const existingInput = document.getElementById('aws-code-input');
+                const preservedValue = existingInput && existingInput.value ? existingInput.value : '';
                 let html = '';
 
                 // Update dashboard banner regardless of which page is active
@@ -622,14 +625,14 @@
                     if (data.awaiting_code) {
                         html += '<p>After approving in your browser, paste the authorization code shown:</p>';
                         html += '<div class="auth-code-input-row">';
-                        html += '<input type="text" id="aws-code-input" class="auth-code-input" placeholder="Paste authorization code..." />';
-                        html += '<button class="submit-code-btn" onclick="submitAWSCode()">Submit Code</button>';
+                        html += '<input type="text" id="aws-code-input" class="auth-code-input" placeholder="Paste authorization code..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();submitAWSCode();}" />';
+                         html += '<button class="submit-code-btn" onclick="submitAWSCode()">Submit Code</button>';
                         html += '</div>';
                         html += '<p class="auth-note">The code is displayed on the AWS authorization page after you approve access.</p>';
                     } else if (data.auth_url) {
                         html += '<p>Awaiting authorization&hellip; (the code input will appear here once the login process is ready)</p>';
                     } else {
-                        html += '<p>Authorization code input will appear here once the login process starts.</p>';
+                        html += '<p>Awaiting authorization&hellip; </p>';
                     }
                     html += '</div></div>';
 
@@ -660,6 +663,11 @@
                     html += '<p>' + X_CIRCLE_SVG + ' Ollama not configured (set OLLAMA_API_BASE).</p>';
                 }
                 authDiv.innerHTML = html;
+                // Restore preserved input value if user was typing
+                if (preservedValue && data.awaiting_code) {
+                    const input = document.getElementById('aws-code-input');
+                    if (input) input.value = preservedValue;
+                }
             }
 
             function copyAuthCode(code) {
