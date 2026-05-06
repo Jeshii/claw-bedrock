@@ -782,28 +782,30 @@
                 input.value = oldName;
                 input.style.flex = '1';
                 input.onkeydown = (e) => {
-                    if (e.key === 'Enter') submitRename(oldName, input.value, element);
-                    if (e.key === 'Escape') cancelRename(oldName, element);
+                    if (e.key === 'Enter') submitRename(oldName, input.value, input);
+                    if (e.key === 'Escape') cancelRename(oldName, input);
                 };
-                input.onblur = () => cancelRename(oldName, element);
+                input.onblur = () => cancelRename(oldName, input);
                 element.parentNode.replaceChild(input, element);
                 input.focus();
                 input.select();
             }
 
-            function cancelRename(oldName, originalElement) {
-                const input = originalElement.parentNode ? originalElement.parentNode.querySelector('input') : null;
-                if (input) {
+            function cancelRename(oldName, inputElement) {
+                const parent = inputElement.parentNode;
+                if (parent) {
                     const span = document.createElement('span');
                     span.className = 'model-name';
                     span.textContent = oldName;
                     span.onclick = () => startRename(oldName, span);
-                    input.parentNode.replaceChild(span, input);
+                    parent.replaceChild(span, inputElement);
                 }
             }
 
-            async function submitRename(oldName, newName, originalElement) {
-                if (!newName || newName === oldName) { cancelRename(oldName, originalElement); return; }
+            async function submitRename(oldName, newName, inputElement) {
+                if (!newName || newName === oldName) { cancelRename(oldName, inputElement); return; }
+                // Exit edit mode immediately
+                cancelRename(oldName, inputElement);
                 try {
                     const encoded = base64urlEncode(oldName);
                     const res = await fetch(`/api/models/${encoded}`, {
@@ -815,15 +817,14 @@
                     const data = await res.json();
                     showToast('Model renamed successfully');
                     showReloadToast(data.reloaded, data.pid);
-                    loadModels();
+                    // Reload happens in background - don't wait for it
+                    setTimeout(loadModels, 2000);
                 } else {
                         const error = await res.json();
                         showToast(`Error: ${error.detail || 'Failed to rename model'}`, 'error');
-                        cancelRename(oldName, originalElement);
                     }
                 } catch (e) {
                     showToast(`Error: ${e.message}`, 'error');
-                    cancelRename(oldName, originalElement);
                 }
             }
 
