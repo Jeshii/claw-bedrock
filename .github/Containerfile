@@ -29,6 +29,7 @@ COPY src/management_app.py .
 COPY deploy/start_container.sh .
 COPY src/db.py .
 COPY templates ./templates
+COPY src/static ./static
 
 # Create empty local config template (users should mount their own directory for persistence)
 RUN echo '{"model_list": []}' > /app/config.local.yaml

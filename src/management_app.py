@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 import yaml
 import json
 import os
@@ -24,6 +25,7 @@ def base64url_decode(s: str) -> str:
 
 app = FastAPI(title="Claw Bedrock Management")
 templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
