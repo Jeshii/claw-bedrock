@@ -376,3 +376,7 @@ response = litellm.completion(
     reasoning_effort="medium"  # "low", "medium", or "high"
 )
 ```
+
+## Task 7: Remove or move the startup logs from Configured Models page to Logs page
+
+The View Startup Logs functionality shouldn't be a button on the Configured Models page, it should be part of the Logs page since it's just showing logs.
