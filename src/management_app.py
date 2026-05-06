@@ -465,7 +465,13 @@ def merge_configs():
             yaml.dump(
                 merged, f, default_flow_style=False, sort_keys=False, allow_unicode=True
             )
-        print(f"[Merge] Config merged. Total models: {len(merged['model_list'])}")
+
+        # Verify the file was written correctly
+        with open(CONFIG_PATH, "r") as f:
+            verify = yaml.safe_load(f)
+        print(
+            f"[Merge] Config merged and verified. Total models: {len(verify.get('model_list', []))}"
+        )
     except Exception as e:
         print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
 
@@ -551,12 +557,22 @@ def reload_litellm() -> dict:
             "0.0.0.0",
         ]
         print(f"[Reload] Starting LiteLLM: {' '.join(cmd)}")
+
+        # Add CONFIG_DIR to PYTHONPATH so token_refresher can be imported
+        env = os.environ.copy()
+        python_path = env.get("PYTHONPATH", "")
+        if config_dir not in python_path.split(":"):
+            env["PYTHONPATH"] = (
+                f"{config_dir}:{python_path}" if python_path else config_dir
+            )
+
         with open(log_path, "a") as log_file:
             process = subprocess.Popen(
                 cmd,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 cwd=config_dir,
+                env=env,
             )
         new_pid = process.pid
         with open(pid_file, "w") as f:
@@ -578,7 +594,7 @@ def reload_litellm() -> dict:
             }
 
         # Step 5: Health check
-        for _ in range(10):
+        for i in range(30):  # Increase retries from 10 to 30
             try:
                 resp = requests.get("http://localhost:4000/health", timeout=2)
                 if resp.status_code < 500:
@@ -588,8 +604,9 @@ def reload_litellm() -> dict:
                         "pid": new_pid,
                         "message": f"LiteLLM restarted (PID {new_pid})",
                     }
-            except Exception:
-                pass
+            except Exception as e:
+                if i == 5:  # Print error once for debugging
+                    print(f"[Reload] Health check attempt {i}: {e}")
             time.sleep(1)
 
         return {

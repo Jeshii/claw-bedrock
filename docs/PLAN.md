@@ -1,149 +1,249 @@
-# Implementation Plan
+# Troubleshooting Plan: Models Unavailable After Rename/Reload
 
-## Task 1: Context Display
+## Problem Statement
+Renaming a model (or reloading LiteLLM) causes models to become unavailable. This document outlines the investigation steps and proposed fixes.
 
-Show context window size (max tokens) for each model in the management UI.
+## Suspected Root Causes
 
-### Bedrock Model Data
+After examining the codebase, I've identified these potential issues:
 
-Fetched from AWS Bedrock model cards (https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) on 2026-05-05. Full table:
-
-| Model | Context window | Max output |
-|---|---|---|
-| deepseek.v3.2 | 164K (167936) | 8K |
-| deepseek.v3.1 | 128K | 8K |
-| moonshotai.kimi-k2.5 | 256K | 16K |
-| moonshotai.kimi-k2-thinking | 256K | 16K |
-| mistral.ministral-3-3b-instruct | 128K | 8K |
-| mistral.ministral-3-8b-instruct | 128K | 8K |
-| mistral.ministral-3-14b-instruct | 128K | 8K |
-| mistral.magistral-small-2509 | 128K | 40K |
-| mistral.mistral-large-3-675b-instruct | 256K | 32K |
-| mistral.devstral-2-123b | 256K | 32K |
-| nvidia.nemotron-nano-3-30b | 256K | 8K |
-| nvidia.nemotron-nano-9b-v2 | 128K | 8K |
-| nvidia.nemotron-nano-12b-v2 | 128K | 8K |
-| qwen.qwen3-235b-a22b-2507 | 128K | 8K |
-| qwen.qwen3-next-80b-a3b-instruct | 256K | 8K |
-| qwen.qwen3-coder-480b-a35b-instruct | 128K | 16K |
-| qwen.qwen3-coder-30b-a3b-instruct | 128K | 16K |
-| qwen.qwen3-coder-next | 256K | 16K |
-| qwen.qwen3-32b | 128K | 8K |
-| openai.gpt-oss-20b | 128K | 16K |
-| openai.gpt-oss-120b | 128K | 16K |
-| google.gemma-3-4b-it | 128K | 8K |
-| google.gemma-3-12b-it | 128K | 8K |
-| google.gemma-3-27b-it | 128K | 8K |
-| zai.glm-4.7 | 203K (207872) | 4K |
-| zai.glm-4.7-flash | 203K (207872) | 4K |
-| minimax.minimax-m2 | 1M (1048576) | 8K |
-| minimax.minimax-m2.1 | 196K (200704) | 8K |
-
-Note: Previous `max_tokens` values in bedrock_models.json were incorrect (all set to 32768). Updated to match actual AWS documentation.
-
-### Changes
-
-1. **`management_app.py`**:
-   - **OpenRouter**: Extract `context_length` from API response. The OpenRouter `/v1/models` response includes `architecture.context_length` or `top_provider.context_length` per model. Include it in the filtered response.
-   - **Ollama**: The `/api/tags` response doesn't include context length. Add a new endpoint `/api/providers/ollama/model-details?name=<name>` that calls `/api/show` and returns `details.context_length`. Also add `context_length` input when manually adding Ollama models.
-   - **Manual**: Add "Context Length" numeric input in add-model form.
-
-2. **`templates/management.html`**:
-   - In `loadModels()`: display context length next to model name (e.g., `— 128k ctx`)
-   - In add-model flow: show context length field for all providers (auto-populated for OpenRouter when model is selected)
-   - For manual entry: numeric input field
-   - Add `context_length` to the model item display
+1. **Python Path Issue on Reload** - When `reload_litellm()` starts a new process, `token_refresher.py` may not be in the Python path
+2. **Config File Path Mismatch** - CONFIG_PATH vs CONFIG_DIR inconsistency
+3. **Model Rename Only Updates Display Name** - `db.rename_model()` only updates `model_name` field
+4. **Health Check Timing** - Health check may timeout too quickly or not properly detect failure
 
 ---
 
-## Task 2: Fix Reload Issue
+## Investigation Steps
 
-When LiteLLM is reloaded (via add/delete/rename model or manual reload), the API becomes unreachable.
+### Step 1: Check LiteLLM Logs After Reload
 
-### Changes
+```bash
+# View the LiteLLM log to see if it fails to start
+cat /app/litellm.log | tail -100
 
-1. **`management_app.py`**:
-   - Add `validate_config()` — parse generated YAML with `yaml.safe_load()` before restarting
-   - Improve `reload_litellm()`:
-     - After SIGTERM, use `process.wait(timeout=5)` to ensure old process is gone, fall back to SIGKILL
-     - After starting new process, verify it's still running after 2s with `psutil.Process(pid).is_running()`
-     - Add post-startup health check: try `GET http://localhost:4000/health` for up to 10s
-     - Log the full startup command and PID
-   - Add `/api/health/litellm` endpoint that proxies to LiteLLM's health check
-   - Update all callers (add/delete/rename model) to return more detailed reload status
+# Or via API
+curl http://localhost:8282/api/logs?lines=100
+```
 
-2. **`templates/management.html`**:
-   - Show richer reload status: "LiteLLM restarted (PID 1234)" or "LiteLLM failed to start — check logs"
-   - Add "View Startup Log" button that fetches last 20 lines of litellm.log after reload
+Look for import errors related to `token_refresher`.
+
+### Step 2: Verify token_refresher Import Path
+
+```bash
+# Check if token_refresher.py is in CONFIG_DIR
+ls -la /app/token_refresher.py
+
+# Check Python path when LiteLLM restarts
+echo $PYTHONPATH
+```
+
+The `start_container.sh` copies `token_refresher.py` to CONFIG_DIR, but the Python path may not include this directory when LiteLLM restarts via `reload_litellm()`.
+
+### Step 3: Validate Generated config.yaml
+
+```bash
+# Check if config.yaml is valid and has correct structure
+cat /app/config.yaml
+
+# Validate YAML syntax
+python3 -c "import yaml; yaml.safe_load(open('/app/config.yaml'))"
+
+# Check model count
+python3 -c "import yaml; c=yaml.safe_load(open('/app/config.yaml')); print(f'Models: {len(c.get(\"model_list\", []))}')"
+```
+
+### Step 4: Test Model Rename Database Update
+
+Check if rename actually updates the database correctly:
+
+```python
+# The db.rename_model() function (db.py:59-64) only updates 'model_name' field
+# Verify the model structure in TinyDB
+python3 -c "from db import *; print(get_all_models())"
+```
+
+### Step 5: Check if LiteLLM Process is Running
+
+```bash
+# Check if LiteLLM is running
+ps aux | grep litellm
+curl http://localhost:4000/health
+```
 
 ---
 
-## Task 3: Auto-refresh Option for Logs
+## Proposed Fixes
 
-### Changes
+### Fix 1: Add CONFIG_DIR to Python Path in reload_litellm()
 
-1. **`templates/management.html`**:
-   - Add "Auto-refresh" toggle button next to each "Refresh Logs" button (LiteLLM + Debug Logs sections)
-   - Add interval dropdown: 2s, 5s, 10s (default 5s)
-   - When toggled on, use `setInterval` to call `loadLogs()` / `loadDebugLogs()` periodically
-   - Persist toggle state + interval in `localStorage`
-   - Clear intervals when navigating away from Logs page, restore on return
-   - Visual indicator: toggle button gets green background when active
+**File:** `src/management_app.py`
 
-## Task 4: Add timestamps to logs
+In the `reload_litellm()` function, modify the subprocess call to include the config directory in the Python path:
 
-Add timestamps to each log line in both LiteLLM and debug logs for better troubleshooting.
+```python
+def reload_litellm() -> dict:
+    """Reload LiteLLM by restarting the process. Returns dict with status info."""
+    pid_file = "/tmp/litellm.pid"
+    config_path = os.environ.get("CONFIG_PATH", "/app/config.yaml")
+    config_dir = os.environ.get("CONFIG_DIR", "/app")
 
-## Task 5: Clean up messy looking python errors in the management UI and replace with user-friendly messages
+    # ... existing code ...
 
-```
-Traceback (most recent call last):
-  File "/usr/local/lib/python3.12/site-packages/litellm/proxy/proxy_server.py", line 5785, in async_data_generator
-    async for chunk in proxy_logging_obj.async_post_call_streaming_iterator_hook(
-  File "/usr/local/lib/python3.12/site-packages/litellm/proxy/utils.py", line 2235, in async_post_call_streaming_iterator_hook
-    async for chunk in current_response:
-  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
-    async for item in response:
-  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
-    async for item in response:
-  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
-    async for item in response:
-  File "/usr/local/lib/python3.12/site-packages/litellm/proxy/hooks/responses_id_security.py", line 286, in async_post_call_streaming_iterator_hook
-    async for chunk in response:
-  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
-    async for item in response:
-  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
-    async for item in response:
-  File "/usr/local/lib/python3.12/site-packages/litellm/integrations/custom_logger.py", line 470, in async_post_call_streaming_iterator_hook
-    async for item in response:
-  [Previous line repeated 2 more times]
-  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 1793, in __anext__
-    return await self._async_generator.__anext__()
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 1878, in stream_with_fallbacks
-    raise fallback_error
-  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 1845, in stream_with_fallbacks
-    await self.async_function_with_fallbacks_common_utils(
-  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 5520, in async_function_with_fallbacks_common_utils
-    raise original_exception
-  File "/usr/local/lib/python3.12/site-packages/litellm/router.py", line 1798, in stream_with_fallbacks
-    async for item in model_response:
-  File "/usr/local/lib/python3.12/site-packages/litellm/litellm_core_utils/streaming_handler.py", line 2240, in __anext__
-    self._handle_stream_fallback_error(e)
-  File "/usr/local/lib/python3.12/site-packages/litellm/litellm_core_utils/streaming_handler.py", line 2308, in _handle_stream_fallback_error
-    raise MidStreamFallbackError(
-litellm.exceptions.MidStreamFallbackError: litellm.MidStreamFallbackError: litellm.RateLimitError: RateLimitError: OpenrouterException - Message: Provider returned error, Metadata: {'error_type': 'rate_limit_exceeded'}, User ID: . Received Model Group=openrouter/owl-alpha
-Available Model Group Fallbacks=None Original exception: RateLimitError: litellm.RateLimitError: RateLimitError: OpenrouterException - Message: Provider returned error, Metadata: {'error_type': 'rate_limit_exceeded'}, User ID: 
+    # Step 3: Start new LiteLLM process
+    try:
+        log_path = os.path.join(config_dir, "litellm.log")
+        cmd = [
+            "litellm",
+            "--config",
+            config_path,
+            "--port",
+            "4000",
+            "--host",
+            "0.0.0.0",
+        ]
+        print(f"[Reload] Starting LiteLLM: {' '.join(cmd)}")
+
+        # Add CONFIG_DIR to PYTHONPATH so token_refresher can be imported
+        env = os.environ.copy()
+        python_path = env.get("PYTHONPATH", "")
+        if config_dir not in python_path.split(":"):
+            env["PYTHONPATH"] = f"{config_dir}:{python_path}" if python_path else config_dir
+
+        with open(log_path, "a") as log_file:
+            process = subprocess.Popen(
+                cmd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=config_dir,
+                env=env,  # Add this to pass modified environment
+            )
+        new_pid = process.pid
+        with open(pid_file, "w") as f:
+            f.write(str(new_pid))
+        print(f"[Reload] LiteLLM started with PID {new_pid}")
+
+        # ... rest of function ...
 ```
 
-Should be replaced with something like:
+### Fix 2: Verify config.yaml is Written Correctly
 
-"OpenRouter rate limit exceeded for model owl-alpha. Please try again later or switch to a different model."
+**File:** `src/management_app.py`
 
-## Task 6: Collapse Log windows by default, with option to expand
+Add a verification step in `merge_configs()`:
 
-In the management UI, the LiteLLM Logs and Debug Logs sections can be quite long and overwhelming. By default, these sections should be collapsed with only the title and "Show Logs" button visible. When the user clicks "Show Logs", the section expands to show the log content and the button changes to "Hide Logs". This allows users to focus on the main management features without being distracted by long logs, while still providing easy access to logs when needed.
+```python
+def merge_configs():
+    """Merge TinyDB models and settings into config.yaml for LiteLLM."""
+    merged = db.get_models_for_litellm()
 
-## Task 7: Reorganize project structure
+    try:
+        with open(CONFIG_PATH, "w") as f:
+            yaml.dump(
+                merged, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+            )
 
-See `docs/FILE_STRUCTURE.md` for proposed new structure and file moves. Update all imports, Dockerfile paths, and documentation references accordingly.
+        # Verify the file was written correctly
+        with open(CONFIG_PATH, "r") as f:
+            verify = yaml.safe_load(f)
+        print(f"[Merge] Config merged and verified. Total models: {len(verify.get('model_list', []))}")
+    except Exception as e:
+        print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
+```
+
+### Fix 3: Improve Health Check in reload_litellm()
+
+**File:** `src/management_app.py`
+
+The health check might be timing out too quickly:
+
+```python
+# In reload_litellm(), improve the health check:
+# Step 5: Health check
+for i in range(30):  # Increase retries from 10 to 30
+    try:
+        resp = requests.get("http://localhost:4000/health", timeout=2)
+        if resp.status_code < 500:
+            print(f"[Reload] LiteLLM health check passed (PID {new_pid})")
+            return {
+                "success": True,
+                "pid": new_pid,
+                "message": f"LiteLLM restarted (PID {new_pid})",
+            }
+    except Exception as e:
+        if i == 5:  # Print error once
+            print(f"[Reload] Health check attempt {i}: {e}")
+    time.sleep(1)
+```
+
+### Fix 4: Ensure Model Rename Updates All Necessary Fields
+
+**File:** `src/db.py`
+
+The `rename_model()` function only updates `model_name`. If there are any cached references or if the model name is used elsewhere in the structure, they may not be updated:
+
+```python
+def rename_model(old_name, new_name):
+    """Rename a model. Returns True if renamed."""
+    # Get the full model to preserve all fields
+    model = models_table.get(where("model_name") == old_name)
+    if not model:
+        return False
+
+    # Update the model_name
+    result = models_table.update(
+        {"model_name": new_name}, where("model_name") == old_name
+    )
+    return len(result) > 0
+```
+
+---
+
+## Quick Diagnostic Commands
+
+Run these to gather more info:
+
+```bash
+# 1. Check if LiteLLM is running
+ps aux | grep litellm
+curl http://localhost:4000/health
+
+# 2. Check config.yaml validity and content
+python3 -c "import yaml; c=yaml.safe_load(open('/app/config.yaml')); print(f'Models: {len(c.get(\"model_list\", []))}'); import json; print(json.dumps(c, indent=2))"
+
+# 3. Check if token_refresher can be imported
+python3 -c "import sys; sys.path.insert(0, '/app'); from token_refresher import BedrockTokenRefresher; print('Import OK')"
+
+# 4. View recent LiteLLM logs
+tail -50 /app/litellm.log
+
+# 5. Check TinyDB content
+python3 -c "from tinydb import TinyDB; db = TinyDB('/app/models.db.json'); print(db.all())"
+
+# 6. Test the complete flow manually
+# Add a model, rename it, check config.yaml, then reload
+```
+
+---
+
+## Recommended Implementation Order
+
+1. **First:** Run the diagnostic commands to confirm the root cause
+2. **Implement Fix 1** (PYTHONPATH) - Most likely cause based on code review
+3. **Implement Fix 2** (config verification) - Adds safety check
+4. **Implement Fix 3** (health check) - Improves reliability
+5. **Test the complete flow:**
+   - Add a model via the UI
+   - Rename the model
+   - Verify config.yaml is updated
+   - Check if LiteLLM reloads successfully
+   - Verify the model is still accessible via API
+
+---
+
+## Additional Notes
+
+- The `start_container.sh` script copies `token_refresher.py` to CONFIG_DIR, but this only happens at container start
+- When `reload_litellm()` is called, it starts a new process without ensuring the Python path includes CONFIG_DIR
+- The `token_refresher.BedrockTokenRefresher` callback in `litellm_settings` requires the module to be importable
+- If the import fails, LiteLLM may start but without the token refresher, or may fail to start entirely
