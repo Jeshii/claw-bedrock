@@ -64,6 +64,12 @@ def rename_model(old_name, new_name):
     return len(result) > 0
 
 
+def update_model_field(model_name, updates: dict):
+    """Update fields on a model. Returns True if updated."""
+    result = models_table.update(updates, where("model_name") == model_name)
+    return len(result) > 0
+
+
 def get_model_by_name(model_name):
     """Get a specific model by name."""
     return models_table.get(where("model_name") == model_name)

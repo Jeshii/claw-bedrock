@@ -587,6 +587,28 @@ async def rename_model(encoded_old_name: str, update: Dict):
     }
 
 
+@app.patch("/api/models/{encoded_name:path}")
+async def update_model(encoded_name: str, update: Dict):
+    """Update fields on a model (e.g., reasoning_effort)."""
+    try:
+        model_name = base64url_decode(encoded_name)
+    except Exception:
+        raise HTTPException(400, "Invalid model name encoding")
+
+    # Allow updating specific fields
+    allowed_fields = {"reasoning_effort"}
+    updates = {k: v for k, v in update.items() if k in allowed_fields}
+    if not updates:
+        raise HTTPException(400, "No valid fields to update")
+
+    updated = db.update_model_field(model_name, updates)
+    if not updated:
+        raise HTTPException(404, f"Model {model_name} not found")
+
+    merge_configs()
+    return {"status": "success", "updated": updates}
+
+
 def merge_configs():
     """Merge TinyDB models and settings into config.yaml for LiteLLM."""
     merged = db.get_models_for_litellm()

@@ -752,13 +752,19 @@
                             ${models.map(m => {
                                 const ctx = m.litellm_params.context_length;
                                 const ctxStr = formatContextLength(ctx);
-                                return `
-                            <div class="model-item" data-model-name="${m.model_name}">
-                                <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'")}', this)">${m.model_name}</span>
-                                <span>: ${m.litellm_params.model}</span>
-                                ${ctxStr ? `<span style="color: #888; font-size: 12px; margin-left: 8px;">— ${ctxStr}</span>` : ''}
-                                <button class="delete-btn" onclick="deleteModel(this, '${m.model_name.replace(/'/g, "\\'")}')">Delete</button>
-                            </div>`}).join('')}
+                                 return `
+                             <div class="model-item" data-model-name="${m.model_name}">
+                                 <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'")}', this)">${m.model_name}</span>
+                                 <span>: ${m.litellm_params.model}</span>
+                                 ${ctxStr ? `<span style="color: #888; font-size: 12px; margin-left: 8px;">— ${ctxStr}</span>` : ''}
+                                 <select onchange="updateReasoningEffort('${m.model_name.replace(/'/g, "\\'")}', this)" style="margin-left: 12px; padding: 2px 4px; font-size: 12px;">
+                                     <option value="">Reasoning: default</option>
+                                     <option value="low" ${m.reasoning_effort === 'low' ? 'selected' : ''}>Low</option>
+                                     <option value="medium" ${m.reasoning_effort === 'medium' ? 'selected' : ''}>Medium</option>
+                                     <option value="high" ${m.reasoning_effort === 'high' ? 'selected' : ''}>High</option>
+                                 </select>
+                                 <button class="delete-btn" onclick="deleteModel(this, '${m.model_name.replace(/'/g, "\\'")}')">Delete</button>
+                             </div>`}).join('')}
                         </div>
                     </div>
                 `).join('');
@@ -822,6 +828,26 @@
                 } else {
                         const error = await res.json();
                         showToast(`Error: ${error.detail || 'Failed to rename model'}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            async function updateReasoningEffort(modelName, selectElement) {
+                const effort = selectElement.value || null;
+                try {
+                    const encoded = base64urlEncode(modelName);
+                    const res = await fetch(`/api/models/${encoded}`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({reasoning_effort: effort})
+                    });
+                    if (res.ok) {
+                        showToast(`Reasoning effort updated for ${modelName}`);
+                    } else {
+                        const error = await res.json();
+                        showToast(`Error: ${error.detail || 'Failed to update'}`, 'error');
                     }
                 } catch (e) {
                     showToast(`Error: ${e.message}`, 'error');
