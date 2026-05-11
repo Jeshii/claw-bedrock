@@ -907,5 +907,9 @@ async def dashboard(request: Request):
     return templates.TemplateResponse(
         request,
         "management.html",
-        context={"version": version, "use_prefix": use_prefix},
+        context={
+            "version": version,
+            "use_prefix": use_prefix,
+            "auth_required": is_auth_required(),
+        },
     )
