@@ -239,28 +239,9 @@ class BedrockTokenRefresher(CustomLogger):
         sets _needs_login, and surfaces it via /auth/status.
         The CLI handles the OAuth callback internally — no stdin input needed.
         """
-        _debug(
-            f"_ensure_login() called. is_interactive={self._is_interactive()}, profile={self._profile}"
-        )
-        print(
-            f"[TokenRefresher] AWS session expired or missing for profile '{self._profile}'. "
-            f"Starting aws login --remote for web-based authentication.",
-            file=sys.stderr,
-        )
-        self._needs_login = True
-
-        try:
-            with open(_TMP_AUTH_NEEDED, "w") as f:
-                f.write("1")
-            _debug(f"Wrote {_TMP_AUTH_NEEDED} file")
-        except Exception as e:
-            _debug(f"WARNING: Could not write auth_needed file: {e}")
-
         # Only start one login process at a time
         if self._login_process is not None and self._login_process.poll() is None:
-            print(
-                "[TokenRefresher] aws login already running, skipping duplicate launch."
-            )
+            _debug("aws login already running, skipping duplicate launch.")
             return
 
         # Cooldown: don't retry too soon after failure
@@ -274,6 +255,21 @@ class BedrockTokenRefresher(CustomLogger):
             # Cooldown expired, reset failure state
             self._login_failed_time = 0
             self._login_error = None
+
+        _debug(f"_ensure_login() launching login. profile={self._profile}")
+        print(
+            f"[TokenRefresher] AWS session expired or missing for profile '{self._profile}'. "
+            f"Starting aws login --remote for web-based authentication.",
+            file=sys.stderr,
+        )
+        self._needs_login = True
+
+        try:
+            with open(_TMP_AUTH_NEEDED, "w") as f:
+                f.write("1")
+            _debug(f"Wrote {_TMP_AUTH_NEEDED} file")
+        except Exception as e:
+            _debug(f"WARNING: Could not write auth_needed file: {e}")
 
         try:
             _debug(
@@ -321,10 +317,8 @@ class BedrockTokenRefresher(CustomLogger):
             f"_get_valid_session() called. profile={self._profile}, region={self._region}"
         )
 
-        self._ensure_login()
         if self._needs_login:
             return None
-        # Login completed synchronously (interactive mode) — rebuild session
         try:
             session = boto3.Session(
                 profile_name=self._profile, region_name=self._region
@@ -332,15 +326,13 @@ class BedrockTokenRefresher(CustomLogger):
             credentials = session.get_credentials()
         except Exception as e:
             print(
-                f"[TokenRefresher] Failed to rebuild session after login: {e}",
+                f"[TokenRefresher] Failed to create session: {e}",
                 file=sys.stderr,
             )
+            self._ensure_login()
             return None
         if credentials is None:
-            print(
-                "[TokenRefresher] Could not obtain credentials after login.",
-                file=sys.stderr,
-            )
+            self._ensure_login()
             return None
         return session
 

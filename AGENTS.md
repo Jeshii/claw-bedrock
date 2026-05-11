@@ -22,8 +22,8 @@
 - Skills are located in `skills/` and should be self-contained with their own dependencies if possible
 
 ## Project Map
-- `management_app.py` — Management UI (uvicorn on port 8282)
-- `token_refresher.py` — AWS SSO token refresh logic, imported at startup
+- `src/management_app.py` — Management UI (uvicorn on port 8282)
+- `src/token_refresher.py` — AWS SSO token refresh logic, imported at startup
 - Container starts LiteLLM on port 4000
 - Container start Management UI on port 8282
 - See docs/FILE_STRUCTURE.md for locations of files
