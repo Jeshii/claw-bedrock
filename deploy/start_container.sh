@@ -26,6 +26,9 @@ init_configs() {
 # Handle shutdown signals
 cleanup() {
     echo "Shutting down..."
+    if [[ -n "${MGMT_PID:-}" ]]; then
+        kill "${MGMT_PID}" 2>/dev/null || true
+    fi
     if [[ -f "${PID_FILE}" ]]; then
         LITELLM_PID=$(cat "${PID_FILE}")
         kill "${LITELLM_PID}" 2>/dev/null || true
@@ -38,6 +41,13 @@ trap cleanup SIGTERM SIGINT
 
 # Initialize configs
 init_configs
+
+# Start Management UI in background (so the web interface is available immediately)
+echo "Starting Management UI on port 8282..."
+export CONFIG_DIR="${CONFIG_DIR}"
+uvicorn management_app:app --host 0.0.0.0 --port 8282 &
+MGMT_PID=$!
+echo "Management UI started with PID ${MGMT_PID}"
 
 # Start LiteLLM proxy in background
 echo "Starting LiteLLM proxy on port 4000..."
@@ -59,7 +69,5 @@ for i in $(seq 1 60); do
     sleep 1
 done
 
-# Start Management UI (foreground)
-echo "Starting Management UI on port 8282..."
-export CONFIG_DIR="${CONFIG_DIR}"
-uvicorn management_app:app --host 0.0.0.0 --port 8282
+# Bring Management UI to foreground to keep the container alive
+wait ${MGMT_PID}
