@@ -41,6 +41,10 @@
         body.dark .theme-toggle { background: #333; color: #e0e0e0; border-color: #666; }
         .theme-toggle:hover { background: #f8f9fa; }
         body.dark .theme-toggle:hover { background: #444; }
+        .logout-btn { width: 100%; padding: 10px; cursor: pointer; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 14px; transition: all 0.2s; margin-top: 8px; color: #dc3545; }
+        body.dark .logout-btn { background: #333; color: #ff6b6b; border-color: #666; }
+        .logout-btn:hover { background: #dc3545; color: white; }
+        body.dark .logout-btn:hover { background: #842029; color: white; }
 
         .main { flex: 1; padding: 30px; max-width: 1200px; overflow-y: auto; }
         .page { display: none; }
@@ -143,6 +147,10 @@
         </ul>
         <div class="sidebar-footer">
             <button class="theme-toggle" onclick="toggleTheme()"></button>
+            <button class="logout-btn" onclick="logout()" title="Logout">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Logout
+            </button>
         </div>
     </div>
 
@@ -730,6 +738,15 @@
                 } catch (e) {
                     showToast(`Error: ${e.message}`, 'error');
                 }
+            }
+
+            async function logout() {
+                try {
+                    await fetch('/api/logout', { method: 'POST' });
+                } catch (e) {
+                    // ignore errors — just redirect
+                }
+                window.location.href = '/login';
             }
 
             async function retryLogin() {

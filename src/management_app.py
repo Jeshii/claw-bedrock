@@ -1,3 +1,4 @@
+from collections import defaultdict
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -56,6 +57,10 @@ AUTH_TOKEN = (
     else None
 )
 
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+LOGIN_RATE_LIMIT = 5
+LOGIN_RATE_WINDOW = 60
+
 
 def is_auth_required():
     """Return True if password protection is enabled."""
@@ -71,14 +76,28 @@ def verify_auth(request: Request) -> bool:
 
 
 @app.post("/api/login")
-async def login(body: Dict):
+async def login(request: Request, body: Dict):
     """Login with password. Returns success or error."""
     if not is_auth_required():
         return {"success": True, "message": "Auth not required"}
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    attempts = _login_attempts[client_ip]
+    attempts[:] = [t for t in attempts if now - t < LOGIN_RATE_WINDOW]
+    if len(attempts) >= LOGIN_RATE_LIMIT:
+        raise HTTPException(429, "Too many login attempts. Try again later.")
+    attempts.append(now)
     password = body.get("password", "")
     if hashlib.sha256(password.encode()).hexdigest() == AUTH_TOKEN:
         response = RedirectResponse(url="/", status_code=302)
-        response.set_cookie(key=AUTH_COOKIE, value=AUTH_TOKEN, httponly=True, path="/")
+        response.set_cookie(
+            key=AUTH_COOKIE,
+            value=AUTH_TOKEN,
+            httponly=True,
+            samesite="lax",
+            max_age=86400,
+            path="/",
+        )
         return response
     raise HTTPException(401, "Invalid password")
 

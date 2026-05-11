@@ -9,6 +9,7 @@ services:
       - "8282:8282"  # Management UI
     environment:
       - CONFIG_DIR=/app
+      - MANAGEMENT_PASSWORD=changeme
       # Add your API keys here
       # - OPENROUTER_API_KEY=your_key_here
       # - OPENAI_API_KEY=your_key_here

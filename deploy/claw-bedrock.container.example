@@ -20,6 +20,8 @@ Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 Environment=CONFIG_DIR=/config
 # Environment=OPENROUTER_API_KEY=your-key  # optional
 # Secret=openrouter_api_key,type=env,target=OPENROUTER_API_KEY # another way to set
+# Environment=MANAGEMENT_PASSWORD=changeme # optional, no login screen if missing
+# Secret=managment_password,type=env,target=MANAGEMENT_PASSWORD # the better way to set
 # Environment=OLLAMA_API_BASE=http://your-ollama-host:11434  # optional
 
 # IMPORTANT: ~/.aws must exist (run `aws configure` to create it)
