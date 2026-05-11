@@ -110,10 +110,8 @@ def set_router_settings(router_settings):
 
 def get_litellm_settings():
     """Get litellm_settings with token_refresher baked in."""
-    always_stream = get_setting("always_include_stream_usage", True)
     return {
         "callbacks": ["token_refresher.BedrockTokenRefresher"],
-        "always_include_stream_usage": always_stream,
     }
 
 

@@ -81,19 +81,34 @@
         input, select { padding: 8px; margin: 5px; width: 300px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
         body.dark input, body.dark select { background: #333; color: #e0e0e0; border-color: #666; }
 
-        .model-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px; }
-        body.dark .model-item { border-color: #444; }
-        body.dark pre { background: #2a2a2a !important; color: #e0e0e0; }
-        .model-name { cursor: pointer; flex: 1; }
-        .model-name:hover { text-decoration: underline; }
-        .delete-btn { padding: 2px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; }
-        body.dark .delete-btn { background: #842029; }
-        .model-item.deleting { background: #ffe6e6; }
-        body.dark .model-item.deleting { background: #3d1a1a; }
-        .confirm-btn { padding: 2px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; }
-        body.dark .confirm-btn { background: #842029; }
-        .confirm-btn:disabled { background: #999; cursor: not-allowed; opacity: 0.6; }
-        body.dark .confirm-btn:disabled { background: #555; }
+        .model-item { border-bottom: 1px solid #eee; }
+         body.dark .model-item { border-color: #444; }
+         body.dark pre { background: #2a2a2a !important; color: #e0e0e0; }
+         .model-row { padding: 10px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+         .model-row:hover { background: #f8f9fa; }
+         body.dark .model-row:hover { background: #2d2d2d; }
+         .model-chevron { flex-shrink: 0; color: #888; }
+         .model-row-name { flex: 1; font-weight: 500; }
+         .model-detail { display: none; padding: 0 10px 12px 30px; }
+         .model-detail.open { display: block; }
+         .model-detail-path { font-size: 13px; color: #666; margin-bottom: 8px; word-break: break-all; }
+         body.dark .model-detail-path { color: #999; }
+         .model-detail-actions { display: flex; align-items: center; gap: 8px; }
+         .model-detail-actions select { padding: 2px 4px; font-size: 12px; width: auto; margin: 0; }
+         .rename-btn, .delete-btn { padding: 2px 8px; font-size: 12px; border: none; border-radius: 3px; cursor: pointer; }
+         .rename-btn { background: #6c757d; color: white; }
+         body.dark .rename-btn { background: #555; }
+         .delete-btn { background: #dc3545; color: white; }
+         body.dark .delete-btn { background: #842029; }
+         .rename-btn.confirming { background: #28a745; }
+         body.dark .rename-btn.confirming { background: #1e7e34; }
+         .model-item.deleting { background: #ffe6e6; }
+         body.dark .model-item.deleting { background: #3d1a1a; }
+         .confirm-btn { padding: 2px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; }
+         body.dark .confirm-btn { background: #842029; }
+         .confirm-btn:disabled { background: #999; cursor: not-allowed; opacity: 0.6; }
+         body.dark .confirm-btn:disabled { background: #555; }
+         .model-row input.inline-rename { flex: 1; padding: 2px 6px; font-size: 14px; font-weight: 500; border: 1px solid #007bff; border-radius: 3px; }
 
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
         .toast { padding: 12px 20px; border-radius: 6px; color: white; font-size: 14px; animation: fadeIn 0.3s ease-in; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
@@ -219,10 +234,7 @@
                         <input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()" style="margin-top: 3px; flex-shrink: 0; width: 16px;">
                         <span>Add <code>claw-bedrock/</code> prefix to model names</span>
                     </label>
-                    <label style="display: flex; align-items: flex-start; gap: 6px; cursor: pointer;">
-                        <input type="checkbox" id="stream-usage-toggle" onchange="toggleStreamUsage()" style="margin-top: 3px; flex-shrink: 0; width: 16px;">
-                        <span>Include stream usage in router responses (always_include_stream_usage)</span>
-                    </label>
+
                 </div>
             </div>
         </div>
@@ -323,8 +335,9 @@
             <div class="section help-section">
                 <h2>Managing Models</h2>
                 <ul>
-                    <li>Click model name to rename</li>
-                    <li>Click Delete for confirmation flow (line turns red, wait 1s, then confirm)</li>
+                     <li>Click a model to expand details and manage it</li>
+                     <li>Rename makes the name editable; click Confirm to save</li>
+                     <li>Click Delete for confirmation flow (line turns red, wait 1s, then confirm)</li>
                     <li>Models auto-restart LiteLLM to pick up changes</li>
                 </ul>
             </div>
@@ -340,8 +353,6 @@
             const CLOSE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
             const FREE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/></svg>';
             const WARNING_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-
-            let ALWAYS_INCLUDE_STREAM_USAGE = true;
 
             // Auto-refresh state
             let autoRefreshIntervals = { logs: null, debug: null };
@@ -804,93 +815,134 @@
                 return `${ctx} ctx`;
             }
 
+            let expandedModel = null;
+
             async function loadModels() {
                 const res = await fetch('/api/models');
-                const settingsRes = await fetch('/api/settings');
-                const settingsData = await settingsRes.json();
-                ALWAYS_INCLUDE_STREAM_USAGE = settingsData.always_include_stream_usage !== false;
-
                 const data = await res.json();
                 const modelsDiv = document.getElementById('models-list');
                 if (data.models.length === 0) {
                     modelsDiv.innerHTML = '<p>No models configured yet.</p>';
                     return;
                 }
-                const groups = {};
-                data.models.forEach(m => {
-                    const provider = m.litellm_params.model.split('/')[0] || 'other';
-                    if (!groups[provider]) groups[provider] = [];
-                    groups[provider].push(m);
-                });
-                modelsDiv.innerHTML = Object.entries(groups).map(([provider, models]) => `
-                    <div class="provider-group" style="margin-bottom: 10px;">
-                            <h3 onclick="toggleGroup('${provider}')" style="cursor: pointer; user-select: none;">
-                                <span id="arrow-${provider}">` + CHEVRON_RIGHT_SVG + `</span> ${provider} (${models.length})
-                            </h3>
-                        <div id="group-${provider}" style="display: none; padding-left: 20px;">
-                            ${models.map(m => {
-                                const ctx = m.litellm_params.context_length;
-                                const ctxStr = formatContextLength(ctx);
-                                 return `
-                             <div class="model-item" data-model-name="${m.model_name}">
-                                 <span class="model-name" onclick="startRename('${m.model_name.replace(/'/g, "\\'")}', this)">${m.model_name}</span>
-                                 <span>: ${m.litellm_params.model}</span>
-                                 ${ctxStr ? `<span style="color: #888; font-size: 12px; margin-left: 8px;">— ${ctxStr}</span>` : ''}
-                                 <select onchange="updateReasoningEffort('${m.model_name.replace(/'/g, "\\'")}', this)" style="margin-left: 12px; padding: 2px 4px; font-size: 12px;">
-                                     <option value="">Reasoning: default</option>
-                                     <option value="low" ${m.reasoning_effort === 'low' ? 'selected' : ''}>Low</option>
-                                     <option value="medium" ${m.reasoning_effort === 'medium' ? 'selected' : ''}>Medium</option>
-                                     <option value="high" ${m.reasoning_effort === 'high' ? 'selected' : ''}>High</option>
-                                 </select>
-                                 <button class="delete-btn" onclick="deleteModel(this, '${m.model_name.replace(/'/g, "\\'")}')">Delete</button>
-                             </div>`}).join('')}
+                expandedModel = null;
+                modelsDiv.innerHTML = data.models.map(m => {
+                    const ctx = m.litellm_params.context_length;
+                    const ctxStr = formatContextLength(ctx);
+                    const escName = m.model_name.replace(/'/g, "\\'");
+                    return `
+                    <div class="model-item" data-model-name="${m.model_name}">
+                        <div class="model-row" onclick="toggleModel('${escName}')">
+                            <span class="model-chevron" id="chevron-${escName}">${CHEVRON_RIGHT_SVG}</span>
+                            <span class="model-row-name">${m.model_name}</span>
+                            ${ctxStr ? `<span style="color: #888; font-size: 12px;">${ctxStr}</span>` : ''}
                         </div>
-                    </div>
-                `).join('');
+                        <div class="model-detail" id="detail-${escName}">
+                            <div class="model-detail-path">${m.litellm_params.model}</div>
+                            <div class="model-detail-actions">
+                                <select onchange="updateReasoningEffort('${escName}', this)">
+                                    <option value="">Reasoning: default</option>
+                                    <option value="low" ${m.reasoning_effort === 'low' ? 'selected' : ''}>Low</option>
+                                    <option value="medium" ${m.reasoning_effort === 'medium' ? 'selected' : ''}>Medium</option>
+                                    <option value="high" ${m.reasoning_effort === 'high' ? 'selected' : ''}>High</option>
+                                </select>
+                                <button class="rename-btn" id="rename-btn-${escName}" onclick="startRename('${escName}')">Rename</button>
+                                <button class="delete-btn" onclick="deleteModel(this, '${escName}')">Delete</button>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
             }
 
-            function toggleGroup(provider) {
-                const group = document.getElementById(`group-${provider}`);
-                const arrow = document.getElementById(`arrow-${provider}`);
-                if (group.style.display === 'none') {
-                    group.style.display = 'block';
-                    arrow.innerHTML = CHEVRON_DOWN_SVG;
+            function toggleModel(modelName) {
+                if (expandedModel === modelName) {
+                    // Collapse
+                    document.getElementById(`detail-${modelName}`).classList.remove('open');
+                    document.getElementById(`chevron-${modelName}`).innerHTML = CHEVRON_RIGHT_SVG;
+                    expandedModel = null;
                 } else {
-                    group.style.display = 'none';
-                    arrow.innerHTML = CHEVRON_RIGHT_SVG;
+                    // Collapse previous
+                    if (expandedModel) {
+                        const prevDetail = document.getElementById(`detail-${expandedModel}`);
+                        const prevChevron = document.getElementById(`chevron-${expandedModel}`);
+                        if (prevDetail) prevDetail.classList.remove('open');
+                        if (prevChevron) prevChevron.innerHTML = CHEVRON_RIGHT_SVG;
+                    }
+                    // Expand new
+                    document.getElementById(`detail-${modelName}`).classList.add('open');
+                    document.getElementById(`chevron-${modelName}`).innerHTML = CHEVRON_DOWN_SVG;
+                    expandedModel = modelName;
                 }
             }
 
-            function startRename(oldName, element) {
+            function startRename(modelName) {
+                const btn = document.getElementById(`rename-btn-${modelName}`);
+                const row = btn.closest('.model-item').querySelector('.model-row-name');
+                if (btn.dataset.renaming === 'true') {
+                    // Confirm rename
+                    const input = btn.closest('.model-item').querySelector('.inline-rename');
+                    const newName = input.value.trim();
+                    if (newName && newName !== modelName) {
+                        submitRename(modelName, newName);
+                    } else {
+                        cancelRename(modelName);
+                    }
+                    return;
+                }
+                // Enter rename mode
+                btn.dataset.renaming = 'true';
+                btn.textContent = 'Confirm';
+                btn.classList.add('confirming');
                 const input = document.createElement('input');
                 input.type = 'text';
-                input.value = oldName;
-                input.style.flex = '1';
+                input.value = modelName;
+                input.className = 'inline-rename';
                 input.onkeydown = (e) => {
-                    if (e.key === 'Enter') submitRename(oldName, input.value, input);
-                    if (e.key === 'Escape') cancelRename(oldName, input);
+                    e.stopPropagation();
+                    if (e.key === 'Enter') startRename(modelName);
+                    if (e.key === 'Escape') cancelRename(modelName);
                 };
-                input.onblur = () => cancelRename(oldName, input);
-                element.parentNode.replaceChild(input, element);
+                row.replaceWith(input);
                 input.focus();
                 input.select();
             }
 
-            function cancelRename(oldName, inputElement) {
-                const parent = inputElement.parentNode;
-                if (parent) {
-                    const span = document.createElement('span');
-                    span.className = 'model-name';
-                    span.textContent = oldName;
-                    span.onclick = () => startRename(oldName, span);
-                    parent.replaceChild(span, inputElement);
+            function cancelRename(modelName) {
+                const btn = document.getElementById(`rename-btn-${modelName}`);
+                if (btn) {
+                    btn.dataset.renaming = 'false';
+                    btn.textContent = 'Rename';
+                    btn.classList.remove('confirming');
+                }
+                const item = document.querySelector(`.model-item[data-model-name="${modelName}"]`);
+                if (item) {
+                    const input = item.querySelector('.inline-rename');
+                    if (input) {
+                        const span = document.createElement('span');
+                        span.className = 'model-row-name';
+                        span.textContent = modelName;
+                        input.replaceWith(span);
+                    }
                 }
             }
 
-            async function submitRename(oldName, newName, inputElement) {
-                if (!newName || newName === oldName) { cancelRename(oldName, inputElement); return; }
-                // Exit edit mode immediately
-                cancelRename(oldName, inputElement);
+            async function submitRename(oldName, newName) {
+                const btn = document.getElementById(`rename-btn-${oldName}`);
+                if (btn) {
+                    btn.dataset.renaming = 'false';
+                    btn.textContent = 'Rename';
+                    btn.classList.remove('confirming');
+                }
+                const item = document.querySelector(`.model-item[data-model-name="${oldName}"]`);
+                if (item) {
+                    const input = item.querySelector('.inline-rename');
+                    if (input) {
+                        const span = document.createElement('span');
+                        span.className = 'model-row-name';
+                        span.textContent = oldName;
+                        input.replaceWith(span);
+                    }
+                }
                 const toast = showToast('Renaming model & restarting LiteLLM...', 'info', 0, true);
                 try {
                     const encoded = base64urlEncode(oldName);
@@ -899,13 +951,12 @@
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({model_name: newName})
                     });
-                if (res.ok) {
-                    const data = await res.json();
-                    showToast('Model renamed successfully');
-                    showReloadToast(toast, data.reloaded, data.pid);
-                    // Reload happens in background - don't wait for it
-                    setTimeout(loadModels, 2000);
-                } else {
+                    if (res.ok) {
+                        const data = await res.json();
+                        showToast('Model renamed successfully');
+                        showReloadToast(toast, data.reloaded, data.pid);
+                        setTimeout(loadModels, 2000);
+                    } else {
                         const error = await res.json();
                         updateToast(toast, `Error: ${error.detail || 'Failed to rename model'}`, 'error');
                         setTimeout(() => {
@@ -1424,32 +1475,13 @@
             async function togglePrefix() {
                 const toggle = document.getElementById('use-prefix-toggle');
                 const usePrefix = toggle.checked;
-                const res = await fetch(`/api/settings?use_prefix=${usePrefix}&always_include_stream_usage=${ALWAYS_INCLUDE_STREAM_USAGE}`, { method: 'POST' });
+                const res = await fetch(`/api/settings?use_prefix=${usePrefix}`, { method: 'POST' });
                 if (res.ok) {
                     window.USE_PREFIX = usePrefix;
                     showToast(`Model prefix ${usePrefix ? 'enabled' : 'disabled'}`);
                 } else {
                     showToast('Failed to update setting', 'error');
                     toggle.checked = !usePrefix;
-                }
-            }
-
-            // Initialize always_include_stream_usage toggle
-            const streamUsageToggle = document.getElementById('stream-usage-toggle');
-            if (streamUsageToggle) {
-                streamUsageToggle.checked = ALWAYS_INCLUDE_STREAM_USAGE;
-            }
-
-            async function toggleStreamUsage() {
-                const toggle = document.getElementById('stream-usage-toggle');
-                const alwaysIncludeStreamUsage = toggle.checked;
-                const res = await fetch(`/api/settings?use_prefix=${window.USE_PREFIX !== false}&always_include_stream_usage=${alwaysIncludeStreamUsage}`, { method: 'POST' });
-                if (res.ok) {
-                    ALWAYS_INCLUDE_STREAM_USAGE = alwaysIncludeStreamUsage;
-                    showToast(`Stream usage ${alwaysIncludeStreamUsage ? 'enabled' : 'disabled'}`);
-                } else {
-                    showToast('Failed to update setting', 'error');
-                    toggle.checked = !alwaysIncludeStreamUsage;
                 }
             }
 

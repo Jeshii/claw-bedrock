@@ -199,19 +199,15 @@ async def get_settings():
     config = load_local_config()
     return {
         "use_prefix": config.get("use_prefix", True),
-        "always_include_stream_usage": db.get_setting(
-            "always_include_stream_usage", True
-        ),
     }
 
 
 @app.post("/api/settings")
 async def update_settings(
-    use_prefix: bool = Query(...), always_include_stream_usage: bool = Query(...)
+    use_prefix: bool = Query(...),
 ):
     """Update settings."""
     db.set_setting("use_prefix", use_prefix)
-    db.set_setting("always_include_stream_usage", always_include_stream_usage)
 
     # Re-merge configs with new settings
     merge_configs()
@@ -219,7 +215,6 @@ async def update_settings(
     return {
         "success": True,
         "use_prefix": use_prefix,
-        "always_include_stream_usage": always_include_stream_usage,
     }
 
 
