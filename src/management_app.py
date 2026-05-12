@@ -334,8 +334,10 @@ async def get_token_refresher_state():
 
 
 @app.get("/api/models")
-async def list_models():
-    """List all configured models."""
+async def list_models(tag: Optional[str] = Query(None)):
+    """List all configured models, optionally filtered by tag."""
+    if tag:
+        return {"models": db.get_models_by_tag(tag)}
     return {"models": db.get_all_models()}
 
 
@@ -707,7 +709,7 @@ async def update_model(encoded_name: str, update: Dict):
         raise HTTPException(400, "Invalid model name encoding")
 
     # Allow updating specific fields
-    allowed_fields = {"reasoning_effort"}
+    allowed_fields = {"reasoning_effort", "tags"}
     updates = {k: v for k, v in update.items() if k in allowed_fields}
     if not updates:
         raise HTTPException(400, "No valid fields to update")
@@ -718,6 +720,108 @@ async def update_model(encoded_name: str, update: Dict):
 
     merge_configs()
     return {"status": "success", "updated": updates}
+
+
+TAG_PALETTE = [
+    "#4CAF50",
+    "#2196F3",
+    "#FF9800",
+    "#9C27B0",
+    "#F44336",
+    "#00BCD4",
+    "#8BC34A",
+    "#795548",
+    "#607D8B",
+    "#E91E63",
+    "#3F51B5",
+    "#009688",
+]
+
+
+@app.get("/api/tags")
+async def list_tags():
+    """List all tag definitions."""
+    return {"tags": db.get_all_tags()}
+
+
+@app.post("/api/tags")
+async def create_tag(body: Dict):
+    """Create a new tag. Color auto-assigned from palette if not provided."""
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "Tag name is required")
+    color = body.get("color")
+    if not color:
+        import random
+
+        color = random.choice(TAG_PALETTE)
+    db.upsert_tag(name, color)
+    return {"name": name, "color": color}
+
+
+@app.put("/api/tags/{tag_name:path}")
+async def rename_tag(tag_name: str, body: Dict):
+    """Rename a tag."""
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(400, "New tag name is required")
+    ok = db.rename_tag(tag_name, new_name)
+    if not ok:
+        raise HTTPException(404, f"Tag '{tag_name}' not found")
+    return {"old_name": tag_name, "new_name": new_name}
+
+
+@app.delete("/api/tags/{tag_name:path}")
+async def delete_tag(tag_name: str):
+    """Delete a tag and remove it from all models."""
+    db.delete_tag(tag_name)
+    return {"deleted": tag_name}
+
+
+@app.patch("/api/tags/{tag_name:path}")
+async def update_tag_color(tag_name: str, body: Dict):
+    """Update a tag's color."""
+    color = body.get("color")
+    if not color:
+        raise HTTPException(400, "Color is required")
+    tag = db.get_tag(tag_name)
+    if not tag:
+        raise HTTPException(404, f"Tag '{tag_name}' not found")
+    db.upsert_tag(tag_name, color)
+    return {"name": tag_name, "color": color}
+
+
+@app.post("/api/models/{encoded_name:path}/tags")
+async def add_model_tag(encoded_name: str, body: Dict):
+    """Add a tag to a model. Creates the tag if it doesn't exist."""
+    try:
+        model_name = base64url_decode(encoded_name)
+    except Exception:
+        raise HTTPException(400, "Invalid model name encoding")
+    tag_name = (body.get("tag_name") or "").strip()
+    if not tag_name:
+        raise HTTPException(400, "tag_name is required")
+    if not db.get_tag(tag_name):
+        import random
+
+        db.upsert_tag(tag_name, random.choice(TAG_PALETTE))
+    ok = db.add_tag_to_model(model_name, tag_name)
+    if not ok:
+        raise HTTPException(404, f"Model '{model_name}' not found")
+    return {"model": model_name, "tag": tag_name}
+
+
+@app.delete("/api/models/{encoded_name:path}/tags/{tag_name:path}")
+async def remove_model_tag(encoded_name: str, tag_name: str):
+    """Remove a tag from a model."""
+    try:
+        model_name = base64url_decode(encoded_name)
+    except Exception:
+        raise HTTPException(400, "Invalid model name encoding")
+    ok = db.remove_tag_from_model(model_name, tag_name)
+    if not ok:
+        raise HTTPException(404, f"Model '{model_name}' not found")
+    return {"model": model_name, "tag": tag_name}
 
 
 def merge_configs():

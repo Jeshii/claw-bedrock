@@ -110,6 +110,53 @@
          body.dark .confirm-btn:disabled { background: #555; }
          .model-row input.inline-rename { flex: 1; padding: 2px 6px; font-size: 14px; font-weight: 500; border: 1px solid #007bff; border-radius: 3px; }
 
+        /* Tag chips in model rows */
+        .tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; color: white; cursor: default; white-space: nowrap; }
+        .tag-chip .tag-remove { cursor: pointer; opacity: 0.7; font-size: 13px; line-height: 1; }
+        .tag-chip .tag-remove:hover { opacity: 1; }
+        .tag-chip[draggable="true"] { cursor: grab; }
+        .tag-chip[draggable="true"]:active { cursor: grabbing; }
+
+        /* Filter bar */
+        .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; align-items: center; }
+        .filter-chip { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; cursor: pointer; border: 2px solid transparent; color: white; opacity: 0.5; transition: opacity 0.15s, border-color 0.15s; }
+        .filter-chip.active { opacity: 1; border-color: rgba(0,0,0,0.3); }
+        body.dark .filter-chip.active { border-color: rgba(255,255,255,0.4); }
+        .filter-chip.filter-all { background: #6c757d; }
+
+        /* Tag input in model detail */
+        .model-tag-input-wrap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 0; }
+        .model-tag-input-wrap .tag-chip { cursor: default; }
+        .model-tag-input { border: none; outline: none; font-size: 12px; padding: 2px 4px; min-width: 80px; background: transparent; }
+        body.dark .model-tag-input { color: #e0e0e0; }
+        .tag-autocomplete { position: absolute; z-index: 100; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-height: 150px; overflow-y: auto; }
+        body.dark .tag-autocomplete { background: #333; border-color: #555; }
+        .tag-autocomplete-item { padding: 6px 10px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+        .tag-autocomplete-item:hover { background: #f0f0f0; }
+        body.dark .tag-autocomplete-item:hover { background: #444; }
+        .tag-autocomplete-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+        /* Tags page */
+        .tag-list { display: flex; flex-direction: column; gap: 6px; }
+        .tag-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid #eee; border-radius: 6px; }
+        body.dark .tag-row { border-color: #444; }
+        .tag-color-swatch { width: 20px; height: 20px; border-radius: 4px; flex-shrink: 0; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); }
+        .tag-row-name { flex: 1; font-weight: 500; font-size: 14px; }
+        .tag-row-name-input { flex: 1; font-size: 14px; font-weight: 500; border: 1px solid #007bff; border-radius: 3px; padding: 2px 6px; }
+        .tag-row-count { font-size: 12px; color: #888; min-width: 60px; text-align: right; }
+        .tag-row-actions { display: flex; gap: 4px; }
+        .tag-row-actions button { padding: 2px 8px; font-size: 12px; border: none; border-radius: 3px; cursor: pointer; }
+        .tag-delete-btn { background: #dc3545; color: white; }
+        body.dark .tag-delete-btn { background: #842029; }
+        .color-palette { display: flex; gap: 4px; padding: 4px; }
+        .color-palette-swatch { width: 18px; height: 18px; border-radius: 3px; cursor: pointer; border: 2px solid transparent; }
+        .color-palette-swatch:hover { border-color: #333; }
+        body.dark .color-palette-swatch:hover { border-color: #fff; }
+
+        /* Drag-over highlight */
+        .model-row.drag-over { background: #e3f2fd !important; }
+        body.dark .model-row.drag-over { background: #1a3a5c !important; }
+
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
         .toast { padding: 12px 20px; border-radius: 6px; color: white; font-size: 14px; animation: fadeIn 0.3s ease-in; min-width: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
         .toast-success { background: #28a745; }
@@ -171,6 +218,7 @@
             <li><a onclick="showPage('dashboard')" class="active">Dashboard</a></li>
             <li><a onclick="showPage('auth')">Authentication</a></li>
             <li><a onclick="showPage('models')">Models</a></li>
+            <li><a onclick="showPage('tags')">Tags</a></li>
             <li><a onclick="showPage('logs')">Logs</a></li>
             <li><a onclick="showPage('help')">Help</a></li>
         </ul>
@@ -212,6 +260,7 @@
             <h1>Models</h1>
             <div class="section">
                 <h2>Configured Models</h2>
+                <div class="filter-bar" id="model-filter-bar"></div>
                 <div id="models-list"></div>
                 <button onclick="showAddModel()">Add New Model</button>
                 <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Reload LiteLLM</button>
@@ -236,6 +285,24 @@
                     </label>
 
                 </div>
+            </div>
+        </div>
+
+        <!-- Tags Page -->
+        <div id="page-tags" class="page">
+            <h1>Tags</h1>
+            <div class="section">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                    <h2 style="margin:0;">Manage Tags</h2>
+                    <button onclick="showCreateTagInput()" id="create-tag-btn">Create Tag</button>
+                </div>
+                <div id="create-tag-row" style="display:none; margin-bottom:12px; gap:8px; align-items:center;">
+                    <input id="new-tag-name" placeholder="Tag name..." style="width:200px;" onkeydown="if(event.key==='Enter')createTagFromInput();" />
+                    <div class="color-palette" id="new-tag-palette"></div>
+                    <button onclick="createTagFromInput()" style="font-size:12px; padding:4px 10px;">Add</button>
+                    <button onclick="hideCreateTagInput()" style="font-size:12px; padding:4px 10px; background:#6c757d;color:white;border:none;border-radius:3px;cursor:pointer;">Cancel</button>
+                </div>
+                <div class="tag-list" id="tags-list"></div>
             </div>
         </div>
 
@@ -528,6 +595,7 @@
                 event.target.classList.add('active');
                 if (pageId === 'dashboard') loadDashboard();
                 if (pageId === 'models') loadModels();
+                if (pageId === 'tags') loadTagsPage();
                 if (pageId === 'logs') {
                     loadLogs();
                     loadDebugLogs();
@@ -817,9 +885,19 @@
 
             let expandedModel = null;
 
-            async function loadModels() {
-                const res = await fetch('/api/models');
-                const data = await res.json();
+            async function loadModels(filterTag) {
+                let url = '/api/models';
+                if (filterTag && filterTag !== 'all') {
+                    url += `?tag=${encodeURIComponent(filterTag)}`;
+                }
+                const [modelsRes, tagsRes] = await Promise.all([
+                    fetch(url),
+                    fetch('/api/tags'),
+                ]);
+                const data = await modelsRes.json();
+                const tagsData = await tagsRes.json();
+                window._allTags = tagsData.tags || [];
+                renderFilterBar(filterTag || 'all');
                 const modelsDiv = document.getElementById('models-list');
                 if (data.models.length === 0) {
                     modelsDiv.innerHTML = '<p>No models configured yet.</p>';
@@ -830,12 +908,19 @@
                     const ctx = m.litellm_params.context_length;
                     const ctxStr = formatContextLength(ctx);
                     const escName = m.model_name.replace(/'/g, "\\'");
+                    const tags = m.tags || [];
+                    const tagChips = tags.map(t => {
+                        const tagInfo = (window._allTags || []).find(x => x.name === t);
+                        const color = tagInfo ? tagInfo.color : '#6c757d';
+                        return `<span class="tag-chip" style="background:${color}" draggable="true" ondragstart="handleTagDragStart(event, '${t}')" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">${t}<span class="tag-remove" onclick="removeTagFromModel('${escName}', '${t}')">&times;</span></span>`;
+                    }).join('');
                     return `
                     <div class="model-item" data-model-name="${m.model_name}">
-                        <div class="model-row" onclick="toggleModel('${escName}')">
+                        <div class="model-row" onclick="toggleModel('${escName}')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleTagDrop(event, '${escName}')">
                             <span class="model-chevron" id="chevron-${escName}">${CHEVRON_RIGHT_SVG}</span>
                             <span class="model-row-name">${m.model_name}</span>
                             ${ctxStr ? `<span style="color: #888; font-size: 12px;">${ctxStr}</span>` : ''}
+                            ${tagChips}
                         </div>
                         <div class="model-detail" id="detail-${escName}">
                             <div class="model-detail-path">${m.litellm_params.model}</div>
@@ -846,6 +931,9 @@
                                     <option value="medium" ${m.reasoning_effort === 'medium' ? 'selected' : ''}>Medium</option>
                                     <option value="high" ${m.reasoning_effort === 'high' ? 'selected' : ''}>High</option>
                                 </select>
+                                <div class="model-tag-input-wrap" id="tag-input-wrap-${escName}" style="position:relative;">
+                                    <input class="model-tag-input" id="tag-input-${escName}" placeholder="Add tag..." autocomplete="off" onkeydown="handleTagInputKeydown(event, '${escName}')" oninput="handleTagInputChange('${escName}')" onblur="handleTagInputBlur('${escName}')" />
+                                </div>
                                 <button class="rename-btn" id="rename-btn-${escName}" onclick="startRename('${escName}')">Rename</button>
                                 <button class="delete-btn" onclick="deleteModel(this, '${escName}')">Delete</button>
                             </div>
@@ -1455,6 +1543,328 @@
                     showToast('Debug logs copied to clipboard');
                 } catch (err) {
                     showToast('Failed to copy debug logs', 'error');
+                }
+            }
+
+            // === TAG FUNCTIONS ===
+
+            const TAG_PALETTE = ['#4CAF50','#2196F3','#FF9800','#9C27B0','#F44336','#00BCD4','#8BC34A','#795548','#607D8B','#E91E63','#3F51B5','#009688'];
+
+            let activeFilter = 'all';
+
+            function renderFilterBar(active) {
+                activeFilter = active;
+                const bar = document.getElementById('model-filter-bar');
+                if (!bar) return;
+                let html = `<span class="filter-chip filter-all ${active === 'all' ? 'active' : ''}" onclick="setFilter('all')">All</span>`;
+                for (const tag of (window._allTags || [])) {
+                    const isActive = active === tag.name ? 'active' : '';
+                    html += `<span class="filter-chip ${isActive}" style="background:${tag.color}" onclick="setFilter('${tag.name}')">${tag.name}</span>`;
+                }
+                bar.innerHTML = html;
+            }
+
+            function setFilter(tag) {
+                loadModels(tag);
+            }
+
+            function handleTagDragStart(event, tagName) {
+                event.dataTransfer.setData('text/plain', tagName);
+                event.dataTransfer.effectAllowed = 'copy';
+            }
+
+            function handleDragOver(event) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+                event.currentTarget.classList.add('drag-over');
+            }
+
+            function handleDragLeave(event) {
+                event.currentTarget.classList.remove('drag-over');
+            }
+
+            function handleTagDrop(event, modelName) {
+                event.preventDefault();
+                event.currentTarget.classList.remove('drag-over');
+                const tagName = event.dataTransfer.getData('text/plain');
+                if (tagName) {
+                    addTagToModel(modelName, tagName);
+                }
+            }
+
+            async function addTagToModel(modelName, tagName) {
+                try {
+                    const encoded = base64urlEncode(modelName);
+                    const res = await fetch(`/api/models/${encoded}/tags`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({tag_name: tagName}),
+                    });
+                    if (res.ok) {
+                        showToast(`Tag "${tagName}" added to ${modelName}`);
+                        loadModels(activeFilter);
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail || 'Failed to add tag'}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            async function removeTagFromModel(modelName, tagName) {
+                try {
+                    const encoded = base64urlEncode(modelName);
+                    const res = await fetch(`/api/models/${encoded}/tags/${encodeURIComponent(tagName)}`, {
+                        method: 'DELETE',
+                    });
+                    if (res.ok) {
+                        loadModels(activeFilter);
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail || 'Failed to remove tag'}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            function handleTagInputKeydown(event, modelName) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const input = document.getElementById(`tag-input-${modelName}`);
+                    const val = input.value.trim();
+                    if (val) {
+                        addTagToModel(modelName, val);
+                        input.value = '';
+                    }
+                    hideTagAutocomplete(modelName);
+                } else if (event.key === 'Escape') {
+                    hideTagAutocomplete(modelName);
+                    document.getElementById(`tag-input-${modelName}`).blur();
+                }
+            }
+
+            function handleTagInputChange(modelName) {
+                const input = document.getElementById(`tag-input-${modelName}`);
+                const val = input.value.trim().toLowerCase();
+                if (!val) {
+                    hideTagAutocomplete(modelName);
+                    return;
+                }
+                const matches = (window._allTags || []).filter(t => t.name.toLowerCase().includes(val));
+                if (matches.length === 0) {
+                    hideTagAutocomplete(modelName);
+                    return;
+                }
+                const wrap = document.getElementById(`tag-input-wrap-${modelName}`);
+                let dd = document.getElementById(`tag-ac-${modelName}`);
+                if (!dd) {
+                    dd = document.createElement('div');
+                    dd.id = `tag-ac-${modelName}`;
+                    dd.className = 'tag-autocomplete';
+                    wrap.appendChild(dd);
+                }
+                dd.innerHTML = matches.map(t => `<div class="tag-autocomplete-item" onmousedown="event.preventDefault(); selectTagAutocomplete('${modelName}', '${t.name}')"><span class="tag-autocomplete-swatch" style="background:${t.color}"></span>${t.name}</div>`).join('');
+                dd.style.display = 'block';
+            }
+
+            function handleTagInputBlur(modelName) {
+                setTimeout(() => {
+                    hideTagAutocomplete(modelName);
+                    const input = document.getElementById(`tag-input-${modelName}`);
+                    const val = input.value.trim();
+                    if (val) {
+                        addTagToModel(modelName, val);
+                        input.value = '';
+                    }
+                }, 200);
+            }
+
+            function hideTagAutocomplete(modelName) {
+                const dd = document.getElementById(`tag-ac-${modelName}`);
+                if (dd) dd.remove();
+            }
+
+            function selectTagAutocomplete(modelName, tagName) {
+                hideTagAutocomplete(modelName);
+                addTagToModel(modelName, tagName);
+                const input = document.getElementById(`tag-input-${modelName}`);
+                input.value = '';
+            }
+
+            // === TAGS PAGE ===
+
+            async function loadTagsPage() {
+                const res = await fetch('/api/tags');
+                const data = await res.json();
+                window._allTags = data.tags || [];
+                const list = document.getElementById('tags-list');
+                if (window._allTags.length === 0) {
+                    list.innerHTML = '<p style="color:#888;">No tags yet. Create one above or add tags to models.</p>';
+                    return;
+                }
+                const modelsRes = await fetch('/api/models');
+                const modelsData = await modelsRes.json();
+                const allModels = modelsData.models || [];
+                list.innerHTML = window._allTags.map(t => {
+                    const count = allModels.filter(m => (m.tags || []).includes(t.name)).length;
+                    return `
+                    <div class="tag-row" data-tag="${t.name}">
+                        <span class="tag-color-swatch" style="background:${t.color}" onclick="showColorPalette('${t.name}', this)"></span>
+                        <span class="tag-row-name" id="tag-name-${t.name}" onclick="startTagRename('${t.name}')">${t.name}</span>
+                        <span class="tag-row-count">${count} model${count !== 1 ? 's' : ''}</span>
+                        <div class="tag-row-actions">
+                            <button class="tag-delete-btn" onclick="deleteTag('${t.name}')">Delete</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            function showCreateTagInput() {
+                document.getElementById('create-tag-row').style.display = 'flex';
+                document.getElementById('new-tag-name').focus();
+                renderNewTagPalette();
+            }
+
+            function hideCreateTagInput() {
+                document.getElementById('create-tag-row').style.display = 'none';
+                document.getElementById('new-tag-name').value = '';
+            }
+
+            function renderNewTagPalette() {
+                const palette = document.getElementById('new-tag-palette');
+                palette.innerHTML = TAG_PALETTE.map(c => `<span class="color-palette-swatch" style="background:${c}" onclick="selectNewTagColor('${c}')"></span>`).join('');
+            }
+
+            let _selectedNewTagColor = TAG_PALETTE[0];
+
+            function selectNewTagColor(color) {
+                _selectedNewTagColor = color;
+            }
+
+            async function createTagFromInput() {
+                const name = document.getElementById('new-tag-name').value.trim();
+                if (!name) return showToast('Tag name required', 'error');
+                try {
+                    const res = await fetch('/api/tags', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name, color: _selectedNewTagColor}),
+                    });
+                    if (res.ok) {
+                        hideCreateTagInput();
+                        showToast(`Tag "${name}" created`);
+                        loadTagsPage();
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            async function deleteTag(name) {
+                try {
+                    const res = await fetch(`/api/tags/${encodeURIComponent(name)}`, {method: 'DELETE'});
+                    if (res.ok) {
+                        showToast(`Tag "${name}" deleted`);
+                        loadTagsPage();
+                        loadModels(activeFilter);
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            function startTagRename(name) {
+                const span = document.getElementById(`tag-name-${name}`);
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = name;
+                input.className = 'tag-row-name-input';
+                input.onkeydown = (e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') submitTagRename(name, input.value.trim());
+                    if (e.key === 'Escape') loadTagsPage();
+                };
+                input.onblur = () => submitTagRename(name, input.value.trim());
+                span.replaceWith(input);
+                input.focus();
+                input.select();
+            }
+
+            async function submitTagRename(oldName, newName) {
+                if (!newName || newName === oldName) {
+                    loadTagsPage();
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/tags/${encodeURIComponent(oldName)}`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name: newName}),
+                    });
+                    if (res.ok) {
+                        showToast(`Tag renamed to "${newName}"`);
+                        loadTagsPage();
+                        loadModels(activeFilter);
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail}`, 'error');
+                        loadTagsPage();
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                    loadTagsPage();
+                }
+            }
+
+            function showColorPalette(tagName, swatchEl) {
+                const existing = swatchEl.nextElementSibling;
+                if (existing && existing.classList.contains('color-palette')) {
+                    existing.remove();
+                    return;
+                }
+                const palette = document.createElement('div');
+                palette.className = 'color-palette';
+                palette.style.position = 'absolute';
+                palette.style.zIndex = '100';
+                palette.innerHTML = TAG_PALETTE.map(c => `<span class="color-palette-swatch" style="background:${c}" onclick="updateTagColor('${tagName}', '${c}', this)"></span>`).join('');
+                swatchEl.style.position = 'relative';
+                swatchEl.parentNode.style.position = 'relative';
+                swatchEl.parentNode.insertBefore(palette, swatchEl.nextSibling);
+                setTimeout(() => {
+                    document.addEventListener('click', function handler(e) {
+                        if (!palette.contains(e.target) && e.target !== swatchEl) {
+                            palette.remove();
+                            document.removeEventListener('click', handler);
+                        }
+                    });
+                }, 0);
+            }
+
+            async function updateTagColor(tagName, color, swatch) {
+                try {
+                    const res = await fetch(`/api/tags/${encodeURIComponent(tagName)}`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({color}),
+                    });
+                    if (res.ok) {
+                        showToast(`Color updated`);
+                        loadTagsPage();
+                        loadModels(activeFilter);
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
                 }
             }
 

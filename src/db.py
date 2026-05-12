@@ -1,4 +1,4 @@
-from tinydb import TinyDB, where
+from tinydb import TinyDB, where, Query
 import os
 import yaml
 
@@ -10,6 +10,7 @@ LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 db = TinyDB(DB_PATH, indent=2, sort_keys=True)
 models_table = db.table("models")
 settings_table = db.table("settings")
+tags_table = db.table("tags")
 
 
 def _migrate_yaml_to_db():
@@ -133,6 +134,72 @@ def get_models_for_litellm():
     config["litellm_settings"] = get_litellm_settings()
 
     return config
+
+
+def get_all_tags():
+    """Get all tag definitions."""
+    return tags_table.all()
+
+
+def get_tag(name):
+    """Get a single tag definition by name."""
+    return tags_table.get(where("name") == name)
+
+
+def upsert_tag(name, color):
+    """Create or update a tag definition."""
+    tags_table.upsert({"name": name, "color": color}, where("name") == name)
+
+
+def delete_tag(name):
+    """Delete a tag definition and remove it from all models."""
+    tags_table.remove(where("name") == name)
+    q = Query()
+    for m in models_table.search(q.tags.any(name)):
+        tags = [t for t in m.get("tags", []) if t != name]
+        models_table.update({"tags": tags}, doc_ids=[m.doc_id])
+
+
+def add_tag_to_model(model_name, tag_name):
+    """Add a tag to a model's tag list. Returns True if updated."""
+    m = models_table.get(where("model_name") == model_name)
+    if not m:
+        return False
+    tags = m.get("tags", [])
+    if tag_name not in tags:
+        tags.append(tag_name)
+        models_table.update({"tags": tags}, where("model_name") == model_name)
+    return True
+
+
+def remove_tag_from_model(model_name, tag_name):
+    """Remove a tag from a model's tag list. Returns True if updated."""
+    m = models_table.get(where("model_name") == model_name)
+    if not m:
+        return False
+    tags = [t for t in m.get("tags", []) if t != tag_name]
+    models_table.update({"tags": tags}, where("model_name") == model_name)
+    return True
+
+
+def rename_tag(old_name, new_name):
+    """Rename a tag definition and update all models using it."""
+    tag = tags_table.get(where("name") == old_name)
+    if not tag:
+        return False
+    tags_table.remove(where("name") == old_name)
+    tags_table.insert({"name": new_name, "color": tag["color"]})
+    q = Query()
+    for m in models_table.search(q.tags.any(old_name)):
+        tags = [new_name if t == old_name else t for t in m.get("tags", [])]
+        models_table.update({"tags": tags}, doc_ids=[m.doc_id])
+    return True
+
+
+def get_models_by_tag(tag_name):
+    """Get all models that have a specific tag."""
+    q = Query()
+    return models_table.search(q.tags.any(tag_name))
 
 
 def close_db():
