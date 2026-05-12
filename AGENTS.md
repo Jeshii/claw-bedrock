@@ -19,6 +19,7 @@
 
 ## General Practices
 - Compact when you hit 80% of your context window
+- Mention your context window when it hits 25%, 50%, and 75%
 - Skills are located in `skills/` and should be self-contained with their own dependencies if possible
 
 ## Project Map

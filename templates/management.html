@@ -123,13 +123,24 @@
         .filter-chip.active { opacity: 1; border-color: rgba(0,0,0,0.3); }
         body.dark .filter-chip.active { border-color: rgba(255,255,255,0.4); }
         .filter-chip.filter-all { background: #6c757d; }
+        .sort-btn { margin-left: auto; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid #ddd; border-radius: 12px; background: white; color: #333; display: flex; align-items: center; gap: 4px; white-space: nowrap; transition: border-color 0.15s; }
+        .sort-btn:hover { border-color: #999; }
+        body.dark .sort-btn { background: #333; color: #e0e0e0; border-color: #666; }
+        body.dark .sort-btn:hover { border-color: #999; }
+        .sort-menu { position: absolute; z-index: 100; background: white; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); padding: 4px 0; min-width: 160px; }
+        body.dark .sort-menu { background: #333; border-color: #555; }
+        .sort-menu-item { padding: 6px 12px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .sort-menu-item:hover { background: #f0f0f0; }
+        body.dark .sort-menu-item:hover { background: #444; }
+        .sort-menu-item.active { font-weight: 600; color: #007bff; }
+        body.dark .sort-menu-item.active { color: #66b3ff; }
 
         /* Tag input in model detail */
         .model-tag-input-wrap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 0; }
         .model-tag-input-wrap .tag-chip { cursor: default; }
         .model-tag-input { border: none; outline: none; font-size: 12px; padding: 2px 4px; min-width: 80px; background: transparent; }
         body.dark .model-tag-input { color: #e0e0e0; }
-        .tag-autocomplete { position: absolute; z-index: 100; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-height: 150px; overflow-y: auto; }
+        .tag-autocomplete { position: absolute; z-index: 100; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-height: 150px; overflow-y: auto; bottom: 100%; left: 0; margin-bottom: 2px; }
         body.dark .tag-autocomplete { background: #333; border-color: #555; }
         .tag-autocomplete-item { padding: 6px 10px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; }
         .tag-autocomplete-item:hover { background: #f0f0f0; }
@@ -148,7 +159,7 @@
         .tag-row-actions button { padding: 2px 8px; font-size: 12px; border: none; border-radius: 3px; cursor: pointer; }
         .tag-delete-btn { background: #dc3545; color: white; }
         body.dark .tag-delete-btn { background: #842029; }
-        .color-palette { display: flex; gap: 4px; padding: 4px; }
+        .color-palette { display: flex; gap: 4px; padding: 4px; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
         .color-palette-swatch { width: 18px; height: 18px; border-radius: 3px; cursor: pointer; border: 2px solid transparent; }
         .color-palette-swatch:hover { border-color: #333; }
         body.dark .color-palette-swatch:hover { border-color: #fff; }
@@ -174,6 +185,7 @@
         .auth-step-num { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: #ffc107; color: #333; font-weight: bold; font-size: 13px; display: flex; align-items: center; justify-content: center; }
         .auth-step-body { flex: 1; }
         .auth-step-body p { margin-bottom: 6px; }
+        #auth-status > p { margin-bottom: 8px; }
         .auth-code-box { display: inline-flex; align-items: center; gap: 10px; background: #fff8e1; border: 2px solid #ffc107; border-radius: 6px; padding: 10px 16px; margin-top: 4px; }
         body.dark .auth-code-box { background: #2a2000; border-color: #ffc107; }
         .auth-code-value { font-family: monospace; font-size: 22px; font-weight: bold; letter-spacing: 3px; color: #333; }
@@ -260,7 +272,7 @@
             <h1>Models</h1>
             <div class="section">
                 <h2>Configured Models</h2>
-                <div class="filter-bar" id="model-filter-bar"></div>
+                <div class="filter-bar" id="model-filter-bar" style="position:relative;"></div>
                 <div id="models-list"></div>
                 <button onclick="showAddModel()">Add New Model</button>
                 <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Reload LiteLLM</button>
@@ -387,7 +399,6 @@
                 <h2>Client Integrations</h2>
                 <p><strong>opencode.ai:</strong> Set baseURL to <code id="opencode-url">detecting...</code> in <code>~/.config/opencode/opencode.json</code></p>
                 <p><strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</code></p>
-                <p>Model names use the <code>claw-bedrock/</code> prefix (e.g., <code>claw-bedrock/qwen3-235b</code>)</p>
             </div>
             <div class="section help-section">
                 <h2>Adding Models</h2>
@@ -406,6 +417,30 @@
                      <li>Rename makes the name editable; click Confirm to save</li>
                      <li>Click Delete for confirmation flow (line turns red, wait 1s, then confirm)</li>
                     <li>Models auto-restart LiteLLM to pick up changes</li>
+                </ul>
+            </div>
+            <div class="section help-section">
+                <h2>Login</h2>
+                <p>The management UI is password-protected. Set the <code>MANAGEMENT_UI_PASSWORD</code> environment variable to enable it.</p>
+                <ul>
+                    <li>Navigate to the management UI — you will be prompted to enter the password.</li>
+                    <li>After logging in, a session cookie is set that lasts 24 hours.</li>
+                    <li>Click <strong>Logout</strong> in the sidebar to end the session immediately.</li>
+                    <li>If <code>MANAGEMENT_UI_PASSWORD</code> is not set, no login is required.</li>
+                </ul>
+            </div>
+            <div class="section help-section">
+                <h2>Tags</h2>
+                <p>Tags let you label and filter models on the Models page. Create tags on the Tags page, then add them to models via the model detail panel.</p>
+                <ul>
+                    <li><strong>Create a tag:</strong> Go to the Tags page, click <strong>Create Tag</strong>, type a name, pick a color, and press Add or hit Enter.</li>
+                    <li><strong>Add a tag to a model:</strong> Click a model to expand it, then type in the <em>Add tag</em> input. Matching tags appear as you type — click one or press Enter to add it.</li>
+                    <li><strong>Drag and drop:</strong> Tag chips on model rows can be dragged onto other models to copy the tag.</li>
+                    <li><strong>Remove a tag:</strong> Click the <strong>&times;</strong> on a tag chip to remove it from that model.</li>
+                    <li><strong>Filter by tag:</strong> Click a tag in the filter bar above the model list to show only models with that tag.</li>
+                    <li><strong>Rename a tag:</strong> On the Tags page, click a tag name to make it editable.</li>
+                    <li><strong>Change tag color:</strong> Click the color swatch next to a tag to pick a new color.</li>
+                    <li><strong>Delete a tag:</strong> Click <strong>Delete</strong> on the Tags page to remove a tag entirely.</li>
                 </ul>
             </div>
         </div>
@@ -897,14 +932,21 @@
                 const data = await modelsRes.json();
                 const tagsData = await tagsRes.json();
                 window._allTags = tagsData.tags || [];
+                window._allModels = data.models;
                 renderFilterBar(filterTag || 'all');
+                renderModelList(data.models);
+            }
+
+            function renderModelList(models) {
+                window._renderedModels = models;
+                const sorted = sortModels(models, currentSort);
                 const modelsDiv = document.getElementById('models-list');
-                if (data.models.length === 0) {
+                if (sorted.length === 0) {
                     modelsDiv.innerHTML = '<p>No models configured yet.</p>';
                     return;
                 }
                 expandedModel = null;
-                modelsDiv.innerHTML = data.models.map(m => {
+                modelsDiv.innerHTML = sorted.map(m => {
                     const ctx = m.litellm_params.context_length;
                     const ctxStr = formatContextLength(ctx);
                     const escName = m.model_name.replace(/'/g, "\\'");
@@ -1147,7 +1189,11 @@
                 btn.onclick = () => deleteModel(btn, modelItem, modelName);
             }
 
-            function showAddModel() { document.getElementById('add-model-section').style.display = 'block'; }
+            function showAddModel() {
+                document.getElementById('add-model-section').style.display = 'block';
+                document.getElementById('provider-select').value = '';
+                document.getElementById('provider-ui').innerHTML = '';
+            }
 
             function closeAddModel() {
                 document.getElementById('add-model-section').style.display = 'none';
@@ -1552,6 +1598,70 @@
 
             let activeFilter = 'all';
 
+            let currentSort = 'default';
+
+            const SORT_LABELS = {
+                default: 'Default',
+                alpha: 'A-Z',
+                provider: 'Provider',
+                context: 'Context',
+                reasoning: 'Reasoning',
+            };
+
+            function sortModels(models, sortKey) {
+                const sorted = [...models];
+                switch (sortKey) {
+                    case 'alpha':
+                        sorted.sort((a, b) => a.model_name.localeCompare(b.model_name));
+                        break;
+                    case 'provider':
+                        sorted.sort((a, b) => {
+                            const pa = (a.litellm_params?.model || '').split('/')[0];
+                            const pb = (b.litellm_params?.model || '').split('/')[0];
+                            return pa.localeCompare(pb) || a.model_name.localeCompare(b.model_name);
+                        });
+                        break;
+                    case 'context':
+                        sorted.sort((a, b) => (b.litellm_params?.context_length || 0) - (a.litellm_params?.context_length || 0));
+                        break;
+                    case 'reasoning': {
+                        const order = { low: 1, medium: 2, high: 3 };
+                        sorted.sort((a, b) => (order[b.reasoning_effort] || 0) - (order[a.reasoning_effort] || 0));
+                        break;
+                    }
+                }
+                return sorted;
+            }
+
+            function toggleSortMenu() {
+                const bar = document.getElementById('model-filter-bar');
+                let menu = document.getElementById('sort-menu');
+                if (menu) { menu.remove(); return; }
+                menu = document.createElement('div');
+                menu.id = 'sort-menu';
+                menu.className = 'sort-menu';
+                menu.innerHTML = Object.entries(SORT_LABELS).map(([key, label]) =>
+                    `<div class="sort-menu-item ${currentSort === key ? 'active' : ''}" onclick="applySort('${key}')">${currentSort === key ? '✓ ' : ''}${label}</div>`
+                ).join('');
+                bar.appendChild(menu);
+                setTimeout(() => {
+                    document.addEventListener('click', function handler(e) {
+                        if (!menu.contains(e.target) && e.target !== bar.querySelector('.sort-btn')) {
+                            menu.remove();
+                            document.removeEventListener('click', handler);
+                        }
+                    });
+                }, 0);
+            }
+
+            function applySort(key) {
+                currentSort = key;
+                document.getElementById('sort-menu')?.remove();
+                const btn = document.getElementById('sort-btn');
+                if (btn) btn.innerHTML = `Sort: ${SORT_LABELS[key]} ▾`;
+                renderModelList(window._renderedModels || []);
+            }
+
             function renderFilterBar(active) {
                 activeFilter = active;
                 const bar = document.getElementById('model-filter-bar');
@@ -1561,6 +1671,7 @@
                     const isActive = active === tag.name ? 'active' : '';
                     html += `<span class="filter-chip ${isActive}" style="background:${tag.color}" onclick="setFilter('${tag.name}')">${tag.name}</span>`;
                 }
+                html += `<span class="sort-btn" id="sort-btn" onclick="event.stopPropagation(); toggleSortMenu()">Sort: ${SORT_LABELS[currentSort]} ▾</span>`;
                 bar.innerHTML = html;
             }
 
@@ -1834,6 +1945,9 @@
                 palette.className = 'color-palette';
                 palette.style.position = 'absolute';
                 palette.style.zIndex = '100';
+                palette.style.bottom = '100%';
+                palette.style.left = '0';
+                palette.style.marginBottom = '2px';
                 palette.innerHTML = TAG_PALETTE.map(c => `<span class="color-palette-swatch" style="background:${c}" onclick="updateTagColor('${tagName}', '${c}', this)"></span>`).join('');
                 swatchEl.style.position = 'relative';
                 swatchEl.parentNode.style.position = 'relative';
