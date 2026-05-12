@@ -1637,6 +1637,7 @@
                 const bar = document.getElementById('model-filter-bar');
                 let menu = document.getElementById('sort-menu');
                 if (menu) { menu.remove(); return; }
+                const btn = bar.querySelector('.sort-btn');
                 menu = document.createElement('div');
                 menu.id = 'sort-menu';
                 menu.className = 'sort-menu';
@@ -1644,6 +1645,8 @@
                     `<div class="sort-menu-item ${currentSort === key ? 'active' : ''}" onclick="applySort('${key}')">${currentSort === key ? '✓ ' : ''}${label}</div>`
                 ).join('');
                 bar.appendChild(menu);
+                menu.style.top = (bar.offsetTop + btn.offsetTop + btn.offsetHeight + 2) + 'px';
+                menu.style.left = (bar.offsetLeft + btn.offsetLeft) + 'px';
                 setTimeout(() => {
                     document.addEventListener('click', function handler(e) {
                         if (!menu.contains(e.target) && e.target !== bar.querySelector('.sort-btn')) {

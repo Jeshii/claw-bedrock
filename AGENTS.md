@@ -25,6 +25,7 @@
 ## Project Map
 - `src/management_app.py` — Management UI (uvicorn on port 8282)
 - `src/token_refresher.py` — AWS SSO token refresh logic, imported at startup
+- `templates/management.html` - HTML template for the management UI
 - Container starts LiteLLM on port 4000
 - Container start Management UI on port 8282
-- See docs/FILE_STRUCTURE.md for locations of files
+- See docs/FILE_STRUCTURE.md for locations of other files
