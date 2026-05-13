@@ -109,6 +109,12 @@ class BedrockTokenRefresher(CustomLogger):
                 file=sys.stderr,
             )
         self._register_auth_endpoint()
+        if self._needs_login and (
+            self._login_process is None or self._login_process.poll() is not None
+        ):
+            _debug(
+                "No login process running — waiting for user to initiate via web UI."
+            )
 
     def _is_interactive(self) -> bool:
         result = sys.stdin.isatty()
@@ -329,10 +335,20 @@ class BedrockTokenRefresher(CustomLogger):
                 f"[TokenRefresher] Failed to create session: {e}",
                 file=sys.stderr,
             )
-            self._ensure_login()
+            self._needs_login = True
+            try:
+                with open(_TMP_AUTH_NEEDED, "w") as f:
+                    f.write("1")
+            except Exception:
+                pass
             return None
         if credentials is None:
-            self._ensure_login()
+            self._needs_login = True
+            try:
+                with open(_TMP_AUTH_NEEDED, "w") as f:
+                    f.write("1")
+            except Exception:
+                pass
             return None
         return session
 
@@ -344,7 +360,6 @@ class BedrockTokenRefresher(CustomLogger):
         )
         if session is None:
             _debug(f"_refresh(): session is None, _needs_login={self._needs_login}")
-            # Start the login process if we're in non-interactive mode
             if self._needs_login:
                 try:
                     with open(_TMP_AUTH_NEEDED, "w") as f:
@@ -354,15 +369,6 @@ class BedrockTokenRefresher(CustomLogger):
                     )
                 except Exception as e:
                     _debug(f"Failed to write auth_needed: {e}")
-                # Actually start the aws login process to get the auth URL
-                if (
-                    self._login_process is None
-                    or self._login_process.poll() is not None
-                ):
-                    _debug(
-                        "_refresh(): calling _ensure_login() to start aws login process"
-                    )
-                    self._ensure_login()
             return  # login required — server stays up, /auth/status will surface the URL
         try:
             credentials = session.get_credentials()

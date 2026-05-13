@@ -765,8 +765,10 @@
                  let html = '';
                   if (data.auth_error) {
                       html += `<div class="banner-error" style="color: #dc3545; font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
+                      html += '<div style="margin-top:8px;"><button class="submit-code-btn" onclick="showPage2(\'auth\')">Retry Login</button></div>';
                   } else if (!data.auth_url) {
-                      html += '<div class="banner-url">Waiting for AWS login URL&hellip;</div>';
+                      html += '<div class="banner-url">AWS authentication required.</div>';
+                      html += '<div style="margin-top:8px;"><button class="submit-code-btn" onclick="showPage2(\'auth\')">Start Login Flow</button></div>';
                   }
                   bannerBody.innerHTML = html;
             }
@@ -826,9 +828,10 @@
                     html += '<div class="auth-step-body"><p>This page will refresh automatically once authentication completes.</p></div>';
                     html += '</div>';
 
-                    // Retry button: show if there's an error or no auth URL
+                    // Action button: show if the login flow hasn't started or there's an error
                     if (data.auth_error || !data.auth_url) {
-                        html += '<div style="margin-top: 12px;"><button class="submit-code-btn" onclick="retryLogin()">Retry Login</button></div>';
+                        const btnLabel = data.auth_error ? 'Retry Login' : 'Start Login Flow';
+                        html += `<div style="margin-top: 12px;"><button class="submit-code-btn" onclick="retryLogin()">${btnLabel}</button></div>`;
                     }
 
                     html += '</div></div>'; // .auth-steps + .auth-needed
