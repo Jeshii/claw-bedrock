@@ -765,11 +765,10 @@
                  let html = '';
                   if (data.auth_error) {
                       html += `<div class="banner-error" style="color: #dc3545; font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
-                      html += '<div style="margin-top:8px;"><button class="submit-code-btn" onclick="showPage2(\'auth\')">Retry Login</button></div>';
-                  } else if (!data.auth_url) {
-                      html += '<div class="banner-url">AWS authentication required.</div>';
-                      html += '<div style="margin-top:8px;"><button class="submit-code-btn" onclick="showPage2(\'auth\')">Start Login Flow</button></div>';
-                  }
+                       html += '<div style="margin-top:8px;"><button class="submit-code-btn" onclick="showPage2(\'auth\');retryLogin(true);">Retry Login</button></div>';
+                   } else if (!data.auth_url) {
+                       html += '<div class="banner-url">AWS authentication required &mdash; go to the Authentication page to start the login flow.</div>';
+                   }
                   bannerBody.innerHTML = html;
             }
 
@@ -830,8 +829,9 @@
 
                     // Action button: show if the login flow hasn't started or there's an error
                     if (data.auth_error || !data.auth_url) {
-                        const btnLabel = data.auth_error ? 'Retry Login' : 'Start Login Flow';
-                        html += `<div style="margin-top: 12px;"><button class="submit-code-btn" onclick="retryLogin()">${btnLabel}</button></div>`;
+                        const isRetry = !!data.auth_error;
+                        const btnLabel = isRetry ? 'Retry Login' : 'Start Login Flow';
+                        html += `<div style="margin-top: 12px;"><button class="submit-code-btn" onclick="retryLogin(${isRetry})">${btnLabel}</button></div>`;
                     }
 
                     html += '</div></div>'; // .auth-steps + .auth-needed
@@ -900,14 +900,14 @@
                 window.location.href = '/login';
             }
 
-            async function retryLogin() {
+            async function retryLogin(isRetry) {
                 try {
                     const res = await fetch('/api/auth/retry', { method: 'POST' });
                     if (res.ok) {
-                        showToast('Login retry initiated');
+                        showToast(isRetry ? 'Login retry initiated' : 'Starting login flow');
                         setTimeout(loadAuth, 1000);
                     } else {
-                        showToast('Failed to retry login', 'error');
+                        showToast('Failed to start login', 'error');
                     }
                 } catch (e) {
                     showToast(`Error: ${e.message}`, 'error');
