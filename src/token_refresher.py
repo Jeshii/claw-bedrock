@@ -89,32 +89,9 @@ class BedrockTokenRefresher(CustomLogger):
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
         self._profile = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
-        # Wrap startup refresh so a login/credential failure never crashes LiteLLM
-        try:
-            self._refresh()
-        except Exception as e:
-            _debug(f"WARNING: Initial token refresh failed ({e})")
-            # Set needs_login flag and write auth_needed file on failure
-            if not self._is_interactive():
-                self._needs_login = True
-                try:
-                    with open(_TMP_AUTH_NEEDED, "w") as f:
-                        f.write("1")
-                    _debug(f"Wrote {_TMP_AUTH_NEEDED} from __init__ failure path")
-                except Exception as e2:
-                    _debug(f"Failed to write auth_needed: {e2}")
-            print(
-                f"[TokenRefresher] WARNING: Initial token refresh failed ({e}). "
-                "Server will start without Bedrock credentials — authenticate via the web UI.",
-                file=sys.stderr,
-            )
+        # Attempt startup refresh — if it fails, wait for user to initiate login via web UI
+        self._refresh()
         self._register_auth_endpoint()
-        if self._needs_login and (
-            self._login_process is None or self._login_process.poll() is not None
-        ):
-            _debug(
-                "No login process running — waiting for user to initiate via web UI."
-            )
 
     def _is_interactive(self) -> bool:
         result = sys.stdin.isatty()
@@ -316,13 +293,9 @@ class BedrockTokenRefresher(CustomLogger):
         self._ensure_login()
 
     def _get_valid_session(self) -> boto3.Session | None:
-        """Return a boto3 Session with valid credentials, triggering login if needed.
-        Returns None if login is required and the server should continue without credentials.
+        """Return a boto3 Session with valid credentials.
+        Returns None if login is required — server stays up, user authenticates via web UI.
         """
-        _debug(
-            f"_get_valid_session() called. profile={self._profile}, region={self._region}"
-        )
-
         if self._needs_login:
             return None
         try:
@@ -331,26 +304,25 @@ class BedrockTokenRefresher(CustomLogger):
             )
             credentials = session.get_credentials()
         except Exception as e:
-            print(
-                f"[TokenRefresher] Failed to create session: {e}",
-                file=sys.stderr,
-            )
+            _debug(f"Session creation failed: {e}")
             self._needs_login = True
-            try:
-                with open(_TMP_AUTH_NEEDED, "w") as f:
-                    f.write("1")
-            except Exception:
-                pass
+            self._write_auth_needed_flag()
             return None
         if credentials is None:
+            _debug("No credentials found — login required")
             self._needs_login = True
-            try:
-                with open(_TMP_AUTH_NEEDED, "w") as f:
-                    f.write("1")
-            except Exception:
-                pass
+            self._write_auth_needed_flag()
             return None
         return session
+
+    def _write_auth_needed_flag(self):
+        """Write the auth_needed flag file if it doesn't already exist."""
+        try:
+            if not os.path.exists(_TMP_AUTH_NEEDED):
+                with open(_TMP_AUTH_NEEDED, "w") as f:
+                    f.write("1")
+        except Exception as e:
+            _debug(f"Failed to write auth_needed: {e}")
 
     def _refresh(self):
         _debug(f"_refresh() called. _needs_login={self._needs_login}")
@@ -359,16 +331,6 @@ class BedrockTokenRefresher(CustomLogger):
             f"_refresh(): _get_valid_session returned {type(session).__name__ if session else None}"
         )
         if session is None:
-            _debug(f"_refresh(): session is None, _needs_login={self._needs_login}")
-            if self._needs_login:
-                try:
-                    with open(_TMP_AUTH_NEEDED, "w") as f:
-                        f.write("1")
-                    _debug(
-                        f"Wrote {_TMP_AUTH_NEEDED} from _refresh (session=None path)"
-                    )
-                except Exception as e:
-                    _debug(f"Failed to write auth_needed: {e}")
             return  # login required — server stays up, /auth/status will surface the URL
         try:
             credentials = session.get_credentials()
@@ -392,15 +354,9 @@ class BedrockTokenRefresher(CustomLogger):
         except Exception as e:
             _debug(f"Token generation failed: {e}")
             print(f"[TokenRefresher] Token generation failed: {e}", file=sys.stderr)
-            # Set needs_login flag and write auth_needed file so UI knows auth is required
             if not self._is_interactive():
                 self._needs_login = True
-                try:
-                    with open(_TMP_AUTH_NEEDED, "w") as f:
-                        f.write("1")
-                    _debug(f"Wrote {_TMP_AUTH_NEEDED} from _refresh failure path")
-                except Exception as e2:
-                    _debug(f"Failed to write auth_needed: {e2}")
+                self._write_auth_needed_flag()
         # Don't re-raise — server stays up, will retry on next request
 
     def get_auth_error(self) -> str | None:
