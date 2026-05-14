@@ -767,7 +767,7 @@
                       html += `<div class="banner-error" style="color: #dc3545; font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
                        html += '<div style="margin-top:8px;"><button class="submit-code-btn" onclick="showPage2(\'auth\');retryLogin(true);">Retry Login</button></div>';
                    } else if (!data.auth_url) {
-                       html += '<div class="banner-url">AWS authentication required &mdash; go to the Authentication page to start the login flow.</div>';
+                       html += '<div class="banner-url">Bedrock models require AWS authentication &mdash; go to the Authentication page to start the login flow.</div>';
                    }
                   bannerBody.innerHTML = html;
             }
@@ -836,7 +836,7 @@
 
                     html += '</div></div>'; // .auth-steps + .auth-needed
                 } else {
-                    html += '<p>' + CHECK_SVG + ' AWS authentication configured.</p>';
+                    html += '<p>' + CHECK_SVG + ' Bedrock model access configured.</p>';
                 }
 
                 if (data.openrouter.configured) {
