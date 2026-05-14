@@ -1480,9 +1480,53 @@
                         }
                     } else {
                         document.getElementById('ollama-context-info').textContent = 'Could not fetch model details';
+                        setTimeout(() => {
+                            const el = document.getElementById('ollama-context-info');
+                            if (el && el.textContent === 'Could not fetch model details') el.textContent = '';
+                        }, 5000);
                     }
                 } catch (e) {
                     document.getElementById('ollama-context-info').textContent = 'Error fetching model details';
+                    setTimeout(() => {
+                        const el = document.getElementById('ollama-context-info');
+                        if (el && el.textContent === 'Error fetching model details') el.textContent = '';
+                    }, 5000);
+                }
+            }
+
+            async function fetchOllamaModels() {
+                const host = document.getElementById('ollama-host').value;
+                const select = document.getElementById('ollama-model-select');
+                select.innerHTML = '<option value="">Loading...</option>';
+                select.style.display = 'block';
+                try {
+                    const url = `/api/providers/ollama/models${host ? `?api_base=${encodeURIComponent(host)}` : ''}`;
+                    const res = await fetch(url);
+                    if (res.ok) {
+                        const data = await res.json();
+                        const models = data.models || [];
+                        if (models.length === 0) {
+                            select.innerHTML = '<option value="">No models found</option>';
+                        } else {
+                            select.innerHTML = '<option value="">-- Select a model --</option>' +
+                                models.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+                        }
+                    } else {
+                        const err = await res.json();
+                        select.innerHTML = `<option value="">Error: ${err.detail || 'Failed to fetch'}</option>`;
+                        setTimeout(() => { select.style.display = 'none'; }, 5000);
+                    }
+                } catch (e) {
+                    select.innerHTML = `<option value="">Error: ${e.message}</option>`;
+                    setTimeout(() => { select.style.display = 'none'; }, 5000);
+                }
+            }
+
+            function onOllamaSelect() {
+                const select = document.getElementById('ollama-model-select');
+                const nameInput = document.getElementById('ollama-name');
+                if (select.value) {
+                    nameInput.value = select.value;
                 }
             }
 
@@ -1512,13 +1556,17 @@
                 } else if (provider === 'ollama') {
                     ui.innerHTML = `
                         <h3>Add Ollama Model</h3>
-                        <input id="ollama-name" placeholder="e.g., qwen2.5:14b" style="width: 400px;" onblur="fetchOllamaContextLength()" />
+                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                            <input id="ollama-host" placeholder="http://ollama-host:11434" style="width: 400px;" />
+                            <button onclick="fetchOllamaModels()">Fetch Models</button>
+                        </div>
+                        <select id="ollama-model-select" style="width: 400px; padding: 5px; margin-bottom: 8px; display: none;" onchange="onOllamaSelect()"></select>
+                        <input id="ollama-name" placeholder="Model name (e.g., qwen2.5:14b)" style="width: 400px;" />
                         <button onclick="fetchOllamaContextLength()" title="Fetch context length from Ollama" style="padding: 8px 12px; margin: 5px;">Get Details</button>
                         <div id="ollama-context-info" style="font-size: 12px; color: #666; margin: 5px 0;"></div>
-                        <input id="ollama-host" placeholder="http://localhost:11434 (default)" style="width: 400px;" />
                         <input id="ollama-context-length" type="number" placeholder="Context Length (auto-filled)" style="width: 400px;" />
                         <button onclick="addOllamaModel()">Add Model</button>
-                        <p style="font-size: 12px; color: #666; margin-top: 5px;">Ensure Ollama is running and accessible.</p>
+                        <p style="font-size: 12px; color: #666; margin-top: 5px;">Ensure the remote Ollama instance is running and accessible.</p>
                     `;
                 } else if (provider === 'bedrock') {
                     ui.innerHTML = `
