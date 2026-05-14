@@ -485,7 +485,7 @@
             const WARNING_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
 
             // Auto-refresh state
-            let autoRefreshIntervals = { logs: null, debug: null, container: null };
+            const autoRefreshIntervals = { logs: null, debug: null, container: null };
 
             function toggleAutoRefresh(type) {
                 const toggleId = type === 'logs' ? 'auto-refresh-toggle' : type === 'debug' ? 'auto-refresh-debug-toggle' : 'auto-refresh-container-toggle';
@@ -976,6 +976,7 @@
                 modelsDiv.innerHTML = sorted.map(m => {
                     const ctx = m.litellm_params.context_length;
                     const ctxStr = formatContextLength(ctx);
+                    const reasoning = m.reasoning_effort ? m.reasoning_effort.charAt(0).toUpperCase() + m.reasoning_effort.slice(1) : '';
                     const escName = m.model_name.replace(/'/g, "\\'");
                     const tags = m.tags || [];
                     const tagChips = tags.map(t => {
@@ -989,6 +990,7 @@
                             <span class="model-chevron" id="chevron-${escName}">${CHEVRON_RIGHT_SVG}</span>
                             <span class="model-row-name">${m.model_name}</span>
                             ${ctxStr ? `<span style="color: #888; font-size: 12px;">${ctxStr}</span>` : ''}
+                            ${reasoning ? `<span style="color: #007bff; font-size: 12px;">${reasoning}</span>` : ''}
                             ${tagChips}
                         </div>
                         <div class="model-detail" id="detail-${escName}">
@@ -1262,7 +1264,8 @@
                 if (!name) return showToast('Model Name is required', 'error');
                 const modelConfig = {
                     model_name: (window.USE_PREFIX ? 'claw-bedrock/' : '') + name,
-                    litellm_params: { model: `ollama/${name}`, api_base: host || 'http://localhost:11434' }
+                    litellm_params: { model: `ollama/${name}`, api_base: host || 'http://localhost:11434' },
+                    model_info: { supports_tool_calling: true }
                 };
                 if (contextLength) modelConfig.litellm_params.context_length = parseInt(contextLength, 10);
                 await addModelCommon(modelConfig, 'ollama');
@@ -2108,7 +2111,7 @@
             }
 
             // Detect and update URLs based on actual access location
-            (function() {
+            (() => {
                 const mgmtUrl = window.location.origin;
                 const apiHost = window.location.hostname;
                 const apiUrl = `${window.location.protocol}//${apiHost}:4000`;

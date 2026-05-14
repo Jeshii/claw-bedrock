@@ -2,9 +2,12 @@
 
 ## Code Quality
 - Never commit before running the following
- - `ruff check --fix` to auto-fix linting issues
- - `ruff format` to enforce formatting
- - `python -m py_compile <file>` to syntax-check any modified Python file
+ - for python
+    - `ruff check --fix` to auto-fix linting issues
+    - `ruff format` to enforce formatting
+    - `python -m py_compile <file>` to syntax-check any modified Python file\
+ - for html/javascript
+    - use `biome check --write .`
 - Never commit if linting or syntax checks fail
 - Ask before pushing since develop branch will build on push
 

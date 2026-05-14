@@ -4,10 +4,7 @@
 		{
 			"Sid": "AllowAwsLoginWithConsoleCredentials",
 			"Effect": "Allow",
-			"Action": [
-				"signin:AuthorizeOAuth2Access",
-				"signin:CreateOAuth2Token"
-			],
+			"Action": ["signin:AuthorizeOAuth2Access", "signin:CreateOAuth2Token"],
 			"Resource": "arn:aws:signin:*:*:oauth2/public-client/*"
 		},
 		{
@@ -31,16 +28,14 @@
 				"bedrock-mantle:ListModels",
 				"bedrock-mantle:GetModel",
 				"bedrock:ListFoundationModels",
-        		"bedrock:GetFoundationModel"
+				"bedrock:GetFoundationModel"
 			],
 			"Resource": "*"
 		},
 		{
 			"Sid": "AllowInference",
 			"Effect": "Allow",
-			"Action": [
-				"bedrock-mantle:CreateInference"
-			],
+			"Action": ["bedrock-mantle:CreateInference"],
 			"Resource": "*"
 		}
 	]
