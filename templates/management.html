@@ -247,7 +247,6 @@
             <h1>Dashboard</h1>
             <!-- Auth banner: shown on dashboard whenever AWS login is needed -->
             <div id="dashboard-auth-banner">
-                <div class="banner-title">&#9888; AWS Authentication Required</div>
                 <div id="banner-body"></div>
                 <div class="banner-actions">
                     <button class="go-auth-btn" onclick="showPage2('auth')">Go to Authentication &rarr;</button>
@@ -810,7 +809,7 @@
                 updateDashboardBanner(data);
 
                 if (data.auth_needed) {
-                    html += '<div class="auth-needed"><p><strong>&#9888; AWS Authentication Required</strong></p>';
+                    html += '<div class="auth-needed"><p><strong>&#9888; AWS Authentication</strong></p>';
                     if (data.auth_error) {
                         html += `<p style="color: #dc3545; margin-top: 8px;"><strong>Error:</strong> ${data.auth_error}</p>`;
                     }
@@ -824,7 +823,7 @@
                         html += '<p>Open this URL in your browser:</p>';
                         html += `<div class="auth-url-row"><a class="auth-url-link" href="${data.auth_url}" target="_blank">${data.auth_url}</a></div>`;
                     } else {
-                        html += '<p>Waiting for AWS login URL&hellip; (refresh in a moment)</p>';
+                        html += '<p>Waiting for AWS login URL&hellip;</p>';
                     }
                     html += '</div></div>';
 
