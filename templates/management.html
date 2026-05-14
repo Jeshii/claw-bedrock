@@ -1740,8 +1740,8 @@
                     `<div class="sort-menu-item ${currentSort === key ? 'active' : ''}" onclick="applySort('${key}')">${currentSort === key ? '✓ ' : ''}${label}</div>`
                 ).join('');
                 bar.appendChild(menu);
-                menu.style.top = (bar.offsetTop + btn.offsetTop + btn.offsetHeight + 2) + 'px';
-                menu.style.left = (bar.offsetLeft + btn.offsetLeft) + 'px';
+                menu.style.top = (btn.offsetTop + btn.offsetHeight + 2) + 'px';
+                menu.style.left = btn.offsetLeft + 'px';
                 setTimeout(() => {
                     document.addEventListener('click', function handler(e) {
                         if (!menu.contains(e.target) && e.target !== bar.querySelector('.sort-btn')) {
