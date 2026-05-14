@@ -59,15 +59,15 @@ LITELLM_PID=$!
 echo "${LITELLM_PID}" > "${PID_FILE}"
 echo "LiteLLM started with PID ${LITELLM_PID}"
 
-# Wait for LiteLLM to be healthy (up to 60s)
+# Wait for LiteLLM to be healthy (up to 120s)
 echo "Waiting for LiteLLM to become healthy..."
-for i in $(seq 1 60); do
+for i in $(seq 1 120); do
     if python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:4000/health', timeout=2)" 2>/dev/null; then
         echo "LiteLLM is healthy after ${i}s"
         break
     fi
-    if [ $i -eq 60 ]; then
-        echo "Warning: LiteLLM did not become healthy within 60s, continuing anyway"
+    if [ $i -eq 120 ]; then
+        echo "Warning: LiteLLM did not become healthy within 120s, continuing anyway"
     fi
     sleep 1
 done
