@@ -1,0 +1,81 @@
+<div id="page-providers" class="page">
+    <h1>Providers</h1>
+    <div class="section">
+        <div class="section-header-row">
+            <h2>Manage Providers</h2>
+            <button type="button"
+                    onclick="showCreateProviderForm()"
+                    id="create-provider-btn">Create Provider</button>
+        </div>
+        <div id="create-provider-row"
+             class="hidden"
+             style="margin-bottom:12px;
+                    padding:16px;
+                    border:1px solid #ddd;
+                    border-radius:8px">
+            <h3 style="margin-top:0;">New Provider</h3>
+            <div class="inline-row" style="flex-wrap:wrap;align-items:flex-start;">
+                <input id="new-provider-name"
+                       placeholder="Name (e.g., bedrock-us-east)"
+                       style="width:250px" />
+                <input id="new-provider-display"
+                       placeholder="Display Name (e.g., AWS Bedrock US East)"
+                       style="width:250px" />
+                <select id="new-provider-type" onchange="toggleNewProviderFields()">
+                    <option value="bedrock">Bedrock</option>
+                    <option value="openai-compatible">OpenAI Compatible</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <input id="new-provider-color"
+                       type="color"
+                       value="#FF9900"
+                       title="Provider color"
+                       style="width:40px;
+                              height:34px;
+                              padding:2px;
+                              cursor:pointer" />
+            </div>
+            <div id="new-provider-bedrock-fields"
+                 class="inline-row"
+                 style="margin-top:8px;
+                        flex-wrap:wrap">
+                <input id="new-provider-aws-region"
+                       placeholder="AWS Region (e.g., us-east-1)"
+                       style="width:200px" />
+                <input id="new-provider-aws-key-env"
+                       placeholder="Access Key Env Var (e.g., AWS_ACCESS_KEY_ID)"
+                       style="width:250px" />
+                <input id="new-provider-aws-secret-env"
+                       placeholder="Secret Key Env Var (e.g., AWS_SECRET_ACCESS_KEY)"
+                       style="width:250px" />
+            </div>
+            <div id="new-provider-openai-fields"
+                 class="hidden"
+                 style="margin-top:8px;
+                        flex-wrap:wrap;
+                        gap:8px">
+                <input id="new-provider-api-base"
+                       placeholder="API Base URL (e.g., https://api.openai.com/v1)"
+                       style="width:400px" />
+            </div>
+            <div style="margin-top:8px;">
+                <input id="new-provider-notes"
+                       placeholder="Notes (optional)"
+                       style="width:100%" />
+            </div>
+            <div class="inline-row" style="margin-top:12px;">
+                <button type="button" class="btn-primary" onclick="createProvider()">Save</button>
+                <button type="button"
+                        class="btn-secondary"
+                        onclick="hideCreateProviderForm()">Cancel</button>
+            </div>
+        </div>
+        <div id="providers-list"
+             style="display:flex;
+                    flex-direction:column;
+                    gap:6px"></div>
+    </div>
+    <div class="section hidden" id="provider-detail-section">
+        <div id="provider-detail-body"></div>
+    </div>
+</div>

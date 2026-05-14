@@ -1,7 +1,7 @@
 from collections import defaultdict
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import yaml
 import json
@@ -13,6 +13,7 @@ import subprocess
 import psutil
 import base64
 import threading
+import datetime
 from typing import Optional, Dict
 import db
 import token_refresher
@@ -937,6 +938,73 @@ async def rename_provider_route(old_name: str, body: Dict):
         raise HTTPException(400, "new_name is required")
     success = db.rename_provider(old_name, new_name)
     return {"success": success}
+
+
+@app.get("/api/backup/export")
+async def export_backup():
+    """Download current config as a JSON backup file."""
+    data = db.export_backup()
+    data["claw_version"] = get_version()
+    filename = f"claw-bedrock-backup-{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.json"
+    response = JSONResponse(content=data)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@app.post("/api/backup/import")
+async def import_backup(request: Request):
+    """
+    Import a backup file.
+    Query param `mode`: "replace" (default) or "merge"
+    """
+    mode = request.query_params.get("mode", "replace")
+    if mode not in ("replace", "merge"):
+        raise HTTPException(400, "mode must be 'replace' or 'merge'")
+    try:
+        backup = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    try:
+        summary = db.import_backup(backup, mode=mode)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    merge_configs()
+    reload_result = reload_litellm()
+    return {
+        "success": True,
+        "mode": mode,
+        "imported": summary,
+        "litellm_reloaded": reload_result.get("success"),
+    }
+
+
+@app.post("/api/backup/preview")
+async def preview_backup(request: Request):
+    """
+    Parse an uploaded backup and return a summary without applying it.
+    Used by the UI to show a confirmation dialog before import.
+    """
+    try:
+        backup = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    try:
+        db._validate_backup(backup)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    data = backup["data"]
+    return {
+        "valid": True,
+        "schema_version": backup.get("schema_version"),
+        "created_at": backup.get("created_at"),
+        "claw_version": backup.get("claw_version", "unknown"),
+        "counts": {
+            "models": len(data.get("models", [])),
+            "tags": len(data.get("tags", [])),
+            "settings": len(data.get("settings", {})),
+            "providers": len(data.get("providers", [])),
+        },
+    }
 
 
 def enrich_model_with_provider(model: dict) -> dict:

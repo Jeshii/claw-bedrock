@@ -1,0 +1,32 @@
+<div id="page-tags" class="page">
+    <h1>Tags</h1>
+    <div class="section">
+        <div class="section-header-row">
+            <h2>Manage Tags</h2>
+            <button type="button" onclick="showCreateTagInput()" id="create-tag-btn">Create Tag</button>
+        </div>
+        <div id="create-tag-row"
+             class="inline-row hidden"
+             style="margin-bottom:12px">
+            <input id="new-tag-name"
+                   placeholder="Tag name..."
+                   style="width:200px"
+                   onkeydown="if(event.key==='Enter')createTagFromInput();" />
+            <div class="color-palette" id="new-tag-palette"></div>
+            <button type="button"
+                    onclick="createTagFromInput()"
+                    style="font-size:12px;
+                           padding:4px 10px">Add</button>
+            <button type="button"
+                    onclick="hideCreateTagInput()"
+                    style="font-size:12px;
+                           padding:4px 10px;
+                           background:#6c757d;
+                           color:white;
+                           border:none;
+                           border-radius:3px;
+                           cursor:pointer">Cancel</button>
+        </div>
+        <div class="tag-list" id="tags-list"></div>
+    </div>
+</div>

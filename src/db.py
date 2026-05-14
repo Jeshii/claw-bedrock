@@ -2,6 +2,8 @@ from tinydb import TinyDB, where, Query
 import os
 import secrets
 import yaml
+import datetime
+import json
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 DB_PATH = os.path.join(CONFIG_DIR, "models.db.json")
@@ -313,6 +315,117 @@ def migrate_infer_providers():
 
     if providers_seen:
         print(f"[DB] Inferred {len(providers_seen)} providers from existing models")
+
+
+BACKUP_SCHEMA_VERSION = 1
+
+
+def export_backup() -> dict:
+    """Dump all tables into a portable backup dict."""
+    return {
+        "schema_version": BACKUP_SCHEMA_VERSION,
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "data": {
+            "models": [dict(m) for m in models_table.all()],
+            "tags": [dict(t) for t in tags_table.all()],
+            "settings": get_settings(),
+            "providers": [dict(p) for p in providers_table.all()],
+        },
+    }
+
+
+def import_backup(backup: dict, mode: str = "replace") -> dict:
+    """
+    Restore from a backup dict.
+
+    mode="replace"  — clears all existing data before importing (full restore)
+    mode="merge"    — adds new records, skips existing ones (non-destructive)
+
+    Returns a summary dict with counts of imported records.
+    """
+    _validate_backup(backup)
+    data = backup["data"]
+    summary = {"models": 0, "tags": 0, "settings": 0, "providers": 0, "skipped": 0}
+
+    if mode == "replace":
+        _auto_backup_before_replace()
+        models_table.truncate()
+        tags_table.truncate()
+        settings_table.truncate()
+        providers_table.truncate()
+
+    for model in data.get("models", []):
+        name = model.get("model_name")
+        if mode == "merge" and model_name_exists(name):
+            summary["skipped"] += 1
+            continue
+        if mode == "replace":
+            models_table.insert(model)
+        else:
+            models_table.upsert(model, where("model_name") == name)
+        summary["models"] += 1
+
+    for tag in data.get("tags", []):
+        name = tag.get("name")
+        color = tag.get("color", "#607D8B")
+        if mode == "merge" and tags_table.contains(where("name") == name):
+            summary["skipped"] += 1
+            continue
+        upsert_tag(name, color)
+        summary["tags"] += 1
+
+    for key, value in data.get("settings", {}).items():
+        if mode == "merge" and settings_table.contains(where("key") == key):
+            summary["skipped"] += 1
+            continue
+        set_setting(key, value)
+        summary["settings"] += 1
+
+    for provider in data.get("providers", []):
+        name = provider.get("name")
+        if mode == "merge" and providers_table.contains(where("name") == name):
+            summary["skipped"] += 1
+            continue
+        upsert_provider(provider)
+        summary["providers"] += 1
+
+    return summary
+
+
+def _validate_backup(backup: dict):
+    """Raise ValueError if the backup structure is invalid."""
+    if not isinstance(backup, dict):
+        raise ValueError("Backup must be a JSON object")
+    if "data" not in backup:
+        raise ValueError("Missing 'data' key in backup")
+    schema = backup.get("schema_version", 0)
+    if schema > BACKUP_SCHEMA_VERSION:
+        raise ValueError(
+            f"Backup schema version {schema} is newer than supported ({BACKUP_SCHEMA_VERSION}). "
+            "Upgrade claw-bedrock before importing."
+        )
+    data = backup["data"]
+    if not isinstance(data.get("models", []), list):
+        raise ValueError("'data.models' must be a list")
+    if not isinstance(data.get("tags", []), list):
+        raise ValueError("'data.tags' must be a list")
+    if not isinstance(data.get("settings", {}), dict):
+        raise ValueError("'data.settings' must be an object")
+    if not isinstance(data.get("providers", []), list):
+        raise ValueError("'data.providers' must be a list")
+
+
+def _auto_backup_before_replace():
+    """Write a timestamped JSON snapshot to CONFIG_DIR before a destructive import."""
+    try:
+        snapshot = export_backup()
+        ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        path = os.path.join(CONFIG_DIR, f"auto-backup-{ts}.json")
+        with open(path, "w") as f:
+            json.dump(snapshot, f, indent=2)
+        print(f"[Backup] Auto-backup written to {path}")
+    except Exception as e:
+        print(f"[Backup] Auto-backup failed: {e}")
 
 
 def close_db():

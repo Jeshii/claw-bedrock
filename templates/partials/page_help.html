@@ -1,0 +1,110 @@
+<div id="page-help" class="page">
+    <h1>Help</h1>
+    <div class="section help-section">
+        <h2>About</h2>
+        <p>
+            A LiteLLM proxy server that exposes AWS Bedrock Mantle models and other providers via a single OpenAI-compatible API. Useful for <a href="https://github.com/ultraworkers/claw-code">claw-code</a>, <a href="https://github.com/anomalyco/opencode">opencode</a>, or other apps expecting an OpenAI response.
+        </p>
+        <p>
+            GitHub: <a href="https://github.com/jeshii/claw-bedrock">https://github.com/jeshii/claw-bedrock</a>
+        </p>
+    </div>
+    <div class="section help-section">
+        <h2>Endpoints</h2>
+        <p>
+            <strong>LiteLLM API:</strong> <code id="litellm-url">detecting...</code> (OpenAI-compatible)
+        </p>
+        <p>
+            <strong>Management UI:</strong> <code id="mgmt-url">detecting...</code> (this page)
+        </p>
+        <p>
+            <strong>List models:</strong> <code id="models-curl">detecting...</code>
+        </p>
+    </div>
+    <div class="section help-section">
+        <h2>Client Integrations</h2>
+        <p>
+            <strong>opencode.ai:</strong> Set baseURL to <code id="opencode-url">detecting...</code> in <code>~/.config/opencode/opencode.json</code>
+        </p>
+        <p>
+            <strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</code>
+        </p>
+    </div>
+    <div class="section help-section">
+        <h2>Adding Models</h2>
+        <p>
+            Use the Models page to add from Bedrock, OpenRouter, Ollama, or manually. Changes auto-restart LiteLLM to pick up new config.
+        </p>
+        <p>
+            <strong>Required Environment Variables:</strong>
+        </p>
+        <ul>
+            <li>
+                OpenRouter: <code>OPENROUTER_API_KEY</code>
+            </li>
+            <li>
+                Ollama: <code>OLLAMA_API_BASE</code> (default: <code>http://localhost:11434</code>)
+            </li>
+            <li>
+                Bedrock: <code>AWS_PROFILE</code>, <code>AWS_REGION</code>, <code>BEDROCK_MANTLE_API_BASE</code>
+            </li>
+        </ul>
+    </div>
+    <div class="section help-section">
+        <h2>Managing Models</h2>
+        <ul>
+            <li>Click a model to expand details and manage it</li>
+            <li>Rename makes the name editable; click Confirm to save</li>
+            <li>Click Delete for confirmation flow (line turns red, wait 1s, then confirm)</li>
+            <li>Models auto-restart LiteLLM to pick up changes</li>
+        </ul>
+    </div>
+    <div class="section help-section">
+        <h2>Login</h2>
+        <p>
+            The management UI is password-protected. Set the <code>MANAGEMENT_UI_PASSWORD</code> environment variable to enable it.
+        </p>
+        <ul>
+            <li>Navigate to the management UI — you will be prompted to enter the password.</li>
+            <li>After logging in, a session cookie is set that lasts 24 hours.</li>
+            <li>
+                Click <strong>Logout</strong> in the sidebar to end the session immediately.
+            </li>
+            <li>
+                If <code>MANAGEMENT_UI_PASSWORD</code> is not set, no login is required.
+            </li>
+        </ul>
+    </div>
+    <div class="section help-section">
+        <h2>Tags</h2>
+        <p>
+            Tags let you label and filter models on the Models page. Create tags on the Tags page, then add them to models via the model detail panel.
+        </p>
+        <ul>
+            <li>
+                <strong>Create a tag:</strong> Go to the Tags page, click <strong>Create Tag</strong>, type a name, pick a color, and press Add or hit Enter.
+            </li>
+            <li>
+                <strong>Add a tag to a model:</strong> Click a model to expand it, then type in the <em>Add tag</em> input. Matching tags appear as you type — click one or press Enter to add it.
+            </li>
+            <li>
+                <strong>Drag and drop:</strong> Tag chips on model rows can be dragged onto other models to copy the tag.
+            </li>
+            <li>
+                <strong>Remove a tag:</strong> Click the <strong>×</strong> on a tag chip to remove it from that model.
+            </li>
+            <li>
+                <strong>Filter by tag:</strong> Click a tag in the filter bar above the model list to show only models with that tag.
+            </li>
+            <li>
+                <strong>Rename a tag:</strong> On the Tags page, click a tag name to make it editable.
+            </li>
+            <li>
+                <strong>Change tag color:</strong> Click the color swatch next to a tag to pick a new color.
+            </li>
+            <li>
+                <strong>Delete a tag:</strong> Click <strong>Delete</strong> on the Tags page to remove a tag entirely.
+            </li>
+        </ul>
+    </div>
+</div>

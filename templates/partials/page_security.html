@@ -1,0 +1,60 @@
+<div id="page-security" class="page">
+    <h1>Security</h1>
+    <div class="section">
+        <h2>API Key</h2>
+        <p class="muted" style="margin-bottom:12px;">
+            When a master key is set, all LiteLLM proxy requests must include
+            <code>Authorization: Bearer &lt;key&gt;</code>.
+        </p>
+        <div id="key-status" style="margin-bottom:12px;"></div>
+        <div class="inline-row">
+            <button type="button"
+                    id="btn-generate-key"
+                    class="btn-primary"
+                    onclick="generateKey()">Generate New Key</button>
+            <button type="button"
+                    id="btn-revoke-key"
+                    class="btn-danger"
+                    onclick="revokeKey()"
+                    style="display:none">Revoke Key</button>
+        </div>
+    </div>
+    <div class="section">
+        <h2>Usage</h2>
+        <p style="margin-bottom:8px;">Once a master key is set, include it in all proxy requests:</p>
+        <pre class="code-block">curl http://localhost:4000/chat/completions \
+  -H "Authorization: Bearer sk-claw-xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "my-model", "messages": [{"role": "user", "content": "Hello"}]}'</pre>
+        <p>Or with the OpenAI Python client:</p>
+        <pre class="code-block">from openai import OpenAI
+client = OpenAI(
+    base_url="http://localhost:4000",
+    api_key="sk-claw-xxxx",
+)</pre>
+    </div>
+</div>
+<dialog id="key-reveal-modal"
+        style="padding:24px;
+               border:1px solid #ddd;
+               border-radius:8px;
+               max-width:600px">
+    <h3 style="margin-top:0;">Your New API Key</h3>
+    <p style="color:#dc3545;font-size:14px;">Copy this now — it will not be shown again.</p>
+    <code id="revealed-key"
+          style="display:block;
+                 padding:12px;
+                 background:#f5f5f5;
+                 border-radius:4px;
+                 font-size:14px;
+                 word-break:break-all;
+                 margin:12px 0"></code>
+    <div class="inline-row">
+        <button type="button"
+                onclick="navigator.clipboard.writeText(document.getElementById('revealed-key').textContent);showToast('Copied to clipboard')">
+            Copy
+        </button>
+        <button type="button"
+                onclick="document.getElementById('key-reveal-modal').close()">Done</button>
+    </div>
+</dialog>
