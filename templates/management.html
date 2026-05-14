@@ -634,11 +634,6 @@
                 if (pageId === 'logs') {
                     loadLogs();
                     loadDebugLogs();
-                    // Expand logs when navigating to the page
-                    document.getElementById('logs-output').style.display = 'block';
-                    document.getElementById('logs-toggle').textContent = 'Hide Logs';
-                    document.getElementById('debug-logs-output').style.display = 'block';
-                    document.getElementById('debug-logs-toggle').textContent = 'Hide Logs';
                     restoreAutoRefresh();
                 }
                 if (pageId === 'auth') loadAuth();
