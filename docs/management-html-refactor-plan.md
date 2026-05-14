@@ -2,7 +2,7 @@
 
 ## Motivation
 
-`templates/management.html` is a single ~1,500-line file combining CSS, HTML, and JavaScript. Working on any one area means loading the entire file into the context window. Splitting it into focused files keeps each unit small, independently editable, and easy to reason about.
+`templates/management.html` is a single ~1,500-line file combining CSS, HTML, and JavaScript. Working on any one area means loading the entire file into the context window. Splitting it into focused files keeps each unit small, independently editable, and easy to reason about. A secondary goal is reducing HTML noise from inline styles so the structure of each page remains readable even after future feature growth.
 
 ---
 
@@ -25,6 +25,49 @@ After refactoring, `management.html` becomes a ~80–100 line shell:
 - Jinja2 `{% include %}` calls for each page
 
 ---
+
+## Step 0 — Inline Style Cleanup
+
+**Effort:** Low | **Risk:** Very low | **Recommended before CSS extraction**
+
+The current template contains many inline `style="..."` attributes, especially in:
+- Security page buttons and status blocks
+- Logs page toolbar controls and `<pre>` blocks
+- Tags page layout rows
+- Modal/dialog presentation
+- Small flex/layout wrappers throughout the page
+
+Cleaning these up first makes the later HTML partial split much cleaner and also resolves the H021 lint exception by replacing one-off inline styles with named CSS classes.
+
+### Action
+1. Audit all `style="..."` attributes in `templates/management.html`.
+2. Move repeated visual patterns into `static/management.css`.
+3. Introduce small reusable classes for common patterns.
+
+### Suggested classes
+- `.btn-primary`
+- `.btn-danger`
+- `.btn-secondary`
+- `.btn-icon`
+- `.toolbar-row`
+- `.inline-row`
+- `.stack-sm`
+- `.muted-text`
+- `.code-block`
+- `.scroll-panel`
+- `.hidden`
+- `.section-header-row`
+
+### Notes
+- Prefer semantic component classes over many tiny utility classes.
+- Keep one-off dynamic styling in JavaScript only when it truly depends on runtime state.
+- This step reduces HTML noise and makes the later Jinja partials smaller and easier to scan.
+
+### Result
+- Smaller HTML partials
+- Cleaner separation of structure vs presentation
+- Less visual clutter in the main template
+- H021 can be followed instead of ignored
 
 ## Step 1 — Extract CSS
 
