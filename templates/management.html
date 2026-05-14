@@ -164,6 +164,31 @@
         .color-palette-swatch:hover { border-color: #333; }
         body.dark .color-palette-swatch:hover { border-color: #fff; }
 
+        /* Provider badges */
+        .provider-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+        /* Provider page */
+        .provider-card { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid #eee; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+        .provider-card:hover { background: #f8f9fa; }
+        body.dark .provider-card:hover { background: #2d2d2d; }
+        .provider-card.active { border-color: #007bff; background: #e8f0fe; }
+        body.dark .provider-card.active { background: #1a3a5c; border-color: #007bff; }
+        .provider-card-color { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+        .provider-card-name { flex: 1; font-weight: 500; font-size: 14px; }
+        .provider-card-count { font-size: 12px; color: #888; }
+        .provider-card-type { font-size: 11px; color: #007bff; background: #e8f0fe; padding: 1px 6px; border-radius: 8px; }
+        body.dark .provider-card-type { color: #66b3ff; background: #1a3a5c; }
+        .provider-detail-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+        .provider-detail-header input { font-size: 16px; font-weight: 600; border: 1px solid transparent; border-radius: 4px; padding: 4px 8px; width: auto; flex: 1; }
+        .provider-detail-header input:focus { border-color: #007bff; outline: none; }
+        .provider-field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .provider-field-row label { min-width: 140px; font-size: 13px; color: #666; }
+        body.dark .provider-field-row label { color: #999; }
+        .provider-field-row input, .provider-field-row select { flex: 1; max-width: 400px; }
+        .provider-models-list { margin-top: 12px; }
+        .provider-model-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; margin: 2px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+        body.dark .provider-model-chip { border-color: #444; }
+
         /* Drag-over highlight */
         .model-row.drag-over { background: #e3f2fd !important; }
         body.dark .model-row.drag-over { background: #1a3a5c !important; }
@@ -238,6 +263,9 @@
                 </li>
                 <li>
                     <a onclick="showPage('models')">Models</a>
+                </li>
+                <li>
+                    <a onclick="showPage('providers')">Providers</a>
                 </li>
                 <li>
                     <a onclick="showPage('tags')">Tags</a>
@@ -402,8 +430,9 @@ client = OpenAI(
                             Close
                         </button>
                     </h2>
+                    <div id="model-provider-selector-wrap" style="margin-bottom:8px;"></div>
                     <select id="provider-select" onchange="loadProviderUI()">
-                        <option value="">Select Provider</option>
+                        <option value="">Select Provider Type</option>
                         <option value="openrouter">OpenRouter</option>
                         <option value="ollama">Ollama (Remote)</option>
                         <option value="bedrock">Bedrock (Mantle)</option>
@@ -430,6 +459,101 @@ client = OpenAI(
                             <span>Add <code>claw-bedrock/</code> prefix to model names</span>
                         </label>
                     </div>
+                </div>
+            </div>
+            <!-- Providers Page -->
+            <div id="page-providers" class="page">
+                <h1>Providers</h1>
+                <div class="section">
+                    <div style="display:flex;
+                                align-items:center;
+                                justify-content:space-between;
+                                margin-bottom:12px">
+                        <h2 style="margin:0;">Manage Providers</h2>
+                        <button type="button"
+                                onclick="showCreateProviderForm()"
+                                id="create-provider-btn">Create Provider</button>
+                    </div>
+                    <div id="create-provider-row"
+                         style="display:none;
+                                margin-bottom:12px;
+                                padding:16px;
+                                border:1px solid #ddd;
+                                border-radius:8px">
+                        <h3 style="margin-top:0;">New Provider</h3>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;">
+                            <input id="new-provider-name"
+                                   placeholder="Name (e.g., bedrock-us-east)"
+                                   style="width:250px" />
+                            <input id="new-provider-display"
+                                   placeholder="Display Name (e.g., AWS Bedrock US East)"
+                                   style="width:250px" />
+                            <select id="new-provider-type" onchange="toggleNewProviderFields()">
+                                <option value="bedrock">Bedrock</option>
+                                <option value="openai-compatible">OpenAI Compatible</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                            <input id="new-provider-color"
+                                   type="color"
+                                   value="#FF9900"
+                                   title="Provider color"
+                                   style="width:40px;
+                                          height:34px;
+                                          padding:2px;
+                                          cursor:pointer" />
+                        </div>
+                        <div id="new-provider-bedrock-fields"
+                             style="margin-top:8px;
+                                    display:flex;
+                                    flex-wrap:wrap;
+                                    gap:8px">
+                            <input id="new-provider-aws-region"
+                                   placeholder="AWS Region (e.g., us-east-1)"
+                                   style="width:200px" />
+                            <input id="new-provider-aws-key-env"
+                                   placeholder="Access Key Env Var (e.g., AWS_ACCESS_KEY_ID)"
+                                   style="width:250px" />
+                            <input id="new-provider-aws-secret-env"
+                                   placeholder="Secret Key Env Var (e.g., AWS_SECRET_ACCESS_KEY)"
+                                   style="width:250px" />
+                        </div>
+                        <div id="new-provider-openai-fields"
+                             style="margin-top:8px;
+                                    display:none;
+                                    flex-wrap:wrap;
+                                    gap:8px">
+                            <input id="new-provider-api-base"
+                                   placeholder="API Base URL (e.g., https://api.openai.com/v1)"
+                                   style="width:400px" />
+                        </div>
+                        <div style="margin-top:8px;">
+                            <input id="new-provider-notes"
+                                   placeholder="Notes (optional)"
+                                   style="width:100%" />
+                        </div>
+                        <div style="margin-top:12px;display:flex;gap:8px;">
+                            <button type="button"
+                                    onclick="createProvider()"
+                                    style="background:#007bff;
+                                           color:white;
+                                           border:1px solid #007bff;
+                                           padding:6px 14px;
+                                           border-radius:4px;
+                                           cursor:pointer">Save</button>
+                            <button type="button"
+                                    onclick="hideCreateProviderForm()"
+                                    style="padding:6px 14px;
+                                           border-radius:4px;
+                                           cursor:pointer">Cancel</button>
+                        </div>
+                    </div>
+                    <div id="providers-list"
+                         style="display:flex;
+                                flex-direction:column;
+                                gap:6px"></div>
+                </div>
+                <div class="section" id="provider-detail-section" style="display:none;">
+                    <div id="provider-detail-body"></div>
                 </div>
             </div>
             <!-- Tags Page -->
@@ -1061,6 +1185,7 @@ client = OpenAI(
                 if (pageId === 'dashboard') loadDashboard();
                 if (pageId === 'security') loadKeyStatus();
                 if (pageId === 'models') loadModels();
+                if (pageId === 'providers') loadProvidersPage();
                 if (pageId === 'tags') loadTagsPage();
                 if (pageId === 'logs') {
                     loadLogs();
@@ -1388,13 +1513,16 @@ client = OpenAI(
                 if (filterTag && filterTag !== 'all') {
                     url += `?tag=${encodeURIComponent(filterTag)}`;
                 }
-                const [modelsRes, tagsRes] = await Promise.all([
+                const [modelsRes, tagsRes, providersRes] = await Promise.all([
                     fetch(url),
                     fetch('/api/tags'),
+                    fetch('/api/providers'),
                 ]);
                 const data = await modelsRes.json();
                 const tagsData = await tagsRes.json();
+                const providersData = await providersRes.json();
                 window._allTags = tagsData.tags || [];
+                window._allProviders = providersData.providers || [];
                 window._allModels = data.models;
                 renderFilterBar(filterTag || 'all');
                 renderModelList(data.models);
@@ -1420,6 +1548,7 @@ client = OpenAI(
                         const color = tagInfo ? tagInfo.color : '#6c757d';
                         return `<span class="tag-chip" style="background:${color}" draggable="true" ondragstart="handleTagDragStart(event, '${t}')" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">${t}<span class="tag-remove" onclick="removeTagFromModel('${escName}', '${t}')">×</span></span>`;
                     }).join('');
+                    const providerBadge = m._provider ? `<span class="provider-badge" style="background:${m._provider.color}20;border:1px solid ${m._provider.color};color:${m._provider.color}">${m._provider.display_name || m._provider.name}</span>` : '';
                     return `
                     <div class="model-item" data-model-name="${m.model_name}">
                         <div class="model-row" onclick="toggleModel('${escName}')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleTagDrop(event, '${escName}')">
@@ -1427,6 +1556,7 @@ client = OpenAI(
                             <span class="model-row-name">${m.model_name}</span>
                             ${ctxStr ? `<span style="color: #888; font-size: 12px;">${ctxStr}</span>` : ''}
                             ${reasoning ? `<span style="color: #007bff; font-size: 12px;">${reasoning}</span>` : ''}
+                            ${providerBadge}
                             ${tagChips}
                         </div>
                         <div class="model-detail" id="detail-${escName}">
@@ -1656,7 +1786,7 @@ client = OpenAI(
 
             function showAddModel() {
                 document.getElementById('add-model-section').style.display = 'block';
-                document.getElementById('provider-select').value = '';
+                renderProviderSelector();
                 document.getElementById('provider-ui').innerHTML = '';
             }
 
@@ -2517,6 +2647,271 @@ client = OpenAI(
                 } catch (e) {
                     showToast(`Error: ${e.message}`, 'error');
                 }
+            }
+
+            // === PROVIDER FUNCTIONS ===
+
+            async function loadProvidersPage() {
+                const res = await fetch('/api/providers');
+                const data = await res.json();
+                window._allProviders = data.providers || [];
+                renderProvidersList(window._allProviders);
+                document.getElementById('provider-detail-section').style.display = 'none';
+            }
+
+            function renderProvidersList(providers) {
+                const list = document.getElementById('providers-list');
+                if (providers.length === 0) {
+                    list.innerHTML = '<p style="color:#888;">No providers yet. Create one above or add providers via the Models page.</p>';
+                    return;
+                }
+                list.innerHTML = providers.map(p => {
+                    const modelCount = (window._allModels || []).filter(m => m.provider === p.name).length;
+                    return `
+                    <div class="provider-card" id="provider-card-${p.name}" onclick="selectProvider('${p.name}')">
+                        <span class="provider-card-color" style="background:${p.color || '#888'}"></span>
+                        <span class="provider-card-name">${p.display_name || p.name}</span>
+                        <span class="provider-card-type">${p.type || 'custom'}</span>
+                        <span class="provider-card-count">${modelCount} model${modelCount !== 1 ? 's' : ''}</span>
+                    </div>`;
+                }).join('');
+            }
+
+            async function selectProvider(name) {
+                document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
+                document.getElementById(`provider-card-${name}`)?.classList.add('active');
+                const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
+                const data = await res.json();
+                renderProviderDetail(data.provider, data.models);
+            }
+
+            function renderProviderDetail(provider, models) {
+                const section = document.getElementById('provider-detail-section');
+                const body = document.getElementById('provider-detail-body');
+                section.style.display = 'block';
+                const typeFields = provider.type === 'bedrock' ? `
+                    <div class="provider-field-row"><label>AWS Region</label><input id="prov-aws-region" value="${provider.aws_region || ''}" /></div>
+                    <div class="provider-field-row"><label>Access Key Env</label><input id="prov-aws-key-env" value="${provider.aws_access_key_env || ''}" /></div>
+                    <div class="provider-field-row"><label>Secret Key Env</label><input id="prov-aws-secret-env" value="${provider.aws_secret_key_env || ''}" /></div>
+                ` : provider.type === 'openai-compatible' ? `
+                    <div class="provider-field-row"><label>API Base</label><input id="prov-api-base" value="${provider.api_base || ''}" /></div>
+                ` : '';
+                const modelChips = models.length > 0 ? models.map(m => `
+                    <span class="provider-model-chip">${m.model_name}</span>
+                `).join('') : '<span style="color:#888;font-size:13px;">No models use this provider</span>';
+                body.innerHTML = `
+                    <div class="provider-detail-header">
+                        <span class="provider-card-color" style="background:${provider.color || '#888'};width:16px;height:16px;border-radius:50%;flex-shrink:0;"></span>
+                        <input id="prov-display-name" value="${provider.display_name || provider.name}" placeholder="Display Name" />
+                    </div>
+                    <div class="provider-field-row"><label>Name</label><input id="prov-name" value="${provider.name}" readonly style="background:#f5f5f5;" /></div>
+                    <div class="provider-field-row"><label>Type</label>
+                        <select id="prov-type" onchange="toggleDetailProviderFields()">
+                            <option value="bedrock" ${provider.type === 'bedrock' ? 'selected' : ''}>Bedrock</option>
+                            <option value="openai-compatible" ${provider.type === 'openai-compatible' ? 'selected' : ''}>OpenAI Compatible</option>
+                            <option value="custom" ${provider.type === 'custom' ? 'selected' : ''}>Custom</option>
+                        </select>
+                    </div>
+                    <div class="provider-field-row"><label>Color</label><input id="prov-color" type="color" value="${provider.color || '#888888'}" style="width:40px;height:34px;padding:2px;cursor:pointer;" /></div>
+                    <div id="prov-bedrock-fields" style="display:${provider.type === 'bedrock' ? 'block' : 'none'};">${typeFields}</div>
+                    <div id="prov-openai-fields" style="display:${provider.type === 'openai-compatible' ? 'block' : 'none'};">${provider.type === 'openai-compatible' ? typeFields : ''}</div>
+                    <div class="provider-field-row"><label>Notes</label><input id="prov-notes" value="${provider.notes || ''}" /></div>
+                    <div style="margin-top:16px;">
+                        <h3>Models Using This Provider</h3>
+                        <div class="provider-models-list" style="margin-top:8px;">${modelChips}</div>
+                    </div>
+                    <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" onclick="saveProviderDetail('${provider.name}')" style="background:#007bff;color:white;border:1px solid #007bff;padding:6px 14px;border-radius:4px;cursor:pointer;">Save Changes</button>
+                        <button type="button" onclick="showRenameProvider('${provider.name}')" style="padding:6px 14px;border-radius:4px;cursor:pointer;">Rename</button>
+                        <button type="button" onclick="deleteProviderConfirm('${provider.name}')" style="background:#dc3545;color:white;border:1px solid #dc3545;padding:6px 14px;border-radius:4px;cursor:pointer;">Delete</button>
+                    </div>
+                `;
+            }
+
+            function toggleDetailProviderFields() {
+                const type = document.getElementById('prov-type').value;
+                document.getElementById('prov-bedrock-fields').style.display = type === 'bedrock' ? 'block' : 'none';
+                document.getElementById('prov-openai-fields').style.display = type === 'openai-compatible' ? 'block' : 'none';
+            }
+
+            function showCreateProviderForm() {
+                document.getElementById('create-provider-row').style.display = 'block';
+                document.getElementById('new-provider-name').focus();
+            }
+
+            function hideCreateProviderForm() {
+                document.getElementById('create-provider-row').style.display = 'none';
+            }
+
+            function toggleNewProviderFields() {
+                const type = document.getElementById('new-provider-type').value;
+                document.getElementById('new-provider-bedrock-fields').style.display = type === 'bedrock' ? 'flex' : 'none';
+                document.getElementById('new-provider-openai-fields').style.display = type === 'openai-compatible' ? 'flex' : 'none';
+            }
+
+            async function createProvider() {
+                const name = document.getElementById('new-provider-name').value.trim();
+                if (!name) return showToast('Provider name is required', 'error');
+                const type = document.getElementById('new-provider-type').value;
+                const provider = {
+                    name,
+                    display_name: document.getElementById('new-provider-display').value.trim() || name,
+                    type,
+                    color: document.getElementById('new-provider-color').value,
+                    notes: document.getElementById('new-provider-notes').value.trim(),
+                };
+                if (type === 'bedrock') {
+                    provider.aws_region = document.getElementById('new-provider-aws-region').value.trim();
+                    provider.aws_access_key_env = document.getElementById('new-provider-aws-key-env').value.trim();
+                    provider.aws_secret_key_env = document.getElementById('new-provider-aws-secret-env').value.trim();
+                } else if (type === 'openai-compatible') {
+                    provider.api_base = document.getElementById('new-provider-api-base').value.trim();
+                }
+                try {
+                    const res = await fetch('/api/providers', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(provider),
+                    });
+                    if (res.ok) {
+                        hideCreateProviderForm();
+                        showToast(`Provider "${name}" created`);
+                        loadProvidersPage();
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            async function saveProviderDetail(name) {
+                const type = document.getElementById('prov-type').value;
+                const provider = {
+                    name,
+                    display_name: document.getElementById('prov-display-name').value.trim(),
+                    type,
+                    color: document.getElementById('prov-color').value,
+                    notes: document.getElementById('prov-notes').value.trim(),
+                };
+                if (type === 'bedrock') {
+                    provider.aws_region = document.getElementById('prov-aws-region')?.value.trim() || '';
+                    provider.aws_access_key_env = document.getElementById('prov-aws-key-env')?.value.trim() || '';
+                    provider.aws_secret_key_env = document.getElementById('prov-aws-secret-env')?.value.trim() || '';
+                } else if (type === 'openai-compatible') {
+                    const apiBase = document.getElementById('prov-api-base');
+                    if (apiBase) provider.api_base = apiBase.value.trim();
+                }
+                try {
+                    const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(provider),
+                    });
+                    if (res.ok) {
+                        showToast('Provider updated');
+                        loadProvidersPage();
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            function showRenameProvider(name) {
+                const newName = prompt(`Rename provider "${name}" to:`, name);
+                if (!newName || newName === name) return;
+                renameProviderSubmit(name, newName);
+            }
+
+            async function renameProviderSubmit(oldName, newName) {
+                try {
+                    const res = await fetch(`/api/providers/${encodeURIComponent(oldName)}/rename`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({new_name: newName}),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        showToast(`Provider renamed to "${newName}"`);
+                        loadProvidersPage();
+                    } else {
+                        showToast(`Error: ${data.detail || 'Failed to rename'}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            async function deleteProviderConfirm(name) {
+                const models = (window._allModels || []).filter(m => m.provider === name);
+                const msg = models.length > 0
+                    ? `${models.length} model(s) use this provider. They will show as unassigned. Delete anyway?`
+                    : `Delete provider "${name}"?`;
+                if (!confirm(msg)) return;
+                try {
+                    const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {method: 'DELETE'});
+                    if (res.ok) {
+                        showToast(`Provider "${name}" deleted`);
+                        document.getElementById('provider-detail-section').style.display = 'none';
+                        loadProvidersPage();
+                        loadModels(activeFilter);
+                    } else {
+                        const err = await res.json();
+                        showToast(`Error: ${err.detail}`, 'error');
+                    }
+                } catch (e) {
+                    showToast(`Error: ${e.message}`, 'error');
+                }
+            }
+
+            function renderProviderSelector() {
+                const wrap = document.getElementById('model-provider-selector-wrap');
+                const providers = window._allProviders || [];
+                if (providers.length === 0) {
+                    wrap.innerHTML = '';
+                    return;
+                }
+                wrap.innerHTML = `
+                    <label for="model-provider-select" style="font-size:13px;color:#666;">Provider</label><br>
+                    <select id="model-provider-select" onchange="onModelProviderSelect()">
+                        <option value="">— None / manual config —</option>
+                        ${providers.map(p => `<option value="${p.name}">${p.display_name || p.name}</option>`).join('')}
+                    </select>
+                    <span id="provider-autofill-hint" class="hint" style="display:none;font-size:12px;color:#007bff;margin-left:8px;">Provider fields pre-filled below</span>
+                `;
+            }
+
+            async function onModelProviderSelect() {
+                const sel = document.getElementById('model-provider-select');
+                const name = sel.value;
+                const hint = document.getElementById('provider-autofill-hint');
+                if (!name) {
+                    hint.style.display = 'none';
+                    return;
+                }
+                const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
+                const data = await res.json();
+                const p = data.provider;
+                if (p.type === 'bedrock') {
+                    document.getElementById('provider-select').value = 'bedrock';
+                    loadProviderUI();
+                    setTimeout(() => {
+                        const regionEl = document.getElementById('bedrock-region');
+                        if (regionEl && p.aws_region) regionEl.value = p.aws_region;
+                    }, 100);
+                } else if (p.type === 'openai-compatible') {
+                    document.getElementById('provider-select').value = 'manual';
+                    loadProviderUI();
+                    setTimeout(() => {
+                        const apiBaseEl = document.getElementById('manual-api-base');
+                        if (apiBaseEl && p.api_base) apiBaseEl.value = p.api_base;
+                    }, 100);
+                }
+                hint.style.display = 'inline';
             }
 
             loadDashboard();

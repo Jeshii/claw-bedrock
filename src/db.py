@@ -41,6 +41,8 @@ def _migrate_yaml_to_db():
     except Exception as e:
         print(f"[DB] Migration error: {e}")
 
+    migrate_infer_providers()
+
 
 def get_all_models():
     """Get all configured models."""
@@ -222,6 +224,95 @@ def get_models_by_tag(tag_name):
     """Get all models that have a specific tag."""
     q = Query()
     return models_table.search(q.tags.any(tag_name))
+
+
+providers_table = db.table("providers")
+
+
+def get_all_providers():
+    """Get all provider definitions."""
+    return providers_table.all()
+
+
+def get_provider(name):
+    """Get a single provider by name."""
+    return providers_table.get(where("name") == name)
+
+
+def upsert_provider(provider: dict):
+    """Create or update a provider. `provider` must include a `name` key."""
+    providers_table.upsert(provider, where("name") == provider["name"])
+
+
+def delete_provider(name):
+    """Delete a provider definition.
+
+    Does NOT remove the `provider` field from models — those models will
+    show an 'unknown provider' state in the UI, prompting reassignment.
+    """
+    providers_table.remove(where("name") == name)
+
+
+def rename_provider(old_name, new_name):
+    """Rename a provider and update all model references."""
+    provider = providers_table.get(where("name") == old_name)
+    if not provider:
+        return False
+    providers_table.remove(where("name") == old_name)
+    provider["name"] = new_name
+    providers_table.insert(provider)
+    models_table.update(
+        {"provider": new_name},
+        where("provider") == old_name,
+    )
+    return True
+
+
+def get_models_by_provider(provider_name):
+    """Get all models assigned to a specific provider."""
+    return models_table.search(where("provider") == provider_name)
+
+
+def set_model_provider(model_name, provider_name):
+    """Assign a provider to a model."""
+    return models_table.update(
+        {"provider": provider_name},
+        where("model_name") == model_name,
+    )
+
+
+def migrate_infer_providers():
+    """Scan existing models and auto-create provider records based on
+    patterns in litellm_params (aws_region, api_base, etc.).
+    Only runs if providers_table is empty.
+    """
+    if providers_table.all():
+        return
+
+    providers_seen: dict[str, dict] = {}
+    for model in models_table.all():
+        params = model.get("litellm_params", {})
+        region = params.get("aws_region_name") or params.get("aws_region")
+        if region:
+            key = f"bedrock-{region}"
+            if key not in providers_seen:
+                providers_seen[key] = {
+                    "name": key,
+                    "display_name": f"AWS Bedrock ({region})",
+                    "type": "bedrock",
+                    "aws_region": region,
+                    "color": "#FF9900",
+                }
+            models_table.update(
+                {"provider": key},
+                where("model_name") == model["model_name"],
+            )
+
+    for p in providers_seen.values():
+        providers_table.insert(p)
+
+    if providers_seen:
+        print(f"[DB] Inferred {len(providers_seen)} providers from existing models")
 
 
 def close_db():

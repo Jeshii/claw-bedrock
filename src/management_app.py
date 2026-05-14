@@ -315,15 +315,13 @@ async def get_dashboard():
     """Return dashboard statistics."""
     models = db.get_all_models()
     model_count = len(models)
-    providers = {}
+    provider_counts: dict[str, int] = {}
     for m in models:
-        provider = (
-            m.get("litellm_params", {}).get("model", "").split("/")[0] or "unknown"
-        )
-        providers[provider] = providers.get(provider, 0) + 1
+        p = m.get("provider") or "unassigned"
+        provider_counts[p] = provider_counts.get(p, 0) + 1
     return {
         "model_count": model_count,
-        "providers": providers,
+        "providers": provider_counts,
         "version": get_version(),
     }
 
@@ -399,8 +397,10 @@ async def get_token_refresher_state():
 async def list_models(tag: Optional[str] = Query(None)):
     """List all configured models, optionally filtered by tag."""
     if tag:
-        return {"models": db.get_models_by_tag(tag)}
-    return {"models": db.get_all_models()}
+        models = db.get_models_by_tag(tag)
+    else:
+        models = db.get_all_models()
+    return {"models": [enrich_model_with_provider(dict(m)) for m in models]}
 
 
 @app.post("/api/models/reload")
@@ -884,6 +884,68 @@ async def remove_model_tag(encoded_name: str, tag_name: str):
     if not ok:
         raise HTTPException(404, f"Model '{model_name}' not found")
     return {"model": model_name, "tag": tag_name}
+
+
+# ── Providers ──────────────────────────────────────────────────────────────
+
+
+@app.get("/api/providers")
+async def list_providers():
+    """List all provider definitions."""
+    return {"providers": db.get_all_providers()}
+
+
+@app.post("/api/providers")
+async def create_provider(body: Dict):
+    """Create or update a provider."""
+    if not body.get("name"):
+        raise HTTPException(400, "name is required")
+    db.upsert_provider(body)
+    return {"success": True}
+
+
+@app.get("/api/providers/{name}")
+async def get_provider_detail(name: str):
+    """Get a single provider and its models."""
+    provider = db.get_provider(name)
+    if not provider:
+        raise HTTPException(404, "Not found")
+    models = db.get_models_by_provider(name)
+    return {"provider": provider, "models": models}
+
+
+@app.put("/api/providers/{name}")
+async def update_provider(name: str, body: Dict):
+    """Update a provider."""
+    body["name"] = name
+    db.upsert_provider(body)
+    return {"success": True}
+
+
+@app.delete("/api/providers/{name}")
+async def delete_provider_route(name: str):
+    """Delete a provider definition."""
+    db.delete_provider(name)
+    return {"success": True}
+
+
+@app.post("/api/providers/{old_name}/rename")
+async def rename_provider_route(old_name: str, body: Dict):
+    """Rename a provider and update all model references."""
+    new_name = body.get("new_name")
+    if not new_name:
+        raise HTTPException(400, "new_name is required")
+    success = db.rename_provider(old_name, new_name)
+    return {"success": success}
+
+
+def enrich_model_with_provider(model: dict) -> dict:
+    """Attach provider display info to a model for UI use."""
+    provider_name = model.get("provider")
+    if provider_name:
+        provider = db.get_provider(provider_name)
+        model["_provider"] = provider
+    return model
 
 
 def merge_configs():
