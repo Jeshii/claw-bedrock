@@ -21,17 +21,7 @@
     </div>
     <div class="section">
         <h2>Usage</h2>
-        <p style="margin-bottom:8px;">Once a master key is set, include it in all proxy requests:</p>
-        <pre class="code-block">curl http://localhost:4000/chat/completions \
-  -H "Authorization: Bearer sk-claw-xxxx" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "my-model", "messages": [{"role": "user", "content": "Hello"}]}'</pre>
-        <p>Or with the OpenAI Python client:</p>
-        <pre class="code-block">from openai import OpenAI
-client = OpenAI(
-    base_url="http://localhost:4000",
-    api_key="sk-claw-xxxx",
-)</pre>
+        <p>See <a href="#" onclick="showPage('help'); return false;">Help → Client Integrations</a> for usage examples and client setup.</p>
     </div>
 </div>
 <dialog id="key-reveal-modal"

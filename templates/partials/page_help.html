@@ -22,13 +22,35 @@
         </p>
     </div>
     <div class="section help-section">
-        <h2>Client Integrations</h2>
+        <h2>Usage</h2>
+        <p>Point your OpenAI-compatible client at the proxy:</p>
+        <pre class="code-block">curl <span id="help-curl-base">detecting...</span>/chat/completions \
+  -H "Authorization: Bearer sk-claw-xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "my-model", "messages": [{"role": "user", "content": "Hello"}]}'</pre>
+        <p>Or with the OpenAI Python client:</p>
+        <pre class="code-block">from openai import OpenAI
+client = OpenAI(
+    base_url="<span id="help-py-base">detecting...</span>",
+    api_key="sk-claw-xxxx",
+)</pre>
+        <h3>opencode.ai</h3>
         <p>
-            <strong>opencode.ai:</strong> Set baseURL to <code id="opencode-url">detecting...</code> in <code>~/.config/opencode/opencode.json</code>
+            Set <code>baseURL</code> in <code>~/.config/opencode/opencode.json</code>:
         </p>
+        <pre class="code-block">{
+  "options": {
+    "baseURL": "<span id="opencode-url">detecting...</span>",
+    "apiKey": "sk-claw-xxxx"
+  }
+}</pre>
         <p>
-            <strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</code>
+            To keep the key out of the config file, export it as an env variable and reference it with <code>{env:MY_API_KEY}</code>.
         </p>
+        <h3>claw-code</h3>
+        <p>Set these environment variables:</p>
+        <pre class="code-block">OPENAI_API_KEY="dummy"
+OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</pre>
     </div>
     <div class="section help-section">
         <h2>Adding Models</h2>
