@@ -10,7 +10,6 @@
     - use `biome check --write .` for static HTML/JS files
     - for Jinja2/HTML templates (e.g. `templates/`), use `djlint` instead — biome cannot parse `{{ }}` template expressions
     - run `djlint templates/ --reformat` to auto-format, then `djlint templates/` to check
-    - note: djlint H021 (inline styles) warnings are expected for self-contained single-file UIs — ignore them
     - note: djlint H030/H031 (meta description/keywords) are SEO suggestions — ignore for internal tools
 - Never commit if linting or syntax checks fail
 - Ask before pushing since develop branch will build on push
