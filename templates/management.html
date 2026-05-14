@@ -234,6 +234,9 @@
                     <a onclick="showPage('auth')">Authentication</a>
                 </li>
                 <li>
+                    <a onclick="showPage('security')">Security</a>
+                </li>
+                <li>
                     <a onclick="showPage('models')">Models</a>
                 </li>
                 <li>
@@ -274,6 +277,89 @@
                     <div id="auth-status"></div>
                 </div>
             </div>
+            <!-- Security Page -->
+            <div id="page-security" class="page">
+                <h1>Security</h1>
+                <div class="section">
+                    <h2>API Key</h2>
+                    <p class="muted" style="color:#666;margin-bottom:12px;">
+                        When a master key is set, all LiteLLM proxy requests must include
+                        <code>Authorization: Bearer &lt;key&gt;</code>.
+                    </p>
+                    <div id="key-status" style="margin-bottom:12px;"></div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <button type="button"
+                                id="btn-generate-key"
+                                onclick="generateKey()"
+                                style="background:#007bff;
+                                       color:white;
+                                       border:1px solid #007bff;
+                                       padding:8px 16px;
+                                       border-radius:4px;
+                                       cursor:pointer;
+                                       font-size:14px">Generate New Key</button>
+                        <button type="button"
+                                id="btn-revoke-key"
+                                onclick="revokeKey()"
+                                style="display:none;
+                                       background:#dc3545;
+                                       color:white;
+                                       border:1px solid #dc3545;
+                                       padding:8px 16px;
+                                       border-radius:4px;
+                                       cursor:pointer;
+                                       font-size:14px">Revoke Key</button>
+                    </div>
+                </div>
+                <div class="section">
+                    <h2>Usage</h2>
+                    <p style="margin-bottom:8px;">Once a master key is set, include it in all proxy requests:</p>
+                    <pre style="background:#f5f5f5;padding:10px;border-radius:4px;overflow-x:auto;margin:10px 0;">curl http://localhost:4000/chat/completions \
+  -H "Authorization: Bearer sk-claw-xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "my-model", "messages": [{"role": "user", "content": "Hello"}]}'</pre>
+                    <p>Or with the OpenAI Python client:</p>
+                    <pre style="background:#f5f5f5;padding:10px;border-radius:4px;overflow-x:auto;margin:10px 0;">from openai import OpenAI
+client = OpenAI(
+    base_url="http://localhost:4000",
+    api_key="sk-claw-xxxx",
+)</pre>
+                </div>
+            </div>
+            <dialog id="key-reveal-modal"
+                    style="padding:24px;
+                           border:1px solid #ddd;
+                           border-radius:8px;
+                           max-width:600px">
+                <h3 style="margin-top:0;">Your New API Key</h3>
+                <p style="color:#dc3545;font-size:14px;">Copy this now — it will not be shown again.</p>
+                <code id="revealed-key"
+                      style="display:block;
+                             padding:12px;
+                             background:#f5f5f5;
+                             border-radius:4px;
+                             font-size:14px;
+                             word-break:break-all;
+                             margin:12px 0"></code>
+                <div style="display:flex;gap:8px;">
+                    <button type="button"
+                            onclick="navigator.clipboard.writeText(document.getElementById('revealed-key').textContent);showToast('Copied to clipboard')"
+                            style="padding:8px 16px;
+                                   cursor:pointer;
+                                   border:1px solid #ddd;
+                                   border-radius:4px;
+                                   background:white;
+                                   font-size:14px">Copy</button>
+                    <button type="button"
+                            onclick="document.getElementById('key-reveal-modal').close()"
+                            style="padding:8px 16px;
+                                   cursor:pointer;
+                                   border:1px solid #ddd;
+                                   border-radius:4px;
+                                   background:white;
+                                   font-size:14px">Done</button>
+                </div>
+            </dialog>
             <!-- Models Page -->
             <div id="page-models" class="page">
                 <h1>Models</h1>
@@ -973,6 +1059,7 @@
                 document.querySelectorAll('.nav a').forEach(a => { a.classList.remove('active'); });
                 event.target.classList.add('active');
                 if (pageId === 'dashboard') loadDashboard();
+                if (pageId === 'security') loadKeyStatus();
                 if (pageId === 'models') loadModels();
                 if (pageId === 'tags') loadTagsPage();
                 if (pageId === 'logs') {
@@ -992,11 +1079,44 @@
                     a.classList.toggle('active', a.getAttribute('onclick') === `showPage('${pageId}')`);
                 });
                 if (pageId === 'auth') loadAuth();
+                if (pageId === 'security') loadKeyStatus();
             }
 
             function hideLoadingOverlay() {
                 const overlay = document.getElementById('loading-overlay');
                 if (overlay) overlay.remove();
+            }
+
+            // === SECURITY KEY FUNCTIONS ===
+
+            async function loadKeyStatus() {
+                const res = await fetch('/api/security/key');
+                const data = await res.json();
+                const statusEl = document.getElementById('key-status');
+                const revokeBtn = document.getElementById('btn-revoke-key');
+
+                if (data.enabled) {
+                    statusEl.innerHTML = '<span style="display:inline-block;padding:4px 10px;border-radius:4px;background:#d4edda;color:#155724;font-weight:600;margin-bottom:4px;">Active</span><br><code style="font-size:13px;word-break:break-all;">' + data.masked_key + '</code>';
+                    revokeBtn.style.display = 'inline-block';
+                } else {
+                    statusEl.innerHTML = '<span style="display:inline-block;padding:4px 10px;border-radius:4px;background:#e2e3e5;color:#383d41;font-weight:600;">Not configured</span>';
+                    revokeBtn.style.display = 'none';
+                }
+            }
+
+            async function generateKey() {
+                if (!confirm('Generate a new key? Any existing key will be invalidated.')) return;
+                const res = await fetch('/api/security/key/generate', { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('revealed-key').textContent = data.key;
+                document.getElementById('key-reveal-modal').showModal();
+                loadKeyStatus();
+            }
+
+            async function revokeKey() {
+                if (!confirm('Revoke the current key? The proxy will become unauthenticated.')) return;
+                await fetch('/api/security/key', { method: 'DELETE' });
+                loadKeyStatus();
             }
 
             async function loadDashboard() {

@@ -38,6 +38,24 @@ LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
 VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
 BEDROCK_MODELS_PATH = os.path.join(BASE_DIR, "bedrock_models.json")
 
+LITELLM_BASE_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
+
+
+def _reload_litellm_config():
+    """Push updated config to LiteLLM without restart."""
+    config = db.get_models_for_litellm()
+    try:
+        key = db.get_master_key()
+        headers = {"Authorization": f"Bearer {key}"} if key else {}
+        requests.post(
+            f"{LITELLM_BASE_URL}/config/update",
+            json=config,
+            headers=headers,
+            timeout=5,
+        )
+    except Exception as e:
+        print(f"[reload] Config reload failed: {e}")
+
 
 def get_version():
     """Get version baked in at build time."""
@@ -257,6 +275,32 @@ async def submit_auth_code(body: dict):
 async def retry_auth():
     """Reset failure state and start a new aws login --remote process."""
     token_refresher.token_refresher.retry_login()
+    return {"success": True}
+
+
+@app.get("/api/security/key")
+async def get_key_status():
+    """Get current master key status (masked)."""
+    key = db.get_master_key()
+    if key:
+        masked = key[:12] + "..." + key[-4:]
+        return {"enabled": True, "masked_key": masked}
+    return {"enabled": False}
+
+
+@app.post("/api/security/key/generate")
+async def generate_key():
+    """Generate a new master key and reload LiteLLM config."""
+    key = db.generate_master_key()
+    _reload_litellm_config()
+    return {"success": True, "key": key}
+
+
+@app.delete("/api/security/key")
+async def revoke_key():
+    """Revoke the master key (disables auth on next reload)."""
+    db.clear_master_key()
+    _reload_litellm_config()
     return {"success": True}
 
 

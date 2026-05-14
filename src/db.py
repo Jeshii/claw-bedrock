@@ -1,5 +1,6 @@
 from tinydb import TinyDB, where, Query
 import os
+import secrets
 import yaml
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
@@ -109,11 +110,32 @@ def set_router_settings(router_settings):
     )
 
 
+def get_master_key():
+    """Get the LiteLLM master key, or None if not set."""
+    return get_setting("litellm_master_key", None)
+
+
+def generate_master_key():
+    """Generate a new cryptographically secure master key and persist it."""
+    key = "sk-claw-" + secrets.token_urlsafe(32)
+    set_setting("litellm_master_key", key)
+    return key
+
+
+def clear_master_key():
+    """Remove the master key (disables auth on next reload)."""
+    settings_table.remove(where("key") == "litellm_master_key")
+
+
 def get_litellm_settings():
-    """Get litellm_settings with token_refresher baked in."""
-    return {
+    """Get litellm_settings with token_refresher and optional master_key."""
+    settings = {
         "callbacks": ["token_refresher.BedrockTokenRefresher"],
     }
+    key = get_master_key()
+    if key:
+        settings["master_key"] = key
+    return settings
 
 
 def model_name_exists(model_name):
