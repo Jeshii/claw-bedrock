@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Claw Bedrock Management</title>
-    <script id="config-data" type="application/json">{"use_prefix": {{ use_prefix|lower }}}</script>
-    <script>window.USE_PREFIX = JSON.parse(document.getElementById('config-data').textContent).use_prefix;</script>
-    <script id="auth-data" type="application/json">{"auth_required": {{ auth_required|lower }}}</script>
-    <script>window.AUTH_REQUIRED = JSON.parse(document.getElementById('auth-data').textContent).auth_required;</script>
-    <style>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Claw Bedrock Management</title>
+        <script id="config-data" type="application/json">{"use_prefix": {{ use_prefix|lower }}}</script>
+        <script>window.USE_PREFIX = JSON.parse(document.getElementById('config-data').textContent).use_prefix;</script>
+        <script id="auth-data" type="application/json">{"auth_required": {{ auth_required|lower }}}</script>
+        <script>window.AUTH_REQUIRED = JSON.parse(document.getElementById('auth-data').textContent).auth_required;</script>
+        <style>
         @font-face {
             font-family: 'B52s';
             src: url('/static/unofficial-b52s-Regular.ttf') format('truetype');
@@ -214,275 +214,589 @@
         body.dark .loading-text { color: #999; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .toast-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
-    </style>
-</head>
-<body>
-    <div id="loading-overlay">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">Loading…</div>
-    </div>
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <h2>🦞claw-bedrock🪨</h2>
-            <div class="version">v{{ version }}</div>
+        </style>
+    </head>
+    <body>
+        <div id="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading…</div>
         </div>
-        <ul class="nav">
-            <li><a onclick="showPage('dashboard')" class="active">Dashboard</a></li>
-            <li><a onclick="showPage('auth')">Authentication</a></li>
-            <li><a onclick="showPage('models')">Models</a></li>
-            <li><a onclick="showPage('tags')">Tags</a></li>
-            <li><a onclick="showPage('logs')">Logs</a></li>
-            <li><a onclick="showPage('help')">Help</a></li>
-        </ul>
-        <div class="sidebar-footer">
-            <button class="theme-toggle" onclick="toggleTheme()"></button>
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>🦞claw-bedrock🪨</h2>
+                <div class="version">v{{ version }}</div>
+            </div>
+            <ul class="nav">
+                <li>
+                    <a onclick="showPage('dashboard')" class="active">Dashboard</a>
+                </li>
+                <li>
+                    <a onclick="showPage('auth')">Authentication</a>
+                </li>
+                <li>
+                    <a onclick="showPage('models')">Models</a>
+                </li>
+                <li>
+                    <a onclick="showPage('tags')">Tags</a>
+                </li>
+                <li>
+                    <a onclick="showPage('logs')">Logs</a>
+                </li>
+                <li>
+                    <a onclick="showPage('help')">Help</a>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <button type="button" class="theme-toggle" onclick="toggleTheme()"></button>
+            </div>
         </div>
-    </div>
-
-    <div class="main">
-        <div id="toast-container"></div>
-
-        <!-- Dashboard Page -->
-        <div id="page-dashboard" class="page active">
-            <h1>Dashboard</h1>
-            <!-- Auth banner: shown on dashboard whenever AWS login is needed -->
-            <div id="dashboard-auth-banner">
-                <div id="banner-body"></div>
-                <div class="banner-actions">
-                    <button class="go-auth-btn" onclick="showPage2('auth')">Go to Authentication &rarr;</button>
+        <div class="main">
+            <div id="toast-container"></div>
+            <!-- Dashboard Page -->
+            <div id="page-dashboard" class="page active">
+                <h1>Dashboard</h1>
+                <!-- Auth banner: shown on dashboard whenever AWS login is needed -->
+                <div id="dashboard-auth-banner">
+                    <div id="banner-body"></div>
+                    <div class="banner-actions">
+                        <button type="button" class="go-auth-btn" onclick="showPage2('auth')">Go to Authentication →</button>
+                    </div>
+                </div>
+                <div class="section" id="dashboard-info">
+                    <h2>Server Information</h2>
+                    <div id="server-status">Loading...</div>
                 </div>
             </div>
-            <div class="section" id="dashboard-info">
-                <h2>Server Information</h2>
-                <div id="server-status">Loading...</div>
-            </div>
-        </div>
-
-        <!-- Authentication Page -->
-        <div id="page-auth" class="page">
-            <h1>Authentication</h1>
-            <div class="section" id="auth-section">
-                <div id="auth-status"></div>
-            </div>
-        </div>
-
-        <!-- Models Page -->
-        <div id="page-models" class="page">
-            <h1>Models</h1>
-            <div class="section">
-                <h2>Configured Models</h2>
-                <div class="filter-bar" id="model-filter-bar" style="position:relative;"></div>
-                <div id="models-list"></div>
-                <button onclick="showAddModel()">Add New Model</button>
-                <button onclick="reloadLiteLLM()" title="Manually trigger LiteLLM config reload"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Reload LiteLLM</button>
-             </div>
-            <div class="section" id="add-model-section" style="display:none;">
-                <h2>Add New Model <button onclick="closeAddModel()" style="float: right;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Close</button></h2>
-                <select id="provider-select" onchange="loadProviderUI()">
-                    <option value="">Select Provider</option>
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="ollama">Ollama (Remote)</option>
-                    <option value="bedrock">Bedrock (Mantle)</option>
-                    <option value="manual">Manual</option>
-                </select>
-                <div id="provider-ui"></div>
-            </div>
-            <div class="section">
-                <h2>Settings</h2>
-                <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 6px;">
-                    <label style="display: flex; align-items: flex-start; gap: 6px; cursor: pointer;">
-                        <input type="checkbox" id="use-prefix-toggle" onchange="togglePrefix()" style="margin-top: 3px; flex-shrink: 0; width: 16px;">
-                        <span>Add <code>claw-bedrock/</code> prefix to model names</span>
-                    </label>
-
+            <!-- Authentication Page -->
+            <div id="page-auth" class="page">
+                <h1>Authentication</h1>
+                <div class="section" id="auth-section">
+                    <div id="auth-status"></div>
                 </div>
             </div>
-        </div>
-
-        <!-- Tags Page -->
-        <div id="page-tags" class="page">
-            <h1>Tags</h1>
-            <div class="section">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                    <h2 style="margin:0;">Manage Tags</h2>
-                    <button onclick="showCreateTagInput()" id="create-tag-btn">Create Tag</button>
-                </div>
-                <div id="create-tag-row" style="display:none; margin-bottom:12px; gap:8px; align-items:center;">
-                    <input id="new-tag-name" placeholder="Tag name..." style="width:200px;" onkeydown="if(event.key==='Enter')createTagFromInput();" />
-                    <div class="color-palette" id="new-tag-palette"></div>
-                    <button onclick="createTagFromInput()" style="font-size:12px; padding:4px 10px;">Add</button>
-                    <button onclick="hideCreateTagInput()" style="font-size:12px; padding:4px 10px; background:#6c757d;color:white;border:none;border-radius:3px;cursor:pointer;">Cancel</button>
-                </div>
-                <div class="tag-list" id="tags-list"></div>
-            </div>
-        </div>
-
-        <!-- Logs Page -->
-        <div id="page-logs" class="page">
-            <h1>Logs</h1>
-            <div class="section">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                    <h2 style="margin:0;">LiteLLM Logs</h2>
-                    <button
-                        onclick="copyLogs()"
-                        id="copy-logs-btn"
-                        title="Copy log contents"
-                        style="padding:4px 6px; background:none; border:1px solid #ccc; border-radius:4px; cursor:pointer; line-height:0;"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <!-- Models Page -->
+            <div id="page-models" class="page">
+                <h1>Models</h1>
+                <div class="section">
+                    <h2>Configured Models</h2>
+                    <div class="filter-bar" id="model-filter-bar" style="position:relative;"></div>
+                    <div id="models-list"></div>
+                    <button type="button" onclick="showAddModel()">Add New Model</button>
+                    <button type="button"
+                            onclick="reloadLiteLLM()"
+                            title="Manually trigger LiteLLM config reload">
+                        <svg width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             style="vertical-align:middle"
+                             aria-hidden="true">
+                            <path d="M1 4v6h6M23 20v-6h-6" />
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+                        </svg>
+                        Reload LiteLLM
                     </button>
                 </div>
-                <button onclick="loadLogs()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Refresh Logs</button>
-                 <button id="auto-refresh-toggle" onclick="toggleAutoRefresh('logs')" title="Auto-refresh logs" style="padding:4px 8px; border:1px solid #ccc; border-radius:4px; cursor:pointer; line-height:0;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-                </button>
-                <select id="auto-refresh-interval" style="padding:4px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
-                    <option value="2000">2s</option>
-                    <option value="5000" selected>5s</option>
-                    <option value="10000">10s</option>
-                </select>
-                <select id="log-lines" onchange="loadLogs()">
-                    <option value="50">Last 50 lines</option>
-                    <option value="100">Last 100 lines</option>
-                    <option value="200">Last 200 lines</option>
-                </select>
-                <pre id="logs-output" style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; font-size: 12px; display: none;"></pre>
-                 <button onclick="toggleLog('logs-output', 'logs-toggle')" id="logs-toggle" style="font-size: 12px; padding:4px 8px; border:1px solid #ccc; border-radius:4px; cursor:pointer; margin-top: 8px;">Show Logs</button>
-            </div>
-            <div class="section">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                    <h2 style="margin:0;">TokenRefresher Logs</h2>
-                    <button
-                        onclick="copyDebugLogs()"
-                        id="copy-debug-logs-btn"
-                        title="Copy debug log contents"
-                        style="padding:4px 6px; background:none; border:1px solid #ccc; border-radius:4px; cursor:pointer; line-height:0;"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                    </button>
+                <div class="section" id="add-model-section" style="display:none;">
+                    <h2>
+                        Add New Model
+                        <button type="button" onclick="closeAddModel()" style="float: right;">
+                            <svg width="14"
+                                 height="14"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2"
+                                 style="vertical-align:middle"
+                                 aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                            Close
+                        </button>
+                    </h2>
+                    <select id="provider-select" onchange="loadProviderUI()">
+                        <option value="">Select Provider</option>
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="ollama">Ollama (Remote)</option>
+                        <option value="bedrock">Bedrock (Mantle)</option>
+                        <option value="manual">Manual</option>
+                    </select>
+                    <div id="provider-ui"></div>
                 </div>
-                <button onclick="loadDebugLogs()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Refresh Debug Logs</button>
-                <button id="auto-refresh-debug-toggle" onclick="toggleAutoRefresh('debug')" title="Auto-refresh debug logs" style="padding:4px 8px; border:1px solid #ccc; border-radius:4px; cursor:pointer; line-height:0;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-                </button>
-                <select id="auto-refresh-debug-interval" style="padding:4px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
-                    <option value="2000">2s</option>
-                    <option value="5000" selected>5s</option>
-                    <option value="10000">10s</option>
-                </select>
-                <select id="debug-log-lines" onchange="loadDebugLogs()">
-                    <option value="50">Last 50 lines</option>
-                    <option value="100">Last 100 lines</option>
-                    <option value="200">Last 200 lines</option>
-                </select>
-                <pre id="debug-logs-output" style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; font-size: 12px; display: none;"></pre>
-                 <button onclick="toggleLog('debug-logs-output', 'debug-logs-toggle')" id="debug-logs-toggle" style="font-size: 12px; padding:4px 8px; border:1px solid #ccc; border-radius:4px; cursor:pointer; margin-top: 8px;">Show Logs</button>
-            </div>
-            <div class="section">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                    <h2 style="margin:0;">Container Logs</h2>
-                    <button
-                        onclick="copyContainerLogs()"
-                        id="copy-container-logs-btn"
-                        title="Copy container log contents"
-                        style="padding:4px 6px; background:none; border:1px solid #ccc; border-radius:4px; cursor:pointer; line-height:0;"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                    </button>
+                <div class="section">
+                    <h2>Settings</h2>
+                    <div style="display: flex;
+                                flex-direction: column;
+                                align-items: flex-start;
+                                gap: 6px">
+                        <label style="display: flex;
+                                      align-items: flex-start;
+                                      gap: 6px;
+                                      cursor: pointer">
+                            <input type="checkbox"
+                                   id="use-prefix-toggle"
+                                   onchange="togglePrefix()"
+                                   style="margin-top: 3px;
+                                          flex-shrink: 0;
+                                          width: 16px">
+                            <span>Add <code>claw-bedrock/</code> prefix to model names</span>
+                        </label>
+                    </div>
                 </div>
-                <button onclick="loadContainerLogs()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Refresh Container Logs</button>
-                <button id="auto-refresh-container-toggle" onclick="toggleAutoRefresh('container')" title="Auto-refresh container logs" style="padding:4px 8px; border:1px solid #ccc; border-radius:4px; cursor:pointer; line-height:0;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-                </button>
-                <select id="auto-refresh-container-interval" style="padding:4px; border:1px solid #ccc; border-radius:4px; font-size:12px;">
-                    <option value="2000">2s</option>
-                    <option value="5000" selected>5s</option>
-                    <option value="10000">10s</option>
-                </select>
-                <select id="container-log-lines" onchange="loadContainerLogs()">
-                    <option value="50">Last 50 lines</option>
-                    <option value="100">Last 100 lines</option>
-                    <option value="200">Last 200 lines</option>
-                </select>
-                <pre id="container-logs-output" style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; font-size: 12px; display: none;"></pre>
-                <button onclick="toggleLog('container-logs-output', 'container-logs-toggle')" id="container-logs-toggle" style="font-size: 12px; padding:4px 8px; border:1px solid #ccc; border-radius:4px; cursor:pointer; margin-top: 8px;">Show Logs</button>
+            </div>
+            <!-- Tags Page -->
+            <div id="page-tags" class="page">
+                <h1>Tags</h1>
+                <div class="section">
+                    <div style="display:flex;
+                                align-items:center;
+                                justify-content:space-between;
+                                margin-bottom:12px">
+                        <h2 style="margin:0;">Manage Tags</h2>
+                        <button type="button" onclick="showCreateTagInput()" id="create-tag-btn">Create Tag</button>
+                    </div>
+                    <div id="create-tag-row"
+                         style="display:none;
+                                margin-bottom:12px;
+                                gap:8px;
+                                align-items:center">
+                        <input id="new-tag-name"
+                               placeholder="Tag name..."
+                               style="width:200px"
+                               onkeydown="if(event.key==='Enter')createTagFromInput();" />
+                        <div class="color-palette" id="new-tag-palette"></div>
+                        <button type="button"
+                                onclick="createTagFromInput()"
+                                style="font-size:12px;
+                                       padding:4px 10px">Add</button>
+                        <button type="button"
+                                onclick="hideCreateTagInput()"
+                                style="font-size:12px;
+                                       padding:4px 10px;
+                                       background:#6c757d;
+                                       color:white;
+                                       border:none;
+                                       border-radius:3px;
+                                       cursor:pointer">Cancel</button>
+                    </div>
+                    <div class="tag-list" id="tags-list"></div>
+                </div>
+            </div>
+            <!-- Logs Page -->
+            <div id="page-logs" class="page">
+                <h1>Logs</h1>
+                <div class="section">
+                    <div style="display:flex;
+                                align-items:center;
+                                justify-content:space-between;
+                                margin-bottom:8px">
+                        <h2 style="margin:0;">LiteLLM Logs</h2>
+                        <button type="button"
+                                onclick="copyLogs()"
+                                id="copy-logs-btn"
+                                title="Copy log contents"
+                                style="padding:4px 6px;
+                                       background:none;
+                                       border:1px solid #ccc;
+                                       border-radius:4px;
+                                       cursor:pointer;
+                                       line-height:0">
+                            <svg width="16"
+                                 height="16"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2"
+                                 style="vertical-align:middle"
+                                 aria-hidden="true">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                        </button>
+                    </div>
+                    <button type="button" onclick="loadLogs()">
+                        <svg width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             style="vertical-align:middle"
+                             aria-hidden="true">
+                            <path d="M1 4v6h6M23 20v-6h-6" />
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+                        </svg>
+                        Refresh Logs
+                    </button>
+                    <button type="button"
+                            id="auto-refresh-toggle"
+                            onclick="toggleAutoRefresh('logs')"
+                            title="Auto-refresh logs"
+                            style="padding:4px 8px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   cursor:pointer;
+                                   line-height:0">
+                        <svg width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             style="vertical-align:middle"
+                             aria-hidden="true">
+                            <path d="M1 4v6h6M23 20v-6h-6" />
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+                        </svg>
+                    </button>
+                    <select id="auto-refresh-interval"
+                            style="padding:4px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   font-size:12px">
+                        <option value="2000">2s</option>
+                        <option value="5000" selected>5s</option>
+                        <option value="10000">10s</option>
+                    </select>
+                    <select id="log-lines" onchange="loadLogs()">
+                        <option value="50">Last 50 lines</option>
+                        <option value="100">Last 100 lines</option>
+                        <option value="200">Last 200 lines</option>
+                    </select>
+                    <pre id="logs-output"
+                         style="background: #f5f5f5;
+                                padding: 10px;
+                                border-radius: 4px;
+                                max-height: 400px;
+                                overflow-y: auto;
+                                font-size: 12px;
+                                display: none"></pre>
+                    <button type="button"
+                            onclick="toggleLog('logs-output', 'logs-toggle')"
+                            id="logs-toggle"
+                            style="font-size: 12px;
+                                   padding:4px 8px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   cursor:pointer;
+                                   margin-top: 8px">Show Logs</button>
+                </div>
+                <div class="section">
+                    <div style="display:flex;
+                                align-items:center;
+                                justify-content:space-between;
+                                margin-bottom:8px">
+                        <h2 style="margin:0;">TokenRefresher Logs</h2>
+                        <button type="button"
+                                onclick="copyDebugLogs()"
+                                id="copy-debug-logs-btn"
+                                title="Copy debug log contents"
+                                style="padding:4px 6px;
+                                       background:none;
+                                       border:1px solid #ccc;
+                                       border-radius:4px;
+                                       cursor:pointer;
+                                       line-height:0">
+                            <svg width="16"
+                                 height="16"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2"
+                                 style="vertical-align:middle"
+                                 aria-hidden="true">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                        </button>
+                    </div>
+                    <button type="button" onclick="loadDebugLogs()">
+                        <svg width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             style="vertical-align:middle"
+                             aria-hidden="true">
+                            <path d="M1 4v6h6M23 20v-6h-6" />
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+                        </svg>
+                        Refresh Debug Logs
+                    </button>
+                    <button type="button"
+                            id="auto-refresh-debug-toggle"
+                            onclick="toggleAutoRefresh('debug')"
+                            title="Auto-refresh debug logs"
+                            style="padding:4px 8px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   cursor:pointer;
+                                   line-height:0">
+                        <svg width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             style="vertical-align:middle"
+                             aria-hidden="true">
+                            <path d="M1 4v6h6M23 20v-6h-6" />
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+                        </svg>
+                    </button>
+                    <select id="auto-refresh-debug-interval"
+                            style="padding:4px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   font-size:12px">
+                        <option value="2000">2s</option>
+                        <option value="5000" selected>5s</option>
+                        <option value="10000">10s</option>
+                    </select>
+                    <select id="debug-log-lines" onchange="loadDebugLogs()">
+                        <option value="50">Last 50 lines</option>
+                        <option value="100">Last 100 lines</option>
+                        <option value="200">Last 200 lines</option>
+                    </select>
+                    <pre id="debug-logs-output"
+                         style="background: #f5f5f5;
+                                padding: 10px;
+                                border-radius: 4px;
+                                max-height: 400px;
+                                overflow-y: auto;
+                                font-size: 12px;
+                                display: none"></pre>
+                    <button type="button"
+                            onclick="toggleLog('debug-logs-output', 'debug-logs-toggle')"
+                            id="debug-logs-toggle"
+                            style="font-size: 12px;
+                                   padding:4px 8px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   cursor:pointer;
+                                   margin-top: 8px">Show Logs</button>
+                </div>
+                <div class="section">
+                    <div style="display:flex;
+                                align-items:center;
+                                justify-content:space-between;
+                                margin-bottom:8px">
+                        <h2 style="margin:0;">Container Logs</h2>
+                        <button type="button"
+                                onclick="copyContainerLogs()"
+                                id="copy-container-logs-btn"
+                                title="Copy container log contents"
+                                style="padding:4px 6px;
+                                       background:none;
+                                       border:1px solid #ccc;
+                                       border-radius:4px;
+                                       cursor:pointer;
+                                       line-height:0">
+                            <svg width="16"
+                                 height="16"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2"
+                                 style="vertical-align:middle"
+                                 aria-hidden="true">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                        </button>
+                    </div>
+                    <button type="button" onclick="loadContainerLogs()">
+                        <svg width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             style="vertical-align:middle"
+                             aria-hidden="true">
+                            <path d="M1 4v6h6M23 20v-6h-6" />
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+                        </svg>
+                        Refresh Container Logs
+                    </button>
+                    <button type="button"
+                            id="auto-refresh-container-toggle"
+                            onclick="toggleAutoRefresh('container')"
+                            title="Auto-refresh container logs"
+                            style="padding:4px 8px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   cursor:pointer;
+                                   line-height:0">
+                        <svg width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             style="vertical-align:middle"
+                             aria-hidden="true">
+                            <path d="M1 4v6h6M23 20v-6h-6" />
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
+                        </svg>
+                    </button>
+                    <select id="auto-refresh-container-interval"
+                            style="padding:4px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   font-size:12px">
+                        <option value="2000">2s</option>
+                        <option value="5000" selected>5s</option>
+                        <option value="10000">10s</option>
+                    </select>
+                    <select id="container-log-lines" onchange="loadContainerLogs()">
+                        <option value="50">Last 50 lines</option>
+                        <option value="100">Last 100 lines</option>
+                        <option value="200">Last 200 lines</option>
+                    </select>
+                    <pre id="container-logs-output"
+                         style="background: #f5f5f5;
+                                padding: 10px;
+                                border-radius: 4px;
+                                max-height: 400px;
+                                overflow-y: auto;
+                                font-size: 12px;
+                                display: none"></pre>
+                    <button type="button"
+                            onclick="toggleLog('container-logs-output', 'container-logs-toggle')"
+                            id="container-logs-toggle"
+                            style="font-size: 12px;
+                                   padding:4px 8px;
+                                   border:1px solid #ccc;
+                                   border-radius:4px;
+                                   cursor:pointer;
+                                   margin-top: 8px">Show Logs</button>
+                </div>
+            </div>
+            <!-- Help Page -->
+            <div id="page-help" class="page">
+                <h1>Help</h1>
+                <div class="section help-section">
+                    <h2>About</h2>
+                    <p>
+                        A LiteLLM proxy server that exposes AWS Bedrock Mantle models and other providers via a single OpenAI-compatible API. Useful for <a href="https://github.com/ultraworkers/claw-code">claw-code</a>, <a href="https://github.com/anomalyco/opencode">opencode</a>, or other apps expecting an OpenAI response.
+                    </p>
+                    <p>
+                        GitHub: <a href="https://github.com/jeshii/claw-bedrock">https://github.com/jeshii/claw-bedrock</a>
+                    </p>
+                </div>
+                <div class="section help-section">
+                    <h2>Endpoints</h2>
+                    <p>
+                        <strong>LiteLLM API:</strong> <code id="litellm-url">detecting...</code> (OpenAI-compatible)
+                    </p>
+                    <p>
+                        <strong>Management UI:</strong> <code id="mgmt-url">detecting...</code> (this page)
+                    </p>
+                    <p>
+                        <strong>List models:</strong> <code id="models-curl">detecting...</code>
+                    </p>
+                </div>
+                <div class="section help-section">
+                    <h2>Client Integrations</h2>
+                    <p>
+                        <strong>opencode.ai:</strong> Set baseURL to <code id="opencode-url">detecting...</code> in <code>~/.config/opencode/opencode.json</code>
+                    </p>
+                    <p>
+                        <strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</code>
+                    </p>
+                </div>
+                <div class="section help-section">
+                    <h2>Adding Models</h2>
+                    <p>
+                        Use the Models page to add from Bedrock, OpenRouter, Ollama, or manually. Changes auto-restart LiteLLM to pick up new config.
+                    </p>
+                    <p>
+                        <strong>Required Environment Variables:</strong>
+                    </p>
+                    <ul>
+                        <li>
+                            OpenRouter: <code>OPENROUTER_API_KEY</code>
+                        </li>
+                        <li>
+                            Ollama: <code>OLLAMA_API_BASE</code> (default: <code>http://localhost:11434</code>)
+                        </li>
+                        <li>
+                            Bedrock: <code>AWS_PROFILE</code>, <code>AWS_REGION</code>, <code>BEDROCK_MANTLE_API_BASE</code>
+                        </li>
+                    </ul>
+                </div>
+                <div class="section help-section">
+                    <h2>Managing Models</h2>
+                    <ul>
+                        <li>Click a model to expand details and manage it</li>
+                        <li>Rename makes the name editable; click Confirm to save</li>
+                        <li>Click Delete for confirmation flow (line turns red, wait 1s, then confirm)</li>
+                        <li>Models auto-restart LiteLLM to pick up changes</li>
+                    </ul>
+                </div>
+                <div class="section help-section">
+                    <h2>Login</h2>
+                    <p>
+                        The management UI is password-protected. Set the <code>MANAGEMENT_UI_PASSWORD</code> environment variable to enable it.
+                    </p>
+                    <ul>
+                        <li>Navigate to the management UI — you will be prompted to enter the password.</li>
+                        <li>After logging in, a session cookie is set that lasts 24 hours.</li>
+                        <li>
+                            Click <strong>Logout</strong> in the sidebar to end the session immediately.
+                        </li>
+                        <li>
+                            If <code>MANAGEMENT_UI_PASSWORD</code> is not set, no login is required.
+                        </li>
+                    </ul>
+                </div>
+                <div class="section help-section">
+                    <h2>Tags</h2>
+                    <p>
+                        Tags let you label and filter models on the Models page. Create tags on the Tags page, then add them to models via the model detail panel.
+                    </p>
+                    <ul>
+                        <li>
+                            <strong>Create a tag:</strong> Go to the Tags page, click <strong>Create Tag</strong>, type a name, pick a color, and press Add or hit Enter.
+                        </li>
+                        <li>
+                            <strong>Add a tag to a model:</strong> Click a model to expand it, then type in the <em>Add tag</em> input. Matching tags appear as you type — click one or press Enter to add it.
+                        </li>
+                        <li>
+                            <strong>Drag and drop:</strong> Tag chips on model rows can be dragged onto other models to copy the tag.
+                        </li>
+                        <li>
+                            <strong>Remove a tag:</strong> Click the <strong>×</strong> on a tag chip to remove it from that model.
+                        </li>
+                        <li>
+                            <strong>Filter by tag:</strong> Click a tag in the filter bar above the model list to show only models with that tag.
+                        </li>
+                        <li>
+                            <strong>Rename a tag:</strong> On the Tags page, click a tag name to make it editable.
+                        </li>
+                        <li>
+                            <strong>Change tag color:</strong> Click the color swatch next to a tag to pick a new color.
+                        </li>
+                        <li>
+                            <strong>Delete a tag:</strong> Click <strong>Delete</strong> on the Tags page to remove a tag entirely.
+                        </li>
+                    </ul>
+                </div>
             </div>
         </div>
-
-        <!-- Help Page -->
-        <div id="page-help" class="page">
-            <h1>Help</h1>
-            <div class="section help-section">
-                <h2>About</h2>
-                <p>A LiteLLM proxy server that exposes AWS Bedrock Mantle models and other providers via a single OpenAI-compatible API. Useful for <a href="https://github.com/ultraworkers/claw-code">claw-code</a>, <a href="https://github.com/anomalyco/opencode">opencode</a>, or other apps expecting an OpenAI response.</p>
-                <p>GitHub: <a href="https://github.com/jeshii/claw-bedrock">https://github.com/jeshii/claw-bedrock</a></p>
-            </div>
-            <div class="section help-section">
-                <h2>Endpoints</h2>
-                <p><strong>LiteLLM API:</strong> <code id="litellm-url">detecting...</code> (OpenAI-compatible)</p>
-                <p><strong>Management UI:</strong> <code id="mgmt-url">detecting...</code> (this page)</p>
-                <p><strong>List models:</strong> <code id="models-curl">detecting...</code></p>
-            </div>
-            <div class="section help-section">
-                <h2>Client Integrations</h2>
-                <p><strong>opencode.ai:</strong> Set baseURL to <code id="opencode-url">detecting...</code> in <code>~/.config/opencode/opencode.json</code></p>
-                <p><strong>claw-code:</strong> Set <code>OPENAI_API_KEY="dummy"</code> and <code>OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</code></p>
-            </div>
-            <div class="section help-section">
-                <h2>Adding Models</h2>
-                <p>Use the Models page to add from Bedrock, OpenRouter, Ollama, or manually. Changes auto-restart LiteLLM to pick up new config.</p>
-                <p><strong>Required Environment Variables:</strong></p>
-                <ul>
-                    <li>OpenRouter: <code>OPENROUTER_API_KEY</code></li>
-                    <li>Ollama: <code>OLLAMA_API_BASE</code> (default: <code>http://localhost:11434</code>)</li>
-                    <li>Bedrock: <code>AWS_PROFILE</code>, <code>AWS_REGION</code>, <code>BEDROCK_MANTLE_API_BASE</code></li>
-                </ul>
-            </div>
-            <div class="section help-section">
-                <h2>Managing Models</h2>
-                <ul>
-                     <li>Click a model to expand details and manage it</li>
-                     <li>Rename makes the name editable; click Confirm to save</li>
-                     <li>Click Delete for confirmation flow (line turns red, wait 1s, then confirm)</li>
-                    <li>Models auto-restart LiteLLM to pick up changes</li>
-                </ul>
-            </div>
-            <div class="section help-section">
-                <h2>Login</h2>
-                <p>The management UI is password-protected. Set the <code>MANAGEMENT_UI_PASSWORD</code> environment variable to enable it.</p>
-                <ul>
-                    <li>Navigate to the management UI — you will be prompted to enter the password.</li>
-                    <li>After logging in, a session cookie is set that lasts 24 hours.</li>
-                    <li>Click <strong>Logout</strong> in the sidebar to end the session immediately.</li>
-                    <li>If <code>MANAGEMENT_UI_PASSWORD</code> is not set, no login is required.</li>
-                </ul>
-            </div>
-            <div class="section help-section">
-                <h2>Tags</h2>
-                <p>Tags let you label and filter models on the Models page. Create tags on the Tags page, then add them to models via the model detail panel.</p>
-                <ul>
-                    <li><strong>Create a tag:</strong> Go to the Tags page, click <strong>Create Tag</strong>, type a name, pick a color, and press Add or hit Enter.</li>
-                    <li><strong>Add a tag to a model:</strong> Click a model to expand it, then type in the <em>Add tag</em> input. Matching tags appear as you type — click one or press Enter to add it.</li>
-                    <li><strong>Drag and drop:</strong> Tag chips on model rows can be dragged onto other models to copy the tag.</li>
-                    <li><strong>Remove a tag:</strong> Click the <strong>&times;</strong> on a tag chip to remove it from that model.</li>
-                    <li><strong>Filter by tag:</strong> Click a tag in the filter bar above the model list to show only models with that tag.</li>
-                    <li><strong>Rename a tag:</strong> On the Tags page, click a tag name to make it editable.</li>
-                    <li><strong>Change tag color:</strong> Click the color swatch next to a tag to pick a new color.</li>
-                    <li><strong>Delete a tag:</strong> Click <strong>Delete</strong> on the Tags page to remove a tag entirely.</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-
         <script>
-            const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
-            const X_CIRCLE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-            const RELOAD_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>';
-            const CHEVRON_RIGHT_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle"><path d="M9 18l6-6-6-6"/></svg>';
-            const CHEVRON_DOWN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle"><path d="M6 9l6 6 6-6"/></svg>';
-            const CLOSE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-            const FREE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/></svg>';
-            const WARNING_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+            const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>';
+            const X_CIRCLE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>';
+            const RELOAD_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><path d="M1 4v6h6M23 20v-6h-6" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>';
+            const CHEVRON_RIGHT_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>';
+            const CHEVRON_DOWN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
+            const CLOSE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>';
+            const FREE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z" /></svg>';
+            const WARNING_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>';
 
             // Auto-refresh state
             const autoRefreshIntervals = { logs: null, debug: null, container: null };
@@ -620,11 +934,12 @@
                 };
                 let result = '';
                 let openSpan = false;
-                const regex = /\x1b\[([0-9;]*)m/g;
+                const regex = /\u001b\[([0-9;]*)m/g;
                 let lastIndex = 0;
                 let match;
-                while ((match = regex.exec(text)) !== null) {
-                    result += text.slice(lastIndex, match.index).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                match = regex.exec(text);
+                while (match !== null) {
+                    result += text.slice(lastIndex, match.index).replace(/&/g, '&amp;').replace(/</g , '&lt;').replace( />/g, '&gt;');
                     const codes = match[1].split(';');
                     for (const code of codes) {
                         if (code === '0' || code === '') {
@@ -636,8 +951,9 @@
                         }
                     }
                     lastIndex = regex.lastIndex;
+                    match = regex.exec(text);
                 }
-                result += text.slice(lastIndex).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                result += text.slice(lastIndex).replace(/&/g, '&amp;').replace(/</g , '&lt;').replace( />/g, '&gt;');
                 if (openSpan) result += '</span>';
                 return result.replace(/\n/g, '<br>');
             }
@@ -652,9 +968,9 @@
                         if (btn) { btn.style.background = ''; btn.style.color = ''; }
                     });
                 }
-                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); });
                 document.getElementById('page-' + pageId).classList.add('active');
-                document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+                document.querySelectorAll('.nav a').forEach(a => { a.classList.remove('active'); });
                 event.target.classList.add('active');
                 if (pageId === 'dashboard') loadDashboard();
                 if (pageId === 'models') loadModels();
@@ -670,7 +986,7 @@
 
             // showPage2: navigate without requiring a click event (used by banner button)
             function showPage2(pageId) {
-                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); });
                 document.getElementById('page-' + pageId).classList.add('active');
                 document.querySelectorAll('.nav a').forEach(a => {
                     a.classList.toggle('active', a.getAttribute('onclick') === `showPage('${pageId}')`);
@@ -709,8 +1025,8 @@
                 }
             }
 
-            const MOON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-            const SUN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+            const MOON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>';
+            const SUN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px" aria-hidden="true"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>';
 
             function toggleTheme() {
                 const body = document.body;
@@ -731,7 +1047,7 @@
                 const logoutBtn = document.createElement('button');
                 logoutBtn.className = 'logout-btn';
                 logoutBtn.title = 'Logout';
-                logoutBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Logout';
+                logoutBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg> Logout';
                 logoutBtn.addEventListener('click', logout);
                 sidebarFooter.appendChild(logoutBtn);
             }
@@ -789,7 +1105,7 @@
                  let html = '';
                   if (data.auth_error) {
                       html += `<div class="banner-error" style="color: #dc3545; font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
-                       html += '<div style="margin-top:8px;"><button class="submit-code-btn" onclick="showPage2(\'auth\');retryLogin(true);">Retry Login</button></div>';
+                       html += '<div style="margin-top:8px;"><button type="button" class="submit-code-btn" onclick="showPage2(\'auth\');retryLogin(true);">Retry Login</button></div>';
                    } else if (!data.auth_url) {
                        html += '<div class="banner-url">Bedrock models require AWS authentication &mdash; go to the Authentication page to start the login flow.</div>';
                    }
@@ -835,7 +1151,7 @@
                         html += '<p>After approving in your browser, paste the authorization code shown:</p>';
                         html += '<div class="auth-code-input-row">';
                         html += '<input type="text" id="aws-code-input" class="auth-code-input" placeholder="Paste authorization code..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();submitAWSCode();}" />';
-                         html += '<button class="submit-code-btn" onclick="submitAWSCode()">Submit Code</button>';
+                         html += '<button type="button" class="submit-code-btn" onclick="submitAWSCode()">Submit Code</button>';
                         html += '</div>';
                         html += '<p class="auth-note">The code is displayed on the AWS authorization page after you approve access.</p>';
                     } else if (data.auth_url) {
@@ -855,7 +1171,7 @@
                     if (data.auth_error || !data.auth_url) {
                         const isRetry = !!data.auth_error;
                         const btnLabel = isRetry ? 'Retry Login' : 'Start Login Flow';
-                        html += `<div style="margin-top: 12px;"><button class="submit-code-btn" onclick="retryLogin(${isRetry})">${btnLabel}</button></div>`;
+                        html += `<div style="margin-top: 12px;"><button type="button" class="submit-code-btn" onclick="retryLogin(${isRetry})">${btnLabel}</button></div>`;
                     }
 
                     html += '</div></div>'; // .auth-steps + .auth-needed
@@ -982,7 +1298,7 @@
                     const tagChips = tags.map(t => {
                         const tagInfo = (window._allTags || []).find(x => x.name === t);
                         const color = tagInfo ? tagInfo.color : '#6c757d';
-                        return `<span class="tag-chip" style="background:${color}" draggable="true" ondragstart="handleTagDragStart(event, '${t}')" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">${t}<span class="tag-remove" onclick="removeTagFromModel('${escName}', '${t}')">&times;</span></span>`;
+                        return `<span class="tag-chip" style="background:${color}" draggable="true" ondragstart="handleTagDragStart(event, '${t}')" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">${t}<span class="tag-remove" onclick="removeTagFromModel('${escName}', '${t}')">×</span></span>`;
                     }).join('');
                     return `
                     <div class="model-item" data-model-name="${m.model_name}">
@@ -1005,8 +1321,8 @@
                                 <div class="model-tag-input-wrap" id="tag-input-wrap-${escName}" style="position:relative;">
                                     <input class="model-tag-input" id="tag-input-${escName}" placeholder="Add tag..." autocomplete="off" onkeydown="handleTagInputKeydown(event, '${escName}')" oninput="handleTagInputChange('${escName}')" onblur="handleTagInputBlur('${escName}')" />
                                 </div>
-                                <button class="rename-btn" id="rename-btn-${escName}" onclick="startRename('${escName}')">Rename</button>
-                                <button class="delete-btn" onclick="deleteModel(this, '${escName}')">Delete</button>
+                                <button type="button" class="rename-btn" id="rename-btn-${escName}" onclick="startRename('${escName}')">Rename</button>
+                                <button type="button" class="delete-btn" onclick="deleteModel(this, '${escName}')">Delete</button>
                             </div>
                         </div>
                     </div>`;
@@ -1552,7 +1868,7 @@
                         <div id="or-context-length" style="font-size: 12px; color: #666; margin-bottom: 8px;"></div>
                         <input id="or-name" placeholder="Or type model ID manually" style="width: 400px;" />
                         <input id="or-context-length-input" type="number" placeholder="Context Length (auto-filled from selection)" style="width: 400px;" />
-                        <button onclick="addOpenRouterModel()">Add Model</button>
+                        <button type="button" onclick="addOpenRouterModel()">Add Model</button>
                         <p style="font-size: 12px; color: #666; margin-top: 5px;">See <a href="https://openrouter.ai/models" target="_blank">OpenRouter models</a>.</p>
                     `;
                     loadOpenRouterModels();
@@ -1561,14 +1877,14 @@
                         <h3>Add Ollama Model</h3>
                         <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
                             <input id="ollama-host" placeholder="http://ollama-host:11434" style="width: 400px;" />
-                            <button onclick="fetchOllamaModels()">Fetch Models</button>
+                            <button type="button" onclick="fetchOllamaModels()">Fetch Models</button>
                         </div>
                         <select id="ollama-model-select" style="width: 400px; padding: 5px; margin-bottom: 8px; display: none;" onchange="onOllamaSelect()"></select>
                         <input id="ollama-name" placeholder="Model name (e.g., qwen2.5:14b)" style="width: 400px;" />
-                        <button onclick="fetchOllamaContextLength()" title="Fetch context length from Ollama" style="padding: 8px 12px; margin: 5px;">Get Details</button>
+                        <button type="button" onclick="fetchOllamaContextLength()" title="Fetch context length from Ollama" style="padding: 8px 12px; margin: 5px;">Get Details</button>
                         <div id="ollama-context-info" style="font-size: 12px; color: #666; margin: 5px 0;"></div>
                         <input id="ollama-context-length" type="number" placeholder="Context Length (auto-filled)" style="width: 400px;" />
-                        <button onclick="addOllamaModel()">Add Model</button>
+                        <button type="button" onclick="addOllamaModel()">Add Model</button>
                         <p style="font-size: 12px; color: #666; margin-top: 5px;">Ensure the remote Ollama instance is running and accessible.</p>
                     `;
                 } else if (provider === 'bedrock') {
@@ -1584,13 +1900,13 @@
                                 <option value="us-west-2">us-west-2</option>
                                 <option value="eu-west-1">eu-west-1</option>
                             </select>
-                            <button onclick="pollBedrockModels()" style="margin-left: 8px;">Poll Models</button>
+                            <button type="button" onclick="pollBedrockModels()" style="margin-left: 8px;">Poll Models</button>
                             <span id="bedrock-poll-status" style="font-size: 12px; margin-left: 8px;"></span>
                         </div>
                         <select id="bedrock-select" style="width: 400px; padding: 5px;" size="10" onchange="onBedrockSelect()"></select>
                         <div id="bedrock-context-info" style="font-size: 12px; color: #666; margin: 8px 0;"></div>
-                        <button onclick="addBedrockModel()">Add Model</button>
-                        <button onclick="loadBedrockModels()" style="margin-left: 8px;">Load from Catalog</button>
+                        <button type="button" onclick="addBedrockModel()">Add Model</button>
+                        <button type="button" onclick="loadBedrockModels()" style="margin-left: 8px;">Load from Catalog</button>
                         <p style="font-size: 12px; color: #666; margin-top: 5px;">Poll fetches live models from Mantle API. "Load from Catalog" uses the static catalog.</p>
                     `;
                     loadBedrockModels();
@@ -1601,7 +1917,7 @@
                         <input id="manual-model-path" placeholder="Model Path (e.g., openrouter/google/gemini-2.0-flash-001)" style="width: 400px;" /><br>
                         <input id="manual-api-base" placeholder="API Base (optional, e.g., https://openrouter.ai/api/v1)" style="width: 400px;" /><br>
                         <input id="manual-context-length" type="number" placeholder="Context Length (e.g., 131072 for 128k)" style="width: 400px;" /><br>
-                        <button onclick="addManualModel()">Add Model</button>
+                        <button type="button" onclick="addManualModel()">Add Model</button>
                     `;
                 } else {
                     ui.innerHTML = '';
@@ -1927,7 +2243,7 @@
                         <span class="tag-row-name" id="tag-name-${t.name}" onclick="startTagRename('${t.name}')">${t.name}</span>
                         <span class="tag-row-count">${count} model${count !== 1 ? 's' : ''}</span>
                         <div class="tag-row-actions">
-                            <button class="tag-delete-btn" onclick="deleteTag('${t.name}')">Delete</button>
+                            <button type="button" class="tag-delete-btn" onclick="deleteTag('${t.name}')">Delete</button>
                         </div>
                     </div>`;
                 }).join('');
@@ -2123,5 +2439,5 @@
                 document.getElementById('clawcode-url').textContent = apiUrlV1;
             })();
         </script>
-</body>
+    </body>
 </html>
