@@ -302,7 +302,7 @@ async def get_logs(lines: int = 50):
 
 
 @app.get("/api/logs/debug")
-async def get_debug_logs(lines: int = 100):
+async def get_debug_logs(lines: int = 50):
     """Return the last N lines of the TokenRefresher debug log."""
     debug_log = "/tmp/token_refresher_debug.log"
     if not os.path.exists(debug_log):
@@ -317,6 +317,24 @@ async def get_debug_logs(lines: int = 100):
         return {"logs": result.stdout or "Log is empty."}
     except Exception as e:
         return {"logs": f"Error reading debug logs: {str(e)}"}
+
+
+@app.get("/api/logs/container")
+async def get_container_logs(lines: int = 50):
+    """Return the last N lines of the container stdout/stderr log."""
+    container_log = os.path.join(CONFIG_DIR, "container.log")
+    if not os.path.exists(container_log):
+        return {"logs": "No container logs available yet."}
+    try:
+        result = subprocess.run(
+            ["tail", f"-{lines}", container_log],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return {"logs": result.stdout or "Log is empty."}
+    except Exception as e:
+        return {"logs": f"Error reading container logs: {str(e)}"}
 
 
 @app.get("/api/debug/token-refresher")

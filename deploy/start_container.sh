@@ -39,6 +39,9 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT
 
+# Duplicate all stdout/stderr to container.log (podman logs -f still works)
+exec > >(tee -a "${CONFIG_DIR}/container.log") 2>&1
+
 # Initialize configs
 init_configs
 
