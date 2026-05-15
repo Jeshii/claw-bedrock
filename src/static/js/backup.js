@@ -68,15 +68,15 @@ async function handleFile(file) {
             <li>Claw version: ${preview.claw_version}</li>
             <li>${preview.counts.models} models, ${preview.counts.tags} tags, ${preview.counts.providers} providers, ${preview.counts.settings} settings</li>
         </ul>`;
-	previewEl.style.display = "";
-	document.getElementById("import-mode-row").style.display = "";
-	document.getElementById("btn-import").style.display = "";
+	previewEl.style.display = "block";
+	document.getElementById("import-mode-row").style.display = "block";
+	document.getElementById("btn-import").style.display = "inline-block";
 }
 
 function showImportError(msg) {
 	const previewEl = document.getElementById("import-preview");
 	previewEl.innerHTML = `<p style="color:#dc3545;">✗ ${msg}</p>`;
-	previewEl.style.display = "";
+	previewEl.style.display = "block";
 	document.getElementById("btn-import").style.display = "none";
 }
 

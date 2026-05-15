@@ -323,7 +323,7 @@ function resetDeleteBtn(btn, modelItem, modelName) {
 }
 
 function showAddModel() {
-	document.getElementById("add-model-section").style.display = "";
+	document.getElementById("add-model-section").style.display = "block";
 	renderProviderSelector();
 	document.getElementById("provider-ui").innerHTML = "";
 }

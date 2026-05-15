@@ -103,7 +103,7 @@ function toggleDetailProviderFields() {
 }
 
 function showCreateProviderForm() {
-	document.getElementById("create-provider-row").style.display = "";
+	document.getElementById("create-provider-row").style.display = "block";
 	document.getElementById("new-provider-name").focus();
 }
 
@@ -114,9 +114,9 @@ function hideCreateProviderForm() {
 function toggleNewProviderFields() {
 	const type = document.getElementById("new-provider-type").value;
 	document.getElementById("new-provider-bedrock-fields").style.display =
-		type === "bedrock" ? "" : "none";
+		type === "bedrock" ? "flex" : "none";
 	document.getElementById("new-provider-openai-fields").style.display =
-		type === "openai-compatible" ? "" : "none";
+		type === "openai-compatible" ? "flex" : "none";
 }
 
 async function createProvider() {

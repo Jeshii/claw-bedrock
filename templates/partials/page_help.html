@@ -49,8 +49,20 @@ client = OpenAI(
         </p>
         <h3>claw-code</h3>
         <p>Set these environment variables:</p>
-        <pre class="code-block">OPENAI_API_KEY="dummy"
+        <pre class="code-block" id="clawcode-env-block">OPENAI_API_KEY="<span id="clawcode-api-key">dummy</span>"
 OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</pre>
+        <p id="clawcode-key-hint" class="hidden">
+            Replace <code>"dummy"</code> with your actual key above.
+        </p>
+        <script>
+            (() => {
+                const key = window.AUTH_REQUIRED ? "your-master-key" : "dummy";
+                document.getElementById("clawcode-api-key").textContent = key;
+                if (window.AUTH_REQUIRED) {
+                    document.getElementById("clawcode-key-hint").style.display = "block";
+                }
+            })();
+        </script>
     </div>
     <div class="section help-section">
         <h2>Adding Models</h2>
