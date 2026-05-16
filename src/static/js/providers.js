@@ -53,6 +53,7 @@ function renderProviderDetail(provider, models) {
 			: provider.type === "openai-compatible"
 				? `
         <div class="provider-field-row"><label>API Base</label><input id="prov-api-base" value="${provider.api_base || ""}" /></div>
+        <div class="provider-field-row"><label>API Key</label><input id="prov-api-key" type="password" value="${provider.api_key || ""}" /></div>
     `
 				: "";
 	const modelChips =
@@ -145,6 +146,9 @@ async function createProvider() {
 		provider.api_base = document
 			.getElementById("new-provider-api-base")
 			.value.trim();
+		provider.api_key = document
+			.getElementById("new-provider-api-key")
+			.value.trim();
 	}
 	try {
 		const res = await fetch("/api/providers", {
@@ -184,6 +188,8 @@ async function saveProviderDetail(name) {
 	} else if (type === "openai-compatible") {
 		const apiBase = document.getElementById("prov-api-base");
 		if (apiBase) provider.api_base = apiBase.value.trim();
+		const apiKey = document.getElementById("prov-api-key");
+		if (apiKey) provider.api_key = apiKey.value.trim();
 	}
 	try {
 		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {

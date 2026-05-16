@@ -43,7 +43,6 @@ def _migrate_yaml_to_db():
     except Exception as e:
         print(f"[DB] Migration error: {e}")
 
-    migrate_infer_providers()
 
 
 def get_all_models():
@@ -281,40 +280,6 @@ def set_model_provider(model_name, provider_name):
         {"provider": provider_name},
         where("model_name") == model_name,
     )
-
-
-def migrate_infer_providers():
-    """Scan existing models and auto-create provider records based on
-    patterns in litellm_params (aws_region, api_base, etc.).
-    Only runs if providers_table is empty.
-    """
-    if providers_table.all():
-        return
-
-    providers_seen: dict[str, dict] = {}
-    for model in models_table.all():
-        params = model.get("litellm_params", {})
-        region = params.get("aws_region_name") or params.get("aws_region")
-        if region:
-            key = f"bedrock-{region}"
-            if key not in providers_seen:
-                providers_seen[key] = {
-                    "name": key,
-                    "display_name": f"AWS Bedrock ({region})",
-                    "type": "bedrock",
-                    "aws_region": region,
-                    "color": "#FF9900",
-                }
-            models_table.update(
-                {"provider": key},
-                where("model_name") == model["model_name"],
-            )
-
-    for p in providers_seen.values():
-        providers_table.insert(p)
-
-    if providers_seen:
-        print(f"[DB] Inferred {len(providers_seen)} providers from existing models")
 
 
 BACKUP_SCHEMA_VERSION = 1
