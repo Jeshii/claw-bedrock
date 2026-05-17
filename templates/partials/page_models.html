@@ -40,12 +40,8 @@
             </button>
         </h2>
         <div id="model-provider-selector-wrap" style="margin-bottom:8px;"></div>
-        <select id="provider-select" onchange="loadProviderUI()">
-            <option value="">Select Provider Type</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="ollama">Ollama (Remote)</option>
-            <option value="bedrock">Bedrock (Mantle)</option>
-            <option value="manual">Manual</option>
+        <select id="provider-select" onchange="onProviderTypeSelect()">
+            <option value="">Select Provider</option>
         </select>
         <div id="provider-ui"></div>
     </div>

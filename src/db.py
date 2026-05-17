@@ -44,7 +44,6 @@ def _migrate_yaml_to_db():
         print(f"[DB] Migration error: {e}")
 
 
-
 def get_all_models():
     """Get all configured models."""
     return models_table.all()
@@ -228,6 +227,23 @@ def get_models_by_tag(tag_name):
 
 
 providers_table = db.table("providers")
+
+
+def seed_default_providers():
+    if providers_table.all():
+        return
+    providers_table.insert(
+        {
+            "name": "bedrock",
+            "display_name": "Bedrock (Mantle)",
+            "type": "bedrock",
+            "color": "#FF9900",
+            "notes": "AWS Bedrock via Mantle — pre-configured on startup",
+            "aws_region": "us-east-1",
+            "aws_access_key_env": "AWS_ACCESS_KEY_ID",
+            "aws_secret_key_env": "AWS_SECRET_ACCESS_KEY",
+        }
+    )
 
 
 def get_all_providers():

@@ -160,6 +160,7 @@ async def login_page(request: Request):
 @app.on_event("startup")
 async def startup_event():
     db._migrate_yaml_to_db()
+    db.seed_default_providers()
     merge_configs()
     print(f"[Startup] Merged configs on startup (CONFIG_DIR={CONFIG_DIR})")
     # Start watchdog in background thread

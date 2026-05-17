@@ -291,19 +291,9 @@ async function onModelProviderSelect() {
 	const data = await res.json();
 	const p = data.provider;
 	if (p.type === "bedrock") {
-		document.getElementById("provider-select").value = "bedrock";
-		loadProviderUI();
-		setTimeout(() => {
-			const regionEl = document.getElementById("bedrock-region");
-			if (regionEl && p.aws_region) regionEl.value = p.aws_region;
-		}, 100);
-	} else if (p.type === "openai-compatible") {
-		document.getElementById("provider-select").value = "manual";
-		loadProviderUI();
-		setTimeout(() => {
-			const apiBaseEl = document.getElementById("manual-api-base");
-			if (apiBaseEl && p.api_base) apiBaseEl.value = p.api_base;
-		}, 100);
+		loadProviderUIForProvider(name, "bedrock");
+	} else {
+		loadProviderUIForProvider(name, "openai-compatible");
 	}
 	hint.style.display = "";
 }

@@ -32,7 +32,7 @@ async function loadModels(filterTag) {
 	renderModelList(data.models);
 }
 
-function renderModelList(models) {
+function renderModelList(models, preserveExpanded) {
 	window._renderedModels = models;
 	const sorted = sortModels(models, currentSort);
 	const modelsDiv = document.getElementById("models-list");
@@ -40,7 +40,7 @@ function renderModelList(models) {
 		modelsDiv.innerHTML = "<p>No models configured yet.</p>";
 		return;
 	}
-	expandedModel = null;
+	if (!preserveExpanded) expandedModel = null;
 	modelsDiv.innerHTML = sorted
 		.map((m) => {
 			const ctx = m.litellm_params.context_length;
@@ -246,6 +246,16 @@ async function updateReasoningEffort(modelName, selectElement) {
 			body: JSON.stringify({ reasoning_effort: effort }),
 		});
 		if (res.ok) {
+			const m = (window._allModels || []).find(
+				(x) => x.model_name === modelName,
+			);
+			if (m) {
+				m.reasoning_effort = effort;
+			}
+			const rendered = window._renderedModels || [];
+			const idx = rendered.findIndex((x) => x.model_name === modelName);
+			if (idx !== -1) rendered[idx].reasoning_effort = effort;
+			renderModelList(rendered, true);
 			showToast(`Reasoning effort updated for ${modelName}`);
 		} else {
 			const error = await res.json();
@@ -325,13 +335,86 @@ function resetDeleteBtn(btn, modelItem, modelName) {
 function showAddModel() {
 	document.getElementById("add-model-section").style.display = "block";
 	renderProviderSelector();
+	renderProviderTypeSelect();
 	document.getElementById("provider-ui").innerHTML = "";
 }
 
 function closeAddModel() {
 	document.getElementById("add-model-section").style.display = "none";
 	document.getElementById("provider-ui").innerHTML = "";
-	document.getElementById("provider-select").value = "";
+	const sel = document.getElementById("provider-select");
+	sel.innerHTML = '<option value="">Select Provider</option>';
+	sel.value = "";
+}
+
+function renderProviderTypeSelect() {
+	const sel = document.getElementById("provider-select");
+	const providers = window._allProviders || [];
+	let html = '<option value="">Select Provider</option>';
+	for (const p of providers) {
+		const label = p.display_name || p.name;
+		html += `<option value="${p.name}" data-type="${p.type}">${label}</option>`;
+	}
+	html +=
+		'<option value="openrouter" data-type="openrouter">OpenRouter</option>';
+	html += '<option value="ollama" data-type="ollama">Ollama (Remote)</option>';
+	html += '<option value="manual" data-type="manual">Manual</option>';
+	sel.innerHTML = html;
+}
+
+function onProviderTypeSelect() {
+	const sel = document.getElementById("provider-select");
+	const name = sel.value;
+	if (!name) {
+		document.getElementById("provider-ui").innerHTML = "";
+		return;
+	}
+	const opt = sel.options[sel.selectedIndex];
+	const type = opt.dataset.type;
+	if (type === "openrouter") {
+		loadProviderUIByType("openrouter");
+	} else if (type === "ollama") {
+		loadProviderUIByType("ollama");
+	} else if (type === "manual") {
+		loadProviderUIByType("manual");
+	} else {
+		// configured provider — fetch details and auto-fill
+		loadProviderUIForProvider(name, type);
+	}
+}
+
+async function loadProviderUIForProvider(name, type) {
+	if (type === "bedrock") {
+		loadProviderUIByType("bedrock");
+		try {
+			const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
+			const data = await res.json();
+			const p = data.provider;
+			setTimeout(() => {
+				const regionEl = document.getElementById("bedrock-region");
+				if (regionEl && p.aws_region) regionEl.value = p.aws_region;
+			}, 100);
+		} catch (_e) {}
+	} else {
+		loadProviderUIByType("manual");
+		try {
+			const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
+			const data = await res.json();
+			const p = data.provider;
+			setTimeout(() => {
+				const apiBaseEl = document.getElementById("manual-api-base");
+				if (apiBaseEl && p.api_base) apiBaseEl.value = p.api_base;
+			}, 100);
+		} catch (_e) {}
+	}
+}
+
+function loadProviderUIByType(type) {
+	const providerSelect = document.getElementById("provider-select");
+	const currentVal = providerSelect.value;
+	providerSelect.value = type;
+	loadProviderUI();
+	providerSelect.value = currentVal;
 }
 
 async function addManualModel() {
