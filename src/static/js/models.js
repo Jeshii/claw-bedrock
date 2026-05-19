@@ -333,7 +333,6 @@ function resetDeleteBtn(btn, modelItem, modelName) {
 
 function showAddModel() {
 	document.getElementById("add-model-section").style.display = "block";
-	renderProviderSelector();
 	renderProviderTypeSelect();
 	document.getElementById("provider-ui").innerHTML = "";
 }

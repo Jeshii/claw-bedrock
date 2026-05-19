@@ -1,7 +1,12 @@
 async function loadProvidersPage() {
-	const res = await fetch("/api/providers");
-	const data = await res.json();
-	window._allProviders = data.providers || [];
+	const [provRes, modRes] = await Promise.all([
+		fetch("/api/providers"),
+		fetch("/api/models"),
+	]);
+	const provData = await provRes.json();
+	const modData = await modRes.json();
+	window._allProviders = provData.providers || [];
+	window._allModels = modData.models || [];
 	renderProvidersList(window._allProviders);
 	document.getElementById("provider-detail-section").style.display = "none";
 }
