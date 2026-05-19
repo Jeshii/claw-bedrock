@@ -8,3 +8,5 @@ psutil
 pyyaml
 tinydb
 requests
+bcrypt
+cryptography

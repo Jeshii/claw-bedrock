@@ -16,6 +16,15 @@ annotated-doc==0.0.4
     #   typer
 annotated-types==0.7.0
     # via pydantic
+bcrypt==5.0.0
+    # via -r requirements.txt
+cryptography==47.0.0
+    # via
+    #   azure-identity
+    #   azure-storage-blob
+    #   litellm
+    #   msal
+    #   pyjwt
 anyio==4.13.0
     # via
     #   httpx
@@ -76,7 +85,7 @@ click==8.3.3
     #   uvicorn
 croniter==6.2.2
     # via rq
-cryptography==47.0.0
+cryptography==48.0.0
     # via
     #   azure-identity
     #   azure-storage-blob

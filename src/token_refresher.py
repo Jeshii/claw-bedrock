@@ -30,14 +30,33 @@ _TMP_AUTH_URL = "/tmp/auth_url"
 _TMP_AUTH_NEEDED = "/tmp/auth_needed"
 
 
+def _secure_write(path: str, data: str) -> None:
+    """Write data to a file with restrictive permissions (owner-only read/write).
+
+    Uses O_NOFOLLOW to prevent symlink attacks and O_CREAT|O_WRONLY|O_TRUNC
+    to atomically create or replace the file.
+    """
+    import stat
+
+    fd = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+        stat.S_IRUSR | stat.S_IWUSR,  # 0o600
+    )
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(data)
+    except Exception:
+        os.close(fd)
+        raise
+
+
 def _write_auth_tmp(url: str):
     """Write auth URL and auth_needed flag to /tmp for management UI."""
     _debug(f"_write_auth_tmp() called. url={url[:50] if url else None}")
     try:
-        with open(_TMP_AUTH_URL, "w") as f:
-            f.write(url)
-        with open(_TMP_AUTH_NEEDED, "w") as f:
-            f.write("1")
+        _secure_write(_TMP_AUTH_URL, url)
+        _secure_write(_TMP_AUTH_NEEDED, "1")
         _debug(f"Wrote {_TMP_AUTH_URL} and {_TMP_AUTH_NEEDED}")
     except Exception as e:
         _debug(f"WARNING: Could not write auth tmp files: {e}")

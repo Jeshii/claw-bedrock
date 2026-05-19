@@ -4,6 +4,7 @@ import secrets
 import yaml
 import datetime
 import json
+import encryption_utils
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 DB_PATH = os.path.join(CONFIG_DIR, "models.db.json")
@@ -114,13 +115,17 @@ def set_router_settings(router_settings):
 
 def get_master_key():
     """Get the LiteLLM master key, or None if not set."""
-    return get_setting("litellm_master_key", None)
+    encrypted_key = get_setting("litellm_master_key", None)
+    if encrypted_key:
+        return encryption_utils.decrypt_data(encrypted_key)
+    return None
 
 
 def generate_master_key():
     """Generate a new cryptographically secure master key and persist it."""
     key = "sk-claw-" + secrets.token_urlsafe(32)
-    set_setting("litellm_master_key", key)
+    encrypted_key = encryption_utils.encrypt_data(key)
+    set_setting("litellm_master_key", encrypted_key)
     return key
 
 

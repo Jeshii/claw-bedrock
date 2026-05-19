@@ -17,7 +17,8 @@ import datetime
 from typing import Optional, Dict
 import db
 import token_refresher
-import hashlib
+import password_utils
+import hmac
 
 
 def base64url_decode(s: str) -> str:
@@ -71,9 +72,7 @@ def get_version():
 MANAGEMENT_PASSWORD = os.environ.get("MANAGEMENT_UI_PASSWORD")
 AUTH_COOKIE = "management_auth"
 AUTH_TOKEN = (
-    hashlib.sha256(MANAGEMENT_PASSWORD.encode()).hexdigest()
-    if MANAGEMENT_PASSWORD
-    else None
+    password_utils.hash_password(MANAGEMENT_PASSWORD) if MANAGEMENT_PASSWORD else None
 )
 
 _login_attempts: dict[str, list[float]] = defaultdict(list)
@@ -87,11 +86,13 @@ def is_auth_required():
 
 
 def verify_auth(request: Request) -> bool:
-    """Verify authentication from cookie."""
+    """Verify authentication from cookie using constant-time comparison."""
     if not is_auth_required():
         return True
     token = request.cookies.get(AUTH_COOKIE)
-    return token == AUTH_TOKEN
+    if token is None or AUTH_TOKEN is None:
+        return False
+    return hmac.compare_digest(token, AUTH_TOKEN)
 
 
 @app.post("/api/login")
@@ -107,12 +108,13 @@ async def login(request: Request, body: Dict):
         raise HTTPException(429, "Too many login attempts. Try again later.")
     attempts.append(now)
     password = body.get("password", "")
-    if hashlib.sha256(password.encode()).hexdigest() == AUTH_TOKEN:
+    if password_utils.verify_password(password, AUTH_TOKEN):
         response = RedirectResponse(url="/", status_code=302)
         response.set_cookie(
             key=AUTH_COOKIE,
             value=AUTH_TOKEN,
             httponly=True,
+            secure=True,
             samesite="lax",
             max_age=86400,
             path="/",
@@ -146,6 +148,18 @@ async def auth_middleware(request: Request, call_next):
             raise HTTPException(401, "Unauthorized")
         return RedirectResponse(url="/login", status_code=302)
     return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
 
 
 @app.get("/login")
