@@ -725,13 +725,10 @@ async def delete_model(encoded_model_name: str):
 
     db.delete_model(model_name)
     merge_configs()
-    result = reload_litellm()
 
     return {
         "status": "success",
         "deleted": model_name,
-        "reloaded": result.get("success"),
-        "pid": result.get("pid"),
     }
 
 

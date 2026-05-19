@@ -283,19 +283,18 @@ async function deleteModel(btn, modelName) {
 	}, 1000);
 
 	btn.onclick = async () => {
-		const toast = showToast(
-			"Deleting model & restarting LiteLLM...",
-			"info",
-			0,
-			true,
-		);
+		const toast = showToast("Deleting model...", "info", 0, true);
 		try {
 			const encoded = base64urlEncode(modelName);
 			const res = await fetch(`/api/models/${encoded}`, { method: "DELETE" });
 			if (res.ok) {
-				const data = await res.json();
-				showToast("Model deleted successfully");
-				showReloadToast(toast, data.reloaded, data.pid);
+				updateToast(
+					toast,
+					"Model deleted — reload LiteLLM to apply",
+					"success",
+				);
+				const reloadBtn = document.getElementById("reload-litellm-btn");
+				if (reloadBtn) reloadBtn.classList.add("needs-reload");
 				loadModels();
 			} else {
 				const error = await res.json();
@@ -846,6 +845,8 @@ async function reloadLiteLLM() {
 				data.message || "LiteLLM reloaded successfully",
 				"success",
 			);
+			const reloadBtn = document.getElementById("reload-litellm-btn");
+			if (reloadBtn) reloadBtn.classList.remove("needs-reload");
 		} else {
 			updateToast(toast, data.message || "LiteLLM reload failed", "warning");
 		}

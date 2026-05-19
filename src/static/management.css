@@ -230,6 +230,20 @@ body.dark .loading-text { color: #999; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .toast-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
 
+@keyframes reloadPulse {
+	0%, 100% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.5); }
+	50% { box-shadow: 0 0 0 6px rgba(0, 123, 255, 0); }
+}
+#reload-litellm-btn.needs-reload {
+	animation: reloadPulse 1.5s ease-in-out infinite;
+	border-color: #007bff;
+	color: #007bff;
+}
+body.dark #reload-litellm-btn.needs-reload {
+	border-color: #66b3ff;
+	color: #66b3ff;
+}
+
 /* Utility classes */
 .btn-primary { background: #007bff; color: white; border: 1px solid #007bff; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; }
 .btn-danger { background: #dc3545; color: white; border: 1px solid #dc3545; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; }
