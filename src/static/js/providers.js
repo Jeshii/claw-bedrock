@@ -1,3 +1,5 @@
+let expandedProvider = null;
+
 async function loadProvidersPage() {
 	const [provRes, modRes] = await Promise.all([
 		fetch("/api/providers"),
@@ -8,7 +10,6 @@ async function loadProvidersPage() {
 	window._allProviders = provData.providers || [];
 	window._allModels = modData.models || [];
 	renderProvidersList(window._allProviders);
-	document.getElementById("provider-detail-section").style.display = "none";
 }
 
 function renderProvidersList(providers) {
@@ -23,31 +24,52 @@ function renderProvidersList(providers) {
 			const modelCount = (window._allModels || []).filter(
 				(m) => m.provider === p.name,
 			).length;
+			const escName = p.name.replace(/'/g, "\\'");
 			return `
-        <div class="provider-card" id="provider-card-${p.name}" onclick="selectProvider('${p.name}')">
-            <span class="provider-card-color" style="background:${p.color || "#888"}"></span>
-            <span class="provider-card-name">${p.display_name || p.name}</span>
-            <span class="provider-card-type">${p.type || "custom"}</span>
-            <span class="provider-card-count">${modelCount} model${modelCount !== 1 ? "s" : ""}</span>
+        <div class="provider-item" data-provider-name="${p.name}">
+            <div class="provider-row" onclick="toggleProvider('${escName}')">
+                <span class="provider-chevron" id="provider-chevron-${p.name}">${CHEVRON_RIGHT_SVG}</span>
+                <span class="provider-card-color" style="background:${p.color || "#888"}"></span>
+                <span class="provider-card-name">${p.display_name || p.name}</span>
+                <span class="provider-card-type">${p.type || "custom"}</span>
+                <span class="provider-card-count">${modelCount} model${modelCount !== 1 ? "s" : ""}</span>
+            </div>
+            <div class="provider-detail" id="provider-detail-${p.name}"></div>
         </div>`;
 		})
 		.join("");
 }
 
-async function selectProvider(name) {
-	document
-		.querySelectorAll(".provider-card")
-		.forEach((c) => c.classList.remove("active"));
-	document.getElementById(`provider-card-${name}`)?.classList.add("active");
+async function toggleProvider(name) {
+	const detail = document.getElementById(`provider-detail-${name}`);
+	const chevron = document.getElementById(`provider-chevron-${name}`);
+	if (expandedProvider === name) {
+		detail.classList.remove("open");
+		chevron.innerHTML = CHEVRON_RIGHT_SVG;
+		expandedProvider = null;
+		return;
+	}
+	if (expandedProvider) {
+		const prevDetail = document.getElementById(
+			`provider-detail-${expandedProvider}`,
+		);
+		const prevChevron = document.getElementById(
+			`provider-chevron-${expandedProvider}`,
+		);
+		if (prevDetail) prevDetail.classList.remove("open");
+		if (prevChevron) prevChevron.innerHTML = CHEVRON_RIGHT_SVG;
+	}
+	expandedProvider = name;
+	detail.classList.add("open");
+	chevron.innerHTML = CHEVRON_DOWN_SVG;
 	const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
 	const data = await res.json();
 	renderProviderDetail(data.provider, data.models);
 }
 
 function renderProviderDetail(provider, models) {
-	const section = document.getElementById("provider-detail-section");
-	const body = document.getElementById("provider-detail-body");
-	section.style.display = "";
+	const detail = document.getElementById(`provider-detail-${provider.name}`);
+	const escName = provider.name.replace(/'/g, "\\'");
 	const typeFields =
 		provider.type === "bedrock"
 			? `
@@ -71,31 +93,29 @@ function renderProviderDetail(provider, models) {
 					)
 					.join("")
 			: '<span style="color:#888;font-size:13px;">No models use this provider</span>';
-	body.innerHTML = `
+	detail.innerHTML = `
         <div class="provider-detail-header">
-            <span class="provider-card-color" style="background:${provider.color || "#888"};width:16px;height:16px;border-radius:50%;flex-shrink:0;"></span>
+            <span class="provider-color-swatch" id="prov-color-swatch-${provider.name}" style="background:${provider.color || "#888"};width:20px;height:20px;border-radius:4px;flex-shrink:0;cursor:pointer;border:1px solid rgba(0,0,0,0.15);" onclick="showProviderColorPalette('${escName}', this)"></span>
             <input id="prov-display-name" value="${provider.display_name || provider.name}" placeholder="Display Name" />
         </div>
-         <div class="provider-field-row"><label>Name</label><input id="prov-name" value="${provider.name}" readonly style="background:#f5f5f5;" /></div>
-         <div class="provider-field-row"><label>Type</label>
-             <select id="prov-type" onchange="toggleDetailProviderFields()">
-                 <option value="bedrock" ${provider.type === "bedrock" ? "selected" : ""}>Bedrock</option>
-                 <option value="openai-compatible" ${provider.type === "openai-compatible" ? "selected" : ""}>OpenAI Compatible</option>
-                 <option value="custom" ${provider.type === "custom" ? "selected" : ""}>Custom</option>
-             </select>
-         </div>
-         <div class="provider-field-row"><label>Color</label><input id="prov-color" type="color" value="${provider.color || "#888888"}" style="width:40px;height:34px;padding:2px;cursor:pointer;" /></div>
-         <div id="prov-bedrock-fields" class="${provider.type === "bedrock" ? "" : "hidden"}">${typeFields}</div>
-         <div id="prov-openai-fields" class="${provider.type === "openai-compatible" ? "" : "hidden"}">${provider.type === "openai-compatible" ? typeFields : ""}</div>
+        <div class="provider-field-row"><label>Type</label>
+            <select id="prov-type" onchange="toggleDetailProviderFields()">
+                <option value="bedrock" ${provider.type === "bedrock" ? "selected" : ""}>Bedrock</option>
+                <option value="openai-compatible" ${provider.type === "openai-compatible" ? "selected" : ""}>OpenAI Compatible</option>
+                <option value="custom" ${provider.type === "custom" ? "selected" : ""}>Custom</option>
+            </select>
+        </div>
+        <div id="prov-bedrock-fields" class="${provider.type === "bedrock" ? "" : "hidden"}">${typeFields}</div>
+        <div id="prov-openai-fields" class="${provider.type === "openai-compatible" ? "" : "hidden"}">${provider.type === "openai-compatible" ? typeFields : ""}</div>
         <div class="provider-field-row"><label>Notes</label><input id="prov-notes" value="${provider.notes || ""}" /></div>
         <div style="margin-top:16px;">
             <h3>Models Using This Provider</h3>
             <div class="provider-models-list" style="margin-top:8px;">${modelChips}</div>
         </div>
         <div class="inline-row" style="margin-top:16px;flex-wrap:wrap;">
-            <button type="button" class="btn-primary" onclick="saveProviderDetail('${provider.name}')">Save Changes</button>
-            <button type="button" class="btn-secondary" onclick="showRenameProvider('${provider.name}')">Rename</button>
-            <button type="button" class="btn-danger" onclick="deleteProviderConfirm('${provider.name}')">Delete</button>
+            <button type="button" class="btn-primary" onclick="saveProviderDetail('${escName}')">Save Changes</button>
+            <button type="button" class="rename-btn" id="rename-btn-${provider.name}" onclick="startProviderRename('${escName}')">Rename</button>
+            <button type="button" class="delete-btn" onclick="deleteProviderConfirm('${escName}')">Delete</button>
         </div>
     `;
 }
@@ -106,6 +126,138 @@ function toggleDetailProviderFields() {
 		type === "bedrock" ? "" : "none";
 	document.getElementById("prov-openai-fields").style.display =
 		type === "openai-compatible" ? "" : "none";
+}
+
+function showProviderColorPalette(name, swatchEl) {
+	const existing = document.getElementById(`prov-palette-${name}`);
+	if (existing) {
+		existing.remove();
+		return;
+	}
+	const palette = document.createElement("div");
+	palette.id = `prov-palette-${name}`;
+	palette.className = "color-palette";
+	palette.style.position = "absolute";
+	palette.style.zIndex = "100";
+	palette.style.bottom = "100%";
+	palette.style.left = "0";
+	palette.style.marginBottom = "2px";
+	palette.innerHTML = TAG_PALETTE.map(
+		(c) =>
+			`<span class="color-palette-swatch" style="background:${c}" onclick="updateProviderColor('${name}', '${c}')"></span>`,
+	).join("");
+	swatchEl.style.position = "relative";
+	swatchEl.parentNode.style.position = "relative";
+	swatchEl.parentNode.insertBefore(palette, swatchEl.nextSibling);
+	setTimeout(() => {
+		document.addEventListener("click", function handler(e) {
+			if (!palette.contains(e.target) && e.target !== swatchEl) {
+				palette.remove();
+				document.removeEventListener("click", handler);
+			}
+		});
+	}, 0);
+}
+
+async function updateProviderColor(name, color) {
+	try {
+		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ color }),
+		});
+		if (res.ok) {
+			showToast("Color updated");
+			const swatch = document.getElementById(`prov-color-swatch-${name}`);
+			if (swatch) swatch.style.background = color;
+			loadProvidersPage();
+		} else {
+			const err = await res.json();
+			showToast(`Error: ${err.detail}`, "error");
+		}
+	} catch (e) {
+		showToast(`Error: ${e.message}`, "error");
+	}
+}
+
+function startProviderRename(name) {
+	const btn = document.getElementById(`rename-btn-${name}`);
+	if (btn.dataset.renaming === "true") {
+		const input = document.getElementById(`prov-display-name`);
+		const newName = input.value.trim();
+		if (
+			newName &&
+			newName !==
+				(window._allProviders || []).find((p) => p.name === name)?.display_name
+		) {
+			submitProviderRename(name, newName);
+		} else {
+			cancelProviderRename(name);
+		}
+		return;
+	}
+	btn.dataset.renaming = "true";
+	btn.textContent = "Confirm";
+	btn.classList.add("confirming");
+}
+
+function cancelProviderRename(name) {
+	const btn = document.getElementById(`rename-btn-${name}`);
+	if (btn) {
+		btn.dataset.renaming = "false";
+		btn.textContent = "Rename";
+		btn.classList.remove("confirming");
+	}
+}
+
+async function submitProviderRename(name, newName) {
+	const btn = document.getElementById(`rename-btn-${name}`);
+	if (btn) {
+		btn.dataset.renaming = "false";
+		btn.textContent = "Rename";
+		btn.classList.remove("confirming");
+	}
+	try {
+		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ display_name: newName }),
+		});
+		if (res.ok) {
+			showToast(`Provider renamed to "${newName}"`);
+			loadProvidersPage();
+		} else {
+			const err = await res.json();
+			showToast(`Error: ${err.detail}`, "error");
+		}
+	} catch (e) {
+		showToast(`Error: ${e.message}`, "error");
+	}
+}
+
+async function deleteProviderConfirm(name) {
+	const models = (window._allModels || []).filter((m) => m.provider === name);
+	const msg =
+		models.length > 0
+			? `${models.length} model(s) use this provider. They will show as unassigned. Delete anyway?`
+			: `Delete provider "${name}"?`;
+	if (!confirm(msg)) return;
+	try {
+		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
+			method: "DELETE",
+		});
+		if (res.ok) {
+			showToast(`Provider "${name}" deleted`);
+			expandedProvider = null;
+			loadProvidersPage();
+			loadModels(activeFilter);
+		} else {
+			const err = await res.json();
+			showToast(`Error: ${err.detail}`, "error");
+		}
+	} catch (e) {
+		showToast(`Error: ${e.message}`, "error");
+	}
 }
 
 function showCreateProviderForm() {
@@ -180,7 +332,9 @@ async function saveProviderDetail(name) {
 		name,
 		display_name: document.getElementById("prov-display-name").value.trim(),
 		type,
-		color: document.getElementById("prov-color").value,
+		color:
+			document.getElementById(`prov-color-swatch-${name}`)?.style
+				?.backgroundColor || "#888888",
 		notes: document.getElementById("prov-notes").value.trim(),
 	};
 	if (type === "bedrock") {
@@ -205,59 +359,6 @@ async function saveProviderDetail(name) {
 		if (res.ok) {
 			showToast("Provider updated");
 			loadProvidersPage();
-		} else {
-			const err = await res.json();
-			showToast(`Error: ${err.detail}`, "error");
-		}
-	} catch (e) {
-		showToast(`Error: ${e.message}`, "error");
-	}
-}
-
-function showRenameProvider(name) {
-	const newName = prompt(`Rename provider "${name}" to:`, name);
-	if (!newName || newName === name) return;
-	renameProviderSubmit(name, newName);
-}
-
-async function renameProviderSubmit(oldName, newName) {
-	try {
-		const res = await fetch(
-			`/api/providers/${encodeURIComponent(oldName)}/rename`,
-			{
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ new_name: newName }),
-			},
-		);
-		const data = await res.json();
-		if (res.ok && data.success) {
-			showToast(`Provider renamed to "${newName}"`);
-			loadProvidersPage();
-		} else {
-			showToast(`Error: ${data.detail || "Failed to rename"}`, "error");
-		}
-	} catch (e) {
-		showToast(`Error: ${e.message}`, "error");
-	}
-}
-
-async function deleteProviderConfirm(name) {
-	const models = (window._allModels || []).filter((m) => m.provider === name);
-	const msg =
-		models.length > 0
-			? `${models.length} model(s) use this provider. They will show as unassigned. Delete anyway?`
-			: `Delete provider "${name}"?`;
-	if (!confirm(msg)) return;
-	try {
-		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
-			method: "DELETE",
-		});
-		if (res.ok) {
-			showToast(`Provider "${name}" deleted`);
-			document.getElementById("provider-detail-section").style.display = "none";
-			loadProvidersPage();
-			loadModels(activeFilter);
 		} else {
 			const err = await res.json();
 			showToast(`Error: ${err.detail}`, "error");

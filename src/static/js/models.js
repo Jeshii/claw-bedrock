@@ -333,57 +333,18 @@ function resetDeleteBtn(btn, modelItem, modelName) {
 
 function showAddModel() {
 	document.getElementById("add-model-section").style.display = "block";
-	renderProviderTypeSelect();
+	renderProviderSelector();
 	document.getElementById("provider-ui").innerHTML = "";
 }
 
 function closeAddModel() {
 	document.getElementById("add-model-section").style.display = "none";
 	document.getElementById("provider-ui").innerHTML = "";
-	const sel = document.getElementById("provider-select");
-	sel.innerHTML = '<option value="">Select Provider</option>';
-	sel.value = "";
-}
-
-function renderProviderTypeSelect() {
-	const sel = document.getElementById("provider-select");
-	const providers = window._allProviders || [];
-	let html = '<option value="">Select Provider</option>';
-	for (const p of providers) {
-		const label = p.display_name || p.name;
-		html += `<option value="${p.name}" data-type="${p.type}">${label}</option>`;
-	}
-	html +=
-		'<option value="openrouter" data-type="openrouter">OpenRouter</option>';
-	html += '<option value="ollama" data-type="ollama">Ollama (Remote)</option>';
-	html += '<option value="manual" data-type="manual">Manual</option>';
-	sel.innerHTML = html;
-}
-
-function onProviderTypeSelect() {
-	const sel = document.getElementById("provider-select");
-	const name = sel.value;
-	if (!name) {
-		document.getElementById("provider-ui").innerHTML = "";
-		return;
-	}
-	const opt = sel.options[sel.selectedIndex];
-	const type = opt.dataset.type;
-	if (type === "openrouter") {
-		loadProviderUIByType("openrouter");
-	} else if (type === "ollama") {
-		loadProviderUIByType("ollama");
-	} else if (type === "manual") {
-		loadProviderUIByType("manual");
-	} else {
-		// configured provider — fetch details and auto-fill
-		loadProviderUIForProvider(name, type);
-	}
 }
 
 async function loadProviderUIForProvider(name, type) {
 	if (type === "bedrock") {
-		loadProviderUIByType("bedrock");
+		loadProviderUI("bedrock");
 		try {
 			const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
 			const data = await res.json();
@@ -394,7 +355,7 @@ async function loadProviderUIForProvider(name, type) {
 			}, 100);
 		} catch (_e) {}
 	} else {
-		loadProviderUIByType("manual");
+		loadProviderUI("manual");
 		try {
 			const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
 			const data = await res.json();
@@ -405,14 +366,6 @@ async function loadProviderUIForProvider(name, type) {
 			}, 100);
 		} catch (_e) {}
 	}
-}
-
-function loadProviderUIByType(type) {
-	const providerSelect = document.getElementById("provider-select");
-	const currentVal = providerSelect.value;
-	providerSelect.value = type;
-	loadProviderUI();
-	providerSelect.value = currentVal;
 }
 
 async function addManualModel() {
@@ -758,10 +711,9 @@ function onOllamaSelect() {
 	}
 }
 
-function loadProviderUI() {
-	const provider = document.getElementById("provider-select").value;
+function loadProviderUI(type) {
 	const ui = document.getElementById("provider-ui");
-	if (provider === "openrouter") {
+	if (type === "openrouter") {
 		ui.innerHTML = `
             <h3>Add OpenRouter Model</h3>
             <div style="margin-bottom: 8px;">
