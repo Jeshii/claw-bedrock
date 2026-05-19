@@ -64,4 +64,4 @@ jobs:
           package-name: claw-bedrock
           package-type: container
           min-versions-to-keep: 5
-          tag-filter: ^develop$
+          ignore-versions: ^v\d+\.\d+\.\d+
