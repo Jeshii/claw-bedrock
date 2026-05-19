@@ -16,15 +16,6 @@ annotated-doc==0.0.4
     #   typer
 annotated-types==0.7.0
     # via pydantic
-bcrypt==5.0.0
-    # via -r requirements.txt
-cryptography==47.0.0
-    # via
-    #   azure-identity
-    #   azure-storage-blob
-    #   litellm
-    #   msal
-    #   pyjwt
 anyio==4.13.0
     # via
     #   httpx
@@ -44,21 +35,23 @@ aws-bedrock-token-generator==1.1.0
     # via -r requirements.txt
 awscrt==0.32.2
     # via botocore
-azure-core==1.40.0
+azure-core==1.41.0
     # via
     #   azure-identity
     #   azure-storage-blob
-azure-identity==1.25.3
+azure-identity==1.25.2
     # via litellm
 azure-storage-blob==12.28.0
     # via litellm
 backoff==2.2.1
     # via litellm
-boto3==1.43.2
+bcrypt==5.0.0
+    # via -r requirements.txt
+boto3==1.43.1
     # via
     #   -r requirements.txt
     #   litellm
-botocore[crt]==1.43.2
+botocore[crt]==1.43.10
     # via
     #   -r requirements.txt
     #   aws-bedrock-token-generator
@@ -77,7 +70,7 @@ cffi==2.0.0
     #   soundfile
 charset-normalizer==3.4.7
     # via requests
-click==8.3.3
+click==8.4.0
     # via
     #   litellm
     #   rq
@@ -85,8 +78,9 @@ click==8.3.3
     #   uvicorn
 croniter==6.2.2
     # via rq
-cryptography==48.0.0
+cryptography==46.0.7
     # via
+    #   -r requirements.txt
     #   azure-identity
     #   azure-storage-blob
     #   litellm
@@ -98,12 +92,12 @@ dnspython==2.8.0
     # via email-validator
 email-validator==2.3.0
     # via pydantic
-fastapi==0.136.1
+fastapi==0.124.4
     # via
     #   -r requirements.txt
     #   fastapi-sso
     #   litellm
-fastapi-sso==0.16.0
+fastapi-sso==0.19.0
     # via litellm
 fastuuid==0.14.0
     # via litellm
@@ -121,7 +115,7 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-hf-xet==1.4.3
+hf-xet==1.5.0
     # via huggingface-hub
 httpcore==1.0.9
     # via httpx
@@ -136,16 +130,16 @@ httpx==0.28.1
     #   openai
 httpx-sse==0.4.3
     # via mcp
-huggingface-hub==1.13.0
+huggingface-hub==1.15.0
     # via tokenizers
-idna==3.13
+idna==3.15
     # via
     #   anyio
     #   email-validator
     #   httpx
     #   requests
     #   yarl
-importlib-metadata==9.0.0
+importlib-metadata==8.9.0
     # via litellm
 isodate==0.7.2
     # via azure-storage-blob
@@ -163,17 +157,17 @@ jsonschema==4.26.0
     #   mcp
 jsonschema-specifications==2025.9.1
     # via jsonschema
-litellm[proxy]==1.83.0
+litellm[proxy]==1.85.0
     # via -r requirements.txt
-litellm-enterprise==0.1.35
+litellm-enterprise==0.1.40
     # via litellm
-litellm-proxy-extras==0.4.70
+litellm-proxy-extras==0.4.72
     # via litellm
-markdown-it-py==4.0.0
+markdown-it-py==4.2.0
     # via rich
 markupsafe==3.0.3
     # via jinja2
-mcp==1.27.0
+mcp==1.26.0
     # via litellm
 mdurl==0.1.2
     # via markdown-it-py
@@ -189,19 +183,19 @@ multidict==6.7.1
     #   yarl
 oauthlib==3.3.1
     # via fastapi-sso
-openai==2.33.0
+openai==2.37.0
     # via litellm
-orjson==3.11.8
+orjson==3.11.6
     # via litellm
 packaging==26.2
     # via
     #   gunicorn
     #   huggingface-hub
-polars==1.40.1
+polars==1.38.1
     # via litellm
-polars-runtime-32==1.40.1
+polars-runtime-32==1.38.1
     # via polars
-propcache==0.4.1
+propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
@@ -209,7 +203,7 @@ psutil==7.2.2
     # via -r requirements.txt
 pycparser==3.0
     # via cffi
-pydantic[email]==2.13.3
+pydantic[email]==2.13.4
     # via
     #   fastapi
     #   fastapi-sso
@@ -217,14 +211,15 @@ pydantic[email]==2.13.3
     #   mcp
     #   openai
     #   pydantic-settings
-pydantic-core==2.46.3
+pydantic-core==2.46.4
     # via pydantic
-pydantic-settings==2.14.0
+pydantic-settings==2.14.1
     # via mcp
 pygments==2.20.0
     # via rich
-pyjwt[crypto]==2.12.1
+pyjwt[crypto]==2.12.0
     # via
+    #   fastapi-sso
     #   litellm
     #   mcp
     #   msal
@@ -257,14 +252,16 @@ referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-specifications
-regex==2026.4.4
+regex==2026.5.9
     # via tiktoken
-requests==2.33.1
+requests==2.34.2
     # via
     #   -r requirements.txt
     #   azure-core
     #   msal
     #   tiktoken
+restrictedpython==8.1
+    # via litellm
 rich==13.9.4
     # via
     #   litellm
@@ -273,7 +270,7 @@ rpds-py==0.30.0
     # via
     #   jsonschema
     #   referencing
-rq==2.8.0
+rq==2.7.0
     # via litellm
 s3transfer==0.17.0
     # via boto3
@@ -285,14 +282,14 @@ sniffio==1.3.1
     # via openai
 soundfile==0.12.1
     # via litellm
-sse-starlette==3.4.1
+sse-starlette==3.4.4
     # via mcp
-starlette==1.0.0
+starlette==0.50.0
     # via
     #   fastapi
     #   mcp
     #   sse-starlette
-tiktoken==0.12.0
+tiktoken==0.13.0
     # via litellm
 tinydb==4.8.2
     # via -r requirements.txt
@@ -322,17 +319,16 @@ typing-extensions==4.15.0
     #   typing-inspection
 typing-inspection==0.4.2
     # via
-    #   fastapi
     #   mcp
     #   pydantic
     #   pydantic-settings
 tzlocal==5.3.1
     # via apscheduler
-urllib3==2.6.3
+urllib3==2.7.0
     # via
     #   botocore
     #   requests
-uvicorn[standard]==0.46.0
+uvicorn[standard]==0.33.0
     # via
     #   -r requirements.txt
     #   litellm
@@ -341,7 +337,7 @@ uvloop==0.21.0
     # via
     #   litellm
     #   uvicorn
-watchfiles==1.1.1
+watchfiles==1.2.0
     # via uvicorn
 websockets==15.0.1
     # via
@@ -349,5 +345,5 @@ websockets==15.0.1
     #   uvicorn
 yarl==1.23.0
     # via aiohttp
-zipp==3.23.1
+zipp==4.1.0
     # via importlib-metadata
