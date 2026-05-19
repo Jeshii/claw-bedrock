@@ -25,9 +25,11 @@ RUN pip install --no-cache-dir -r requirements.lock
 # Copy application files
 COPY config/bedrock_models.json .
 COPY src/token_refresher.py .
+COPY src/encryption_utils.py .
+COPY src/password_utils.py .
+COPY src/db.py .
 COPY src/management_app.py .
 COPY deploy/start_container.sh .
-COPY src/db.py .
 COPY templates ./templates
 COPY src/static ./static
 
