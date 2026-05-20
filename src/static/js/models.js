@@ -195,12 +195,7 @@ async function submitRename(oldName, newName) {
 			input.replaceWith(span);
 		}
 	}
-	const toast = showToast(
-		"Renaming model & restarting LiteLLM...",
-		"info",
-		0,
-		true,
-	);
+	const toast = showToast("Renaming model...", "info", 0, true);
 	try {
 		const encoded = base64urlEncode(oldName);
 		const res = await fetch(`/api/models/${encoded}`, {
@@ -209,10 +204,15 @@ async function submitRename(oldName, newName) {
 			body: JSON.stringify({ model_name: newName }),
 		});
 		if (res.ok) {
-			const data = await res.json();
-			showToast("Model renamed successfully");
-			showReloadToast(toast, data.reloaded, data.pid);
-			setTimeout(loadModels, 2000);
+			updateToast(toast, "Model renamed — reload LiteLLM to apply", "success");
+			const reloadBtn = document.getElementById("reload-litellm-btn");
+			if (reloadBtn) reloadBtn.classList.add("needs-reload");
+			loadModels();
+			setTimeout(() => {
+				toast.style.opacity = "0";
+				toast.style.transition = "opacity 0.3s";
+				setTimeout(() => toast.remove(), 300);
+			}, 3000);
 		} else {
 			const error = await res.json();
 			updateToast(
@@ -296,6 +296,11 @@ async function deleteModel(btn, modelName) {
 				const reloadBtn = document.getElementById("reload-litellm-btn");
 				if (reloadBtn) reloadBtn.classList.add("needs-reload");
 				loadModels();
+				setTimeout(() => {
+					toast.style.opacity = "0";
+					toast.style.transition = "opacity 0.3s";
+					setTimeout(() => toast.remove(), 300);
+				}, 3000);
 			} else {
 				const error = await res.json();
 				updateToast(
@@ -577,12 +582,7 @@ async function addBedrockModel() {
 }
 
 async function addModelCommon(modelConfig, _provider) {
-	const toast = showToast(
-		"Adding model & restarting LiteLLM...",
-		"info",
-		0,
-		true,
-	);
+	const toast = showToast("Adding model...", "info", 0, true);
 	try {
 		const res = await fetch("/api/models", {
 			method: "POST",
@@ -590,9 +590,7 @@ async function addModelCommon(modelConfig, _provider) {
 			body: JSON.stringify(modelConfig),
 		});
 		if (res.ok) {
-			const data = await res.json();
-			showToast("Model added successfully");
-			showReloadToast(toast, data.reloaded, data.pid);
+			updateToast(toast, "Model added — reload LiteLLM to apply", "success");
 			const reloadBtn = document.getElementById("reload-litellm-btn");
 			if (reloadBtn) reloadBtn.classList.add("needs-reload");
 			closeAddModel();

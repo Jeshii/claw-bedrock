@@ -805,13 +805,10 @@ async def add_model(model: Dict):
     """Add a new model to TinyDB."""
     db.add_model(model)
     merge_configs()
-    result = reload_litellm()
 
     return {
         "status": "success",
         "model": model,
-        "reloaded": result.get("success"),
-        "pid": result.get("pid"),
     }
 
 
@@ -832,14 +829,11 @@ async def rename_model(encoded_old_name: str, update: Dict):
         raise HTTPException(404, f"Model {old_model_name} not found")
 
     merge_configs()
-    result = reload_litellm()
 
     return {
         "status": "success",
         "old_name": old_model_name,
         "new_name": new_model_name,
-        "reloaded": result.get("success"),
-        "pid": result.get("pid"),
     }
 
 

@@ -55,23 +55,6 @@ function updateToast(toast, message, type = null, removeSpinner = true) {
 	}
 }
 
-function showReloadToast(toast, reloaded, pid) {
-	if (reloaded) {
-		updateToast(toast, `LiteLLM reloaded (PID ${pid || "unknown"})`, "info");
-	} else {
-		updateToast(
-			toast,
-			"LiteLLM reload failed - try restarting the container",
-			"warning",
-		);
-	}
-	setTimeout(() => {
-		toast.style.opacity = "0";
-		toast.style.transition = "opacity 0.3s";
-		setTimeout(() => toast.remove(), 300);
-	}, 3000);
-}
-
 function base64urlEncode(str) {
 	return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }

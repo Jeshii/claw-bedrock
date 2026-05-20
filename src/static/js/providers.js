@@ -162,7 +162,7 @@ function showProviderColorPalette(name, swatchEl) {
 async function updateProviderColor(name, color) {
 	try {
 		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
-			method: "PATCH",
+			method: "PUT",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ color }),
 		});
