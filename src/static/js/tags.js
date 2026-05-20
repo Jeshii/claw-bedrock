@@ -29,7 +29,7 @@ async function loadTagsPage() {
 		.join("");
 }
 
-function showCreateTagInput() {
+function _showCreateTagInput() {
 	document.getElementById("create-tag-row").style.display = "";
 	document.getElementById("new-tag-name").focus();
 	renderNewTagPalette();
@@ -50,11 +50,11 @@ function renderNewTagPalette() {
 
 let _selectedNewTagColor = TAG_PALETTE[0];
 
-function selectNewTagColor(color) {
+function _selectNewTagColor(color) {
 	_selectedNewTagColor = color;
 }
 
-async function createTagFromInput() {
+async function _createTagFromInput() {
 	const name = document.getElementById("new-tag-name").value.trim();
 	if (!name) return showToast("Tag name required", "error");
 	try {
@@ -76,7 +76,7 @@ async function createTagFromInput() {
 	}
 }
 
-async function deleteTag(name) {
+async function _deleteTag(name) {
 	try {
 		const res = await fetch(`/api/tags/${encodeURIComponent(name)}`, {
 			method: "DELETE",
@@ -94,7 +94,7 @@ async function deleteTag(name) {
 	}
 }
 
-function startTagRename(name) {
+function _startTagRename(name) {
 	const span = document.getElementById(`tag-name-${name}`);
 	const input = document.createElement("input");
 	input.type = "text";
@@ -137,9 +137,9 @@ async function submitTagRename(oldName, newName) {
 	}
 }
 
-function showColorPalette(tagName, swatchEl) {
+function _showColorPalette(tagName, swatchEl) {
 	const existing = swatchEl.nextElementSibling;
-	if (existing && existing.classList.contains("color-palette")) {
+	if (existing?.classList.contains("color-palette")) {
 		existing.remove();
 		return;
 	}
@@ -167,7 +167,7 @@ function showColorPalette(tagName, swatchEl) {
 	}, 0);
 }
 
-async function updateTagColor(tagName, color, swatch) {
+async function _updateTagColor(tagName, color, _swatch) {
 	try {
 		const res = await fetch(`/api/tags/${encodeURIComponent(tagName)}`, {
 			method: "PATCH",

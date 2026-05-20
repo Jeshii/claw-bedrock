@@ -20,15 +20,33 @@
                 <div class="version">v{{ version }}</div>
             </div>
             <ul class="nav">
-                <li><a onclick="showPage('dashboard')" class="active">Dashboard</a></li>
-                <li><a onclick="showPage('auth')">Authentication</a></li>
-                <li><a onclick="showPage('security')">Security</a></li>
-                <li><a onclick="showPage('models')">Models</a></li>
-                <li><a onclick="showPage('backup')">Backup</a></li>
-                <li><a onclick="showPage('providers')">Providers</a></li>
-                <li><a onclick="showPage('tags')">Tags</a></li>
-                <li><a onclick="showPage('logs')">Logs</a></li>
-                <li><a onclick="showPage('help')">Help</a></li>
+                <li>
+                    <a onclick="showPage('dashboard')" class="active">Dashboard</a>
+                </li>
+                <li>
+                    <a onclick="showPage('auth')">Authentication</a>
+                </li>
+                <li>
+                    <a onclick="showPage('security')">Security</a>
+                </li>
+                <li>
+                    <a onclick="showPage('models')">Models</a>
+                </li>
+                <li>
+                    <a onclick="showPage('backup')">Backup</a>
+                </li>
+                <li>
+                    <a onclick="showPage('providers')">Providers</a>
+                </li>
+                <li>
+                    <a onclick="showPage('tags')">Tags</a>
+                </li>
+                <li>
+                    <a onclick="showPage('logs')">Logs</a>
+                </li>
+                <li>
+                    <a onclick="showPage('help')">Help</a>
+                </li>
             </ul>
             <div class="sidebar-footer">
                 <button type="button" class="theme-toggle" onclick="toggleTheme()"></button>
@@ -46,7 +64,6 @@
             {% include 'partials/page_logs.html' %}
             {% include 'partials/page_help.html' %}
         </div>
-
         <script src="/static/js/utils.js"></script>
         <script src="/static/js/theme.js"></script>
         <script src="/static/js/navigation.js"></script>

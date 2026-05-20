@@ -25,7 +25,7 @@
             <div class="error" id="error" style="display:none;"></div>
         </div>
         <script>
-        async function login() {
+        async function _login() {
             const password = document.getElementById('password').value;
             const errorDiv = document.getElementById('error');
             try {
@@ -42,7 +42,7 @@
                     errorDiv.style.display = 'block';
                 }
             } catch (e) {
-                errorDiv.textContent = 'Error: ' + e.message;
+                errorDiv.textContent = `Error: ${e.message}`;
                 errorDiv.style.display = 'block';
             }
         }

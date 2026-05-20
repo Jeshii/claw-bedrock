@@ -105,7 +105,7 @@ function renderFilterBar(active) {
 	bar.innerHTML = html;
 }
 
-function toggleModel(modelName) {
+function _toggleModel(modelName) {
 	if (expandedModel === modelName) {
 		document.getElementById(`detail-${modelName}`).classList.remove("open");
 		document.getElementById(`chevron-${modelName}`).innerHTML =
@@ -125,7 +125,7 @@ function toggleModel(modelName) {
 	}
 }
 
-function startRename(modelName) {
+function _startRename(modelName) {
 	const btn = document.getElementById(`rename-btn-${modelName}`);
 	const row = btn.closest(".model-item").querySelector(".model-row-name");
 	if (btn.dataset.renaming === "true") {
@@ -147,7 +147,7 @@ function startRename(modelName) {
 	input.className = "inline-rename";
 	input.onkeydown = (e) => {
 		e.stopPropagation();
-		if (e.key === "Enter") startRename(modelName);
+		if (e.key === "Enter") _startRename(modelName);
 		if (e.key === "Escape") cancelRename(modelName);
 	};
 	row.replaceWith(input);
@@ -236,7 +236,7 @@ async function submitRename(oldName, newName) {
 	}
 }
 
-async function updateReasoningEffort(modelName, selectElement) {
+async function _updateReasoningEffort(modelName, selectElement) {
 	const effort = selectElement.value || null;
 	try {
 		const encoded = base64urlEncode(modelName);
@@ -331,7 +331,7 @@ function resetDeleteBtn(btn, modelItem, modelName) {
 	btn.onclick = () => deleteModel(btn, modelItem, modelName);
 }
 
-function showAddModel() {
+function _showAddModel() {
 	document.getElementById("add-model-section").style.display = "block";
 	renderProviderSelector();
 	document.getElementById("provider-ui").innerHTML = "";
@@ -345,7 +345,7 @@ function closeAddModel() {
 let genericProviderModels = [];
 let selectedGenericModel = null;
 
-async function loadProviderUIForProvider(provider) {
+async function _loadProviderUIForProvider(provider) {
 	if (provider.type === "bedrock") {
 		loadProviderUI("bedrock");
 		setTimeout(() => {
@@ -366,7 +366,9 @@ function loadGenericProviderUI(provider) {
 			<span class="muted" style="font-size:12px;margin-left:8px;">${provider.type || "custom"}</span>
 		</div>
 		<div class="muted" style="font-size:12px;margin-bottom:12px;">API Base: ${provider.api_base || "Not configured"}</div>
-		${hasApiBase ? `
+		${
+			hasApiBase
+				? `
 			<div class="inline-row" style="margin-bottom:12px;">
 				<button type="button" id="generic-poll-btn" onclick="pollGenericProviderModels('${provider.name.replace(/'/g, "\\'")}')">Poll Models</button>
 				<span id="generic-poll-status" style="font-size:12px;margin-left:8px;"></span>
@@ -379,17 +381,19 @@ function loadGenericProviderUI(provider) {
 			<input id="generic-context-length" type="number" placeholder="Context Length (auto-filled from selection)" style="width:400px;" />
 			<br><br>
 			<button type="button" onclick="addGenericModel('${provider.name.replace(/'/g, "\\'")}')">Add Model</button>
-		` : `
+		`
+				: `
 			<p class="muted" style="font-size:13px;">Configure <strong>api_base</strong> in the Providers page to enable model polling.</p>
 			<input id="generic-manual-model-id" placeholder="Model ID (e.g., gpt-4o)" style="width:400px;" />
 			<input id="generic-context-length" type="number" placeholder="Context Length" style="width:400px;" />
 			<br><br>
 			<button type="button" onclick="addGenericModel('${provider.name.replace(/'/g, "\\'")}')">Add Model</button>
-		`}
+		`
+		}
 	`;
 }
 
-async function pollGenericProviderModels(providerName) {
+async function _pollGenericProviderModels(providerName) {
 	const btn = document.getElementById("generic-poll-btn");
 	const status = document.getElementById("generic-poll-status");
 	btn.disabled = true;
@@ -399,7 +403,9 @@ async function pollGenericProviderModels(providerName) {
 	selectedGenericModel = null;
 
 	try {
-		const res = await fetch(`/api/providers/${encodeURIComponent(providerName)}/models`);
+		const res = await fetch(
+			`/api/providers/${encodeURIComponent(providerName)}/models`,
+		);
 		if (!res.ok) {
 			const error = await res.json();
 			throw new Error(error.detail || "Failed to poll models");
@@ -420,16 +426,21 @@ async function pollGenericProviderModels(providerName) {
 
 function renderGenericModelSelect(models) {
 	const select = document.getElementById("generic-model-select");
-	select.innerHTML = models.length === 0
-		? '<option value="">No models found</option>'
-		: '<option value="">-- Select a model --</option>' +
-			models.map((m) => {
-				const ctx = m.context_length ? ` (${formatContextLength(m.context_length)})` : "";
-				return `<option value="${m.id}" data-context-length="${m.context_length || ""}" data-name="${m.name || m.id}">${m.id}${ctx}</option>`;
-			}).join("");
+	select.innerHTML =
+		models.length === 0
+			? '<option value="">No models found</option>'
+			: '<option value="">-- Select a model --</option>' +
+				models
+					.map((m) => {
+						const ctx = m.context_length
+							? ` (${formatContextLength(m.context_length)})`
+							: "";
+						return `<option value="${m.id}" data-context-length="${m.context_length || ""}" data-name="${m.name || m.id}">${m.id}${ctx}</option>`;
+					})
+					.join("");
 }
 
-function filterGenericModels() {
+function _filterGenericModels() {
 	const search = document.getElementById("generic-search").value.toLowerCase();
 	const filtered = genericProviderModels.filter(
 		(m) =>
@@ -439,7 +450,7 @@ function filterGenericModels() {
 	renderGenericModelSelect(filtered);
 }
 
-function onGenericModelSelect() {
+function _onGenericModelSelect() {
 	const select = document.getElementById("generic-model-select");
 	const option = select.options[select.selectedIndex];
 	const contextInfo = document.getElementById("generic-context-info");
@@ -455,7 +466,9 @@ function onGenericModelSelect() {
 	selectedGenericModel = {
 		id: option.value,
 		name: option.dataset.name || option.value,
-		context_length: option.dataset.contextLength ? parseInt(option.dataset.contextLength, 10) : null,
+		context_length: option.dataset.contextLength
+			? parseInt(option.dataset.contextLength, 10)
+			: null,
 	};
 
 	if (selectedGenericModel.context_length) {
@@ -467,7 +480,7 @@ function onGenericModelSelect() {
 	}
 }
 
-async function addGenericModel(providerName) {
+async function _addGenericModel(providerName) {
 	const contextLength = document.getElementById("generic-context-length").value;
 	const manualInput = document.getElementById("generic-manual-model-id");
 
@@ -476,7 +489,8 @@ async function addGenericModel(providerName) {
 		modelId = manualInput.value.trim();
 		if (!modelId) return showToast("Model ID is required", "error");
 	} else {
-		if (!selectedGenericModel) return showToast("Please select a model", "error");
+		if (!selectedGenericModel)
+			return showToast("Please select a model", "error");
 		modelId = selectedGenericModel.id;
 	}
 
@@ -494,7 +508,7 @@ async function addGenericModel(providerName) {
 	await addModelCommon(modelConfig, providerName);
 }
 
-async function addManualModel() {
+async function _addManualModel() {
 	const name = document.getElementById("manual-name").value;
 	const modelPath = document.getElementById("manual-model-path").value;
 	const apiBase = document.getElementById("manual-api-base").value;
@@ -511,7 +525,7 @@ async function addManualModel() {
 	await addModelCommon(modelConfig, "manual");
 }
 
-async function addOpenRouterModel() {
+async function _addOpenRouterModel() {
 	const name = document.getElementById("or-name").value;
 	const contextLength = document.getElementById(
 		"or-context-length-input",
@@ -526,7 +540,7 @@ async function addOpenRouterModel() {
 	await addModelCommon(modelConfig, "openrouter");
 }
 
-async function addOllamaModel() {
+async function _addOllamaModel() {
 	const name = document.getElementById("ollama-name").value;
 	const host = document.getElementById("ollama-host").value;
 	const contextLength = document.getElementById("ollama-context-length").value;
@@ -544,7 +558,7 @@ async function addOllamaModel() {
 	await addModelCommon(modelConfig, "ollama");
 }
 
-async function addBedrockModel() {
+async function _addBedrockModel() {
 	const select = document.getElementById("bedrock-select");
 	const selected = select.value;
 	if (!selected) return showToast("Please select a model", "error");
@@ -562,7 +576,7 @@ async function addBedrockModel() {
 	select.selectedIndex = 0;
 }
 
-async function addModelCommon(modelConfig, provider) {
+async function addModelCommon(modelConfig, _provider) {
 	const toast = showToast(
 		"Adding model & restarting LiteLLM...",
 		"info",
@@ -619,12 +633,12 @@ async function loadBedrockModels() {
 			option.textContent = `${m.model} (${m.context_length || "?"} ctx)`;
 			select.appendChild(option);
 		});
-	} catch (e) {
+	} catch (_e) {
 		showToast("Failed to load Bedrock models catalog", "error");
 	}
 }
 
-async function pollBedrockModels() {
+async function _pollBedrockModels() {
 	const token = document.getElementById("bedrock-token").value;
 	const region = document.getElementById("bedrock-region").value;
 	const statusSpan = document.getElementById("bedrock-poll-status");
@@ -672,7 +686,7 @@ async function pollBedrockModels() {
 	}
 }
 
-function onBedrockSelect() {
+function _onBedrockSelect() {
 	const select = document.getElementById("bedrock-select");
 	const selectedOption = select.options[select.selectedIndex];
 	const contextInfo = document.getElementById("bedrock-context-info");
@@ -697,7 +711,7 @@ function onBedrockSelect() {
 			info += `<br><span style="color: #dc3545;">This model is not included by default. <a href="https://github.com/Jeshii/claw-bedrock/issues" target="_blank">Please open an Issue to have it added.</a></span>`;
 		}
 		contextInfo.innerHTML = info;
-	} catch (e) {
+	} catch (_e) {
 		contextInfo.textContent = "";
 	}
 }
@@ -712,7 +726,7 @@ async function loadOpenRouterModels() {
 		const data = await res.json();
 		openRouterModels = data.models || [];
 		renderOpenRouterSelect(openRouterModels);
-	} catch (e) {
+	} catch (_e) {
 		showToast("Failed to load OpenRouter models", "error");
 	}
 }
@@ -730,7 +744,7 @@ function renderOpenRouterSelect(models) {
 		.join("");
 }
 
-function filterOpenRouterModels() {
+function _filterOpenRouterModels() {
 	const search = document.getElementById("or-search").value.toLowerCase();
 	const filtered = openRouterModels.filter(
 		(m) =>
@@ -740,7 +754,7 @@ function filterOpenRouterModels() {
 	renderOpenRouterSelect(filtered);
 }
 
-function onOpenRouterSelect() {
+function _onOpenRouterSelect() {
 	const select = document.getElementById("or-select");
 	const selectedOption = select.options[select.selectedIndex];
 	const modelId = selectedOption.value;
@@ -757,7 +771,7 @@ function onOpenRouterSelect() {
 	}
 }
 
-async function fetchOllamaContextLength() {
+async function _fetchOllamaContextLength() {
 	const name = document.getElementById("ollama-name").value;
 	const host = document.getElementById("ollama-host").value;
 	if (!name) return;
@@ -785,7 +799,7 @@ async function fetchOllamaContextLength() {
 					el.textContent = "";
 			}, 5000);
 		}
-	} catch (e) {
+	} catch (_e) {
 		document.getElementById("ollama-context-info").textContent =
 			"Error fetching model details";
 		setTimeout(() => {
@@ -796,7 +810,7 @@ async function fetchOllamaContextLength() {
 	}
 }
 
-async function fetchOllamaModels() {
+async function _fetchOllamaModels() {
 	const host = document.getElementById("ollama-host").value;
 	const select = document.getElementById("ollama-model-select");
 	select.innerHTML = '<option value="">Loading...</option>';
@@ -831,7 +845,7 @@ async function fetchOllamaModels() {
 	}
 }
 
-function onOllamaSelect() {
+function _onOllamaSelect() {
 	const select = document.getElementById("ollama-model-select");
 	const nameInput = document.getElementById("ollama-name");
 	if (select.value) {
@@ -913,7 +927,7 @@ function loadProviderUI(type) {
 	}
 }
 
-async function reloadLiteLLM() {
+async function _reloadLiteLLM() {
 	const toast = showToast("Restarting LiteLLM...", "info", 0, true);
 	try {
 		const res = await fetch("/api/models/reload", { method: "POST" });
@@ -971,7 +985,7 @@ function sortModels(models, sortKey) {
 	return sorted;
 }
 
-function toggleSortMenu() {
+function _toggleSortMenu() {
 	const bar = document.getElementById("model-filter-bar");
 	let menu = document.getElementById("sort-menu");
 	if (menu) {
@@ -989,8 +1003,8 @@ function toggleSortMenu() {
 		)
 		.join("");
 	bar.appendChild(menu);
-	menu.style.top = btn.offsetTop + btn.offsetHeight + 2 + "px";
-	menu.style.left = btn.offsetLeft + "px";
+	menu.style.top = `${btn.offsetTop + btn.offsetHeight + 2}px`;
+	menu.style.left = `${btn.offsetLeft}px`;
 	setTimeout(() => {
 		document.addEventListener("click", function handler(e) {
 			if (
@@ -1004,7 +1018,7 @@ function toggleSortMenu() {
 	}, 0);
 }
 
-function applySort(key) {
+function _applySort(key) {
 	currentSort = key;
 	document.getElementById("sort-menu")?.remove();
 	const btn = document.getElementById("sort-btn");
@@ -1012,26 +1026,26 @@ function applySort(key) {
 	renderModelList(window._renderedModels || []);
 }
 
-function setFilter(tag) {
+function _setFilter(tag) {
 	loadModels(tag);
 }
 
-function handleTagDragStart(event, tagName) {
+function _handleTagDragStart(event, tagName) {
 	event.dataTransfer.setData("text/plain", tagName);
 	event.dataTransfer.effectAllowed = "copy";
 }
 
-function handleDragOver(event) {
+function _handleDragOver(event) {
 	event.preventDefault();
 	event.dataTransfer.dropEffect = "copy";
 	event.currentTarget.classList.add("drag-over");
 }
 
-function handleDragLeave(event) {
+function _handleDragLeave(event) {
 	event.currentTarget.classList.remove("drag-over");
 }
 
-function handleTagDrop(event, modelName) {
+function _handleTagDrop(event, modelName) {
 	event.preventDefault();
 	event.currentTarget.classList.remove("drag-over");
 	const tagName = event.dataTransfer.getData("text/plain");
@@ -1060,7 +1074,7 @@ async function addTagToModel(modelName, tagName) {
 	}
 }
 
-async function removeTagFromModel(modelName, tagName) {
+async function _removeTagFromModel(modelName, tagName) {
 	try {
 		const encoded = base64urlEncode(modelName);
 		const res = await fetch(
@@ -1080,7 +1094,7 @@ async function removeTagFromModel(modelName, tagName) {
 	}
 }
 
-function handleTagInputKeydown(event, modelName) {
+function _handleTagInputKeydown(event, modelName) {
 	if (event.key === "Enter") {
 		event.preventDefault();
 		const input = document.getElementById(`tag-input-${modelName}`);
@@ -1096,7 +1110,7 @@ function handleTagInputKeydown(event, modelName) {
 	}
 }
 
-function handleTagInputChange(modelName) {
+function _handleTagInputChange(modelName) {
 	const input = document.getElementById(`tag-input-${modelName}`);
 	const val = input.value.trim().toLowerCase();
 	if (!val) {
@@ -1127,7 +1141,7 @@ function handleTagInputChange(modelName) {
 	dd.style.display = "block";
 }
 
-function handleTagInputBlur(modelName) {
+function _handleTagInputBlur(modelName) {
 	setTimeout(() => {
 		hideTagAutocomplete(modelName);
 		const input = document.getElementById(`tag-input-${modelName}`);
@@ -1144,14 +1158,14 @@ function hideTagAutocomplete(modelName) {
 	if (dd) dd.remove();
 }
 
-function selectTagAutocomplete(modelName, tagName) {
+function _selectTagAutocomplete(modelName, tagName) {
 	hideTagAutocomplete(modelName);
 	addTagToModel(modelName, tagName);
 	const input = document.getElementById(`tag-input-${modelName}`);
 	input.value = "";
 }
 
-async function togglePrefix() {
+async function _togglePrefix() {
 	const toggle = document.getElementById("use-prefix-toggle");
 	const usePrefix = toggle.checked;
 	const res = await fetch(`/api/settings?use_prefix=${usePrefix}`, {

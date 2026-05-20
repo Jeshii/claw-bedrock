@@ -40,7 +40,7 @@ function renderProvidersList(providers) {
 		.join("");
 }
 
-async function toggleProvider(name) {
+async function _toggleProvider(name) {
 	const detail = document.getElementById(`provider-detail-${name}`);
 	const chevron = document.getElementById(`provider-chevron-${name}`);
 	if (expandedProvider === name) {
@@ -115,12 +115,12 @@ function renderProviderDetail(provider, models) {
         <div class="inline-row" style="margin-top:16px;flex-wrap:wrap;">
             <button type="button" class="btn-primary" onclick="saveProviderDetail('${escName}')">Save Changes</button>
             <button type="button" class="rename-btn" id="rename-btn-${provider.name}" onclick="startProviderRename('${escName}')">Rename</button>
-            <button type="button" class="delete-btn" onclick="deleteProviderConfirm('${escName}')">Delete</button>
+            <button type="button" class="delete-btn" id="delete-btn-${provider.name}" onclick="deleteProviderConfirm('${escName}')">Delete</button>
         </div>
     `;
 }
 
-function toggleDetailProviderFields() {
+function _toggleDetailProviderFields() {
 	const type = document.getElementById("prov-type").value;
 	document.getElementById("prov-bedrock-fields").style.display =
 		type === "bedrock" ? "" : "none";
@@ -128,7 +128,7 @@ function toggleDetailProviderFields() {
 		type === "openai-compatible" ? "" : "none";
 }
 
-function showProviderColorPalette(name, swatchEl) {
+function _showProviderColorPalette(name, swatchEl) {
 	const existing = document.getElementById(`prov-palette-${name}`);
 	if (existing) {
 		existing.remove();
@@ -159,7 +159,7 @@ function showProviderColorPalette(name, swatchEl) {
 	}, 0);
 }
 
-async function updateProviderColor(name, color) {
+async function _updateProviderColor(name, color) {
 	try {
 		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
 			method: "PATCH",
@@ -180,16 +180,12 @@ async function updateProviderColor(name, color) {
 	}
 }
 
-function startProviderRename(name) {
+function _startProviderRename(name) {
 	const btn = document.getElementById(`rename-btn-${name}`);
+	const input = document.getElementById(`prov-display-name`);
 	if (btn.dataset.renaming === "true") {
-		const input = document.getElementById(`prov-display-name`);
 		const newName = input.value.trim();
-		if (
-			newName &&
-			newName !==
-				(window._allProviders || []).find((p) => p.name === name)?.display_name
-		) {
+		if (newName && newName !== name) {
 			submitProviderRename(name, newName);
 		} else {
 			cancelProviderRename(name);
@@ -199,6 +195,9 @@ function startProviderRename(name) {
 	btn.dataset.renaming = "true";
 	btn.textContent = "Confirm";
 	btn.classList.add("confirming");
+	input.dataset.originalName = name;
+	input.focus();
+	input.select();
 }
 
 function cancelProviderRename(name) {
@@ -208,59 +207,107 @@ function cancelProviderRename(name) {
 		btn.textContent = "Rename";
 		btn.classList.remove("confirming");
 	}
+	const input = document.getElementById(`prov-display-name`);
+	if (input?.dataset.originalName) {
+		input.value = input.dataset.originalName;
+		delete input.dataset.originalName;
+	}
 }
 
-async function submitProviderRename(name, newName) {
-	const btn = document.getElementById(`rename-btn-${name}`);
+async function submitProviderRename(oldName, newName) {
+	const btn = document.getElementById(`rename-btn-${oldName}`);
 	if (btn) {
 		btn.dataset.renaming = "false";
 		btn.textContent = "Rename";
 		btn.classList.remove("confirming");
 	}
 	try {
-		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
-			method: "PUT",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ display_name: newName }),
-		});
+		const res = await fetch(
+			`/api/providers/${encodeURIComponent(oldName)}/rename`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ new_name: newName }),
+			},
+		);
 		if (res.ok) {
 			showToast(`Provider renamed to "${newName}"`);
-			loadProvidersPage();
-		} else {
-			const err = await res.json();
-			showToast(`Error: ${err.detail}`, "error");
-		}
-	} catch (e) {
-		showToast(`Error: ${e.message}`, "error");
-	}
-}
-
-async function deleteProviderConfirm(name) {
-	const models = (window._allModels || []).filter((m) => m.provider === name);
-	const msg =
-		models.length > 0
-			? `${models.length} model(s) use this provider. They will show as unassigned. Delete anyway?`
-			: `Delete provider "${name}"?`;
-	if (!confirm(msg)) return;
-	try {
-		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
-			method: "DELETE",
-		});
-		if (res.ok) {
-			showToast(`Provider "${name}" deleted`);
 			expandedProvider = null;
 			loadProvidersPage();
-			loadModels(activeFilter);
 		} else {
 			const err = await res.json();
 			showToast(`Error: ${err.detail}`, "error");
+			const input = document.getElementById(`prov-display-name`);
+			if (input) input.value = oldName;
 		}
 	} catch (e) {
 		showToast(`Error: ${e.message}`, "error");
+		const input = document.getElementById(`prov-display-name`);
+		if (input) input.value = oldName;
 	}
 }
 
-function showCreateProviderForm() {
+async function _deleteProviderConfirm(name) {
+	const btn = document.getElementById(`delete-btn-${name}`);
+	if (!btn) return;
+
+	if (btn.dataset.confirming === "true") return;
+
+	btn.dataset.confirming = "true";
+	btn.textContent = "Confirm";
+	btn.className = "confirm-btn";
+	btn.disabled = true;
+
+	setTimeout(() => {
+		btn.disabled = false;
+	}, 1000);
+
+	btn.onclick = async () => {
+		const toast = showToast("Deleting provider...", "info", 0, true);
+		try {
+			const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
+				method: "DELETE",
+			});
+			if (res.ok) {
+				updateToast(toast, `Provider "${name}" deleted`, "success");
+				expandedProvider = null;
+				loadProvidersPage();
+				loadModels(activeFilter);
+			} else {
+				const err = await res.json();
+				updateToast(
+					toast,
+					`Error: ${err.detail || "Failed to delete provider"}`,
+					"error",
+				);
+				resetProviderDeleteBtn(btn, name);
+				setTimeout(() => {
+					toast.style.opacity = "0";
+					toast.style.transition = "opacity 0.3s";
+					setTimeout(() => toast.remove(), 300);
+				}, 3000);
+			}
+		} catch (e) {
+			updateToast(toast, `Error: ${e.message}`, "error");
+			resetProviderDeleteBtn(btn, name);
+			setTimeout(() => {
+				toast.style.opacity = "0";
+				toast.style.transition = "opacity 0.3s";
+				setTimeout(() => toast.remove(), 300);
+			}, 3000);
+		}
+	};
+}
+
+function resetProviderDeleteBtn(btn, name) {
+	btn.dataset.confirming = "false";
+	btn.textContent = "Delete";
+	btn.className = "delete-btn";
+	btn.disabled = false;
+	btn.onclick = () => _deleteProviderConfirm(name);
+}
+
+function _showCreateProviderForm() {
 	document.getElementById("create-provider-row").style.display = "block";
 	document.getElementById("new-provider-name").focus();
 }
@@ -269,7 +316,7 @@ function hideCreateProviderForm() {
 	document.getElementById("create-provider-row").style.display = "none";
 }
 
-function toggleNewProviderFields() {
+function _toggleNewProviderFields() {
 	const type = document.getElementById("new-provider-type").value;
 	document.getElementById("new-provider-bedrock-fields").style.display =
 		type === "bedrock" ? "flex" : "none";
@@ -277,7 +324,7 @@ function toggleNewProviderFields() {
 		type === "openai-compatible" ? "flex" : "none";
 }
 
-async function createProvider() {
+async function _createProvider() {
 	const name = document.getElementById("new-provider-name").value.trim();
 	if (!name) return showToast("Provider name is required", "error");
 	const type = document.getElementById("new-provider-type").value;
@@ -326,7 +373,7 @@ async function createProvider() {
 	}
 }
 
-async function saveProviderDetail(name) {
+async function _saveProviderDetail(name) {
 	const type = document.getElementById("prov-type").value;
 	const provider = {
 		name,
@@ -368,7 +415,7 @@ async function saveProviderDetail(name) {
 	}
 }
 
-function renderProviderSelector() {
+function _renderProviderSelector() {
 	const wrap = document.getElementById("model-provider-selector-wrap");
 	const providers = window._allProviders || [];
 	if (providers.length === 0) {
@@ -385,7 +432,7 @@ function renderProviderSelector() {
     `;
 }
 
-async function onModelProviderSelect() {
+async function _onModelProviderSelect() {
 	const sel = document.getElementById("model-provider-select");
 	const name = sel.value;
 	const hint = document.getElementById("provider-autofill-hint");

@@ -17,7 +17,7 @@ async function loadKeyStatus() {
 	}
 }
 
-async function generateKey() {
+async function _generateKey() {
 	if (!confirm("Generate a new key? Any existing key will be invalidated."))
 		return;
 	const res = await fetch("/api/security/key/generate", { method: "POST" });
@@ -27,7 +27,7 @@ async function generateKey() {
 	loadKeyStatus();
 }
 
-async function revokeKey() {
+async function _revokeKey() {
 	if (
 		!confirm("Revoke the current key? The proxy will become unauthenticated.")
 	)

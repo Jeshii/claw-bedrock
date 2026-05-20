@@ -10,7 +10,7 @@ if (prefixToggle) {
 	prefixToggle.checked = window.USE_PREFIX !== false;
 }
 
-const originalShowPage = showPage;
+const _originalShowPage = showPage;
 
 (() => {
 	const mgmtUrl = window.location.origin;

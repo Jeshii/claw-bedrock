@@ -1,4 +1,4 @@
-async function loadDashboard() {
+async function _loadDashboard() {
 	try {
 		const ctrl = new AbortController();
 		const timer = setTimeout(() => ctrl.abort(), 5000);
@@ -16,7 +16,7 @@ async function loadDashboard() {
 			html += "</ul>";
 		}
 		serverStatus.innerHTML = html;
-	} catch (e) {
+	} catch (_e) {
 		const serverStatus = document.getElementById("server-status");
 		if (serverStatus) serverStatus.innerHTML = "<p>Server is starting up…</p>";
 	} finally {
@@ -49,8 +49,7 @@ async function loadAuth() {
 	const data = await res.json();
 	const authDiv = document.getElementById("auth-status");
 	const existingInput = document.getElementById("aws-code-input");
-	const preservedValue =
-		existingInput && existingInput.value ? existingInput.value : "";
+	const preservedValue = existingInput?.value ? existingInput.value : "";
 	let html = "";
 
 	updateDashboardBanner(data);
@@ -110,11 +109,11 @@ async function loadAuth() {
 
 		html += "</div></div>";
 	} else {
-		html += "<p>" + CHECK_SVG + " Bedrock model access configured.</p>";
+		html += `<p>${CHECK_SVG} Bedrock model access configured.</p>`;
 	}
 
 	if (data.openrouter.configured) {
-		html += "<p>" + CHECK_SVG + " OpenRouter API key configured.</p>";
+		html += `<p>${CHECK_SVG} OpenRouter API key configured.</p>`;
 	} else {
 		html +=
 			"<p>" +
@@ -122,7 +121,7 @@ async function loadAuth() {
 			" OpenRouter not configured (set OPENROUTER_API_KEY).</p>";
 	}
 	if (data.ollama.configured) {
-		html += `<p>` + CHECK_SVG + ` Ollama configured (${data.ollama.host}).</p>`;
+		html += `<p>${CHECK_SVG} Ollama configured (${data.ollama.host}).</p>`;
 	} else {
 		html +=
 			"<p>" +
@@ -136,7 +135,7 @@ async function loadAuth() {
 	}
 }
 
-function copyAuthCode(code) {
+function _copyAuthCode(code) {
 	navigator.clipboard
 		.writeText(code)
 		.then(() => {
@@ -147,7 +146,7 @@ function copyAuthCode(code) {
 		});
 }
 
-async function submitAWSCode() {
+async function _submitAWSCode() {
 	const input = document.getElementById("aws-code-input");
 	const code = input.value.trim();
 	if (!code) {
@@ -173,16 +172,16 @@ async function submitAWSCode() {
 	}
 }
 
-async function logout() {
+async function _logout() {
 	try {
 		await fetch("/api/logout", { method: "POST" });
-	} catch (e) {
+	} catch (_e) {
 		// ignore errors — just redirect
 	}
 	window.location.href = "/login";
 }
 
-async function retryLogin(isRetry) {
+async function _retryLogin(isRetry) {
 	try {
 		const res = await fetch("/api/auth/retry", { method: "POST" });
 		if (res.ok) {

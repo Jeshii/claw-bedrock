@@ -1,4 +1,4 @@
-async function loadLogs() {
+async function _loadLogs() {
 	const lines = document.getElementById("log-lines").value;
 	const res = await fetch(`/api/logs?lines=${lines}`);
 	const data = await res.json();
@@ -8,18 +8,18 @@ async function loadLogs() {
 	logsDiv.scrollTop = logsDiv.scrollHeight;
 }
 
-async function copyLogs() {
+async function _copyLogs() {
 	const logsText = document.getElementById("logs-output").innerText;
 	if (!logsText) return showToast("No logs to copy", "warning");
 	try {
 		await navigator.clipboard.writeText(logsText);
 		showToast("Logs copied to clipboard");
-	} catch (err) {
+	} catch (_err) {
 		showToast("Failed to copy logs", "error");
 	}
 }
 
-async function loadDebugLogs() {
+async function _loadDebugLogs() {
 	const lines = document.getElementById("debug-log-lines").value;
 	const res = await fetch(`/api/logs/debug?lines=${lines}`);
 	const data = await res.json();
@@ -29,18 +29,18 @@ async function loadDebugLogs() {
 	logsDiv.scrollTop = logsDiv.scrollHeight;
 }
 
-async function copyDebugLogs() {
+async function _copyDebugLogs() {
 	const logsText = document.getElementById("debug-logs-output").innerText;
 	if (!logsText) return showToast("No debug logs to copy", "warning");
 	try {
 		await navigator.clipboard.writeText(logsText);
 		showToast("Debug logs copied to clipboard");
-	} catch (err) {
+	} catch (_err) {
 		showToast("Failed to copy debug logs", "error");
 	}
 }
 
-async function loadContainerLogs() {
+async function _loadContainerLogs() {
 	const lines = document.getElementById("container-log-lines").value;
 	const res = await fetch(`/api/logs/container?lines=${lines}`);
 	const data = await res.json();
@@ -49,13 +49,13 @@ async function loadContainerLogs() {
 	logsDiv.scrollTop = logsDiv.scrollHeight;
 }
 
-async function copyContainerLogs() {
+async function _copyContainerLogs() {
 	const logsText = document.getElementById("container-logs-output").innerText;
 	if (!logsText) return showToast("No container logs to copy", "warning");
 	try {
 		await navigator.clipboard.writeText(logsText);
 		showToast("Container logs copied to clipboard");
-	} catch (err) {
+	} catch (_err) {
 		showToast("Failed to copy container logs", "error");
 	}
 }

@@ -623,11 +623,13 @@ async def fetch_provider_models(name: str):
                 ctx = m["context_length"]
             elif m.get("context_window"):
                 ctx = m["context_window"]
-            models.append({
-                "id": model_id,
-                "name": m.get("name", model_id),
-                "context_length": int(ctx) if ctx else None,
-            })
+            models.append(
+                {
+                    "id": model_id,
+                    "name": m.get("name", model_id),
+                    "context_length": int(ctx) if ctx else None,
+                }
+            )
 
         return {"models": sorted(models, key=lambda x: x["id"].lower())}
     except requests.exceptions.ConnectionError as e:

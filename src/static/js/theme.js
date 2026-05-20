@@ -1,15 +1,15 @@
-function toggleTheme() {
+function _toggleTheme() {
 	const body = document.body;
 	const btn = document.querySelector(".theme-toggle");
 	body.classList.toggle("dark");
 	const isDark = body.classList.contains("dark");
-	btn.innerHTML = isDark ? SUN_SVG + "Light" : MOON_SVG + "Dark";
+	btn.innerHTML = isDark ? `${SUN_SVG}Light` : `${MOON_SVG}Dark`;
 	localStorage.setItem("theme", isDark ? "dark" : "light");
 }
 if (localStorage.getItem("theme") === "dark") {
 	document.body.classList.add("dark");
 	document.addEventListener("DOMContentLoaded", () => {
-		document.querySelector(".theme-toggle").innerHTML = SUN_SVG + "Light";
+		document.querySelector(".theme-toggle").innerHTML = `${SUN_SVG}Light`;
 	});
 }
 if (window.AUTH_REQUIRED) {

@@ -1,4 +1,4 @@
-function showPage(pageId) {
+function _showPage(pageId) {
 	if (pageId !== "logs") {
 		clearAutoRefresh();
 		[
@@ -16,7 +16,7 @@ function showPage(pageId) {
 	document.querySelectorAll(".page").forEach((p) => {
 		p.classList.remove("active");
 	});
-	document.getElementById("page-" + pageId).classList.add("active");
+	document.getElementById(`page-${pageId}`).classList.add("active");
 	document.querySelectorAll(".nav a").forEach((a) => {
 		a.classList.remove("active");
 	});
@@ -36,11 +36,11 @@ function showPage(pageId) {
 	if (pageId === "auth") loadAuth();
 }
 
-function showPage2(pageId) {
+function _showPage2(pageId) {
 	document.querySelectorAll(".page").forEach((p) => {
 		p.classList.remove("active");
 	});
-	document.getElementById("page-" + pageId).classList.add("active");
+	document.getElementById(`page-${pageId}`).classList.add("active");
 	document.querySelectorAll(".nav a").forEach((a) => {
 		a.classList.toggle(
 			"active",
@@ -51,7 +51,7 @@ function showPage2(pageId) {
 	if (pageId === "security") loadKeyStatus();
 }
 
-function hideLoadingOverlay() {
+function _hideLoadingOverlay() {
 	const overlay = document.getElementById("loading-overlay");
 	if (overlay) overlay.remove();
 }
