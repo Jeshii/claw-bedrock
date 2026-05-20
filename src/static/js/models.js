@@ -342,30 +342,156 @@ function closeAddModel() {
 	document.getElementById("provider-ui").innerHTML = "";
 }
 
-async function loadProviderUIForProvider(name, type) {
-	if (type === "bedrock") {
+let genericProviderModels = [];
+let selectedGenericModel = null;
+
+async function loadProviderUIForProvider(provider) {
+	if (provider.type === "bedrock") {
 		loadProviderUI("bedrock");
-		try {
-			const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
-			const data = await res.json();
-			const p = data.provider;
-			setTimeout(() => {
-				const regionEl = document.getElementById("bedrock-region");
-				if (regionEl && p.aws_region) regionEl.value = p.aws_region;
-			}, 100);
-		} catch (_e) {}
+		setTimeout(() => {
+			const regionEl = document.getElementById("bedrock-region");
+			if (regionEl && provider.aws_region) regionEl.value = provider.aws_region;
+		}, 100);
 	} else {
-		loadProviderUI("manual");
-		try {
-			const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
-			const data = await res.json();
-			const p = data.provider;
-			setTimeout(() => {
-				const apiBaseEl = document.getElementById("manual-api-base");
-				if (apiBaseEl && p.api_base) apiBaseEl.value = p.api_base;
-			}, 100);
-		} catch (_e) {}
+		loadGenericProviderUI(provider);
 	}
+}
+
+function loadGenericProviderUI(provider) {
+	const ui = document.getElementById("provider-ui");
+	const hasApiBase = !!provider.api_base;
+	ui.innerHTML = `
+		<div style="margin-bottom:12px;">
+			<span class="provider-badge" style="background:${provider.color}20;border:1px solid ${provider.color};color:${provider.color}">${provider.display_name || provider.name}</span>
+			<span class="muted" style="font-size:12px;margin-left:8px;">${provider.type || "custom"}</span>
+		</div>
+		<div class="muted" style="font-size:12px;margin-bottom:12px;">API Base: ${provider.api_base || "Not configured"}</div>
+		${hasApiBase ? `
+			<div class="inline-row" style="margin-bottom:12px;">
+				<button type="button" id="generic-poll-btn" onclick="pollGenericProviderModels('${provider.name.replace(/'/g, "\\'")}')">Poll Models</button>
+				<span id="generic-poll-status" style="font-size:12px;margin-left:8px;"></span>
+			</div>
+			<input id="generic-search" placeholder="Search models..." style="width:400px;margin-bottom:8px;" oninput="filterGenericModels()" />
+			<select id="generic-model-select" style="width:400px;padding:5px;" size="10" onchange="onGenericModelSelect()">
+				<option value="">-- Poll for models to see available options --</option>
+			</select>
+			<div id="generic-context-info" class="muted" style="font-size:12px;margin:8px 0;"></div>
+			<input id="generic-context-length" type="number" placeholder="Context Length (auto-filled from selection)" style="width:400px;" />
+			<br><br>
+			<button type="button" onclick="addGenericModel('${provider.name.replace(/'/g, "\\'")}')">Add Model</button>
+		` : `
+			<p class="muted" style="font-size:13px;">Configure <strong>api_base</strong> in the Providers page to enable model polling.</p>
+			<input id="generic-manual-model-id" placeholder="Model ID (e.g., gpt-4o)" style="width:400px;" />
+			<input id="generic-context-length" type="number" placeholder="Context Length" style="width:400px;" />
+			<br><br>
+			<button type="button" onclick="addGenericModel('${provider.name.replace(/'/g, "\\'")}')">Add Model</button>
+		`}
+	`;
+}
+
+async function pollGenericProviderModels(providerName) {
+	const btn = document.getElementById("generic-poll-btn");
+	const status = document.getElementById("generic-poll-status");
+	btn.disabled = true;
+	status.textContent = "Polling...";
+	status.style.color = "";
+	genericProviderModels = [];
+	selectedGenericModel = null;
+
+	try {
+		const res = await fetch(`/api/providers/${encodeURIComponent(providerName)}/models`);
+		if (!res.ok) {
+			const error = await res.json();
+			throw new Error(error.detail || "Failed to poll models");
+		}
+		const data = await res.json();
+		genericProviderModels = data.models || [];
+		renderGenericModelSelect(genericProviderModels);
+		status.textContent = `Found ${genericProviderModels.length} models`;
+		status.style.color = "#28a745";
+	} catch (e) {
+		status.textContent = `Error: ${e.message}`;
+		status.style.color = "#dc3545";
+		showToast(`Failed to poll models: ${e.message}`, "error");
+	} finally {
+		btn.disabled = false;
+	}
+}
+
+function renderGenericModelSelect(models) {
+	const select = document.getElementById("generic-model-select");
+	select.innerHTML = models.length === 0
+		? '<option value="">No models found</option>'
+		: '<option value="">-- Select a model --</option>' +
+			models.map((m) => {
+				const ctx = m.context_length ? ` (${formatContextLength(m.context_length)})` : "";
+				return `<option value="${m.id}" data-context-length="${m.context_length || ""}" data-name="${m.name || m.id}">${m.id}${ctx}</option>`;
+			}).join("");
+}
+
+function filterGenericModels() {
+	const search = document.getElementById("generic-search").value.toLowerCase();
+	const filtered = genericProviderModels.filter(
+		(m) =>
+			m.id.toLowerCase().includes(search) ||
+			(m.name || "").toLowerCase().includes(search),
+	);
+	renderGenericModelSelect(filtered);
+}
+
+function onGenericModelSelect() {
+	const select = document.getElementById("generic-model-select");
+	const option = select.options[select.selectedIndex];
+	const contextInfo = document.getElementById("generic-context-info");
+	const contextInput = document.getElementById("generic-context-length");
+
+	if (!option.value) {
+		contextInfo.textContent = "";
+		contextInput.value = "";
+		selectedGenericModel = null;
+		return;
+	}
+
+	selectedGenericModel = {
+		id: option.value,
+		name: option.dataset.name || option.value,
+		context_length: option.dataset.contextLength ? parseInt(option.dataset.contextLength, 10) : null,
+	};
+
+	if (selectedGenericModel.context_length) {
+		contextInput.value = selectedGenericModel.context_length;
+		contextInfo.textContent = `Context Length: ${formatContextLength(selectedGenericModel.context_length)}`;
+	} else {
+		contextInput.value = "";
+		contextInfo.textContent = "Context length not available - enter manually";
+	}
+}
+
+async function addGenericModel(providerName) {
+	const contextLength = document.getElementById("generic-context-length").value;
+	const manualInput = document.getElementById("generic-manual-model-id");
+
+	let modelId;
+	if (manualInput) {
+		modelId = manualInput.value.trim();
+		if (!modelId) return showToast("Model ID is required", "error");
+	} else {
+		if (!selectedGenericModel) return showToast("Please select a model", "error");
+		modelId = selectedGenericModel.id;
+	}
+
+	const modelConfig = {
+		model_name: (window.USE_PREFIX ? "claw-bedrock/" : "") + modelId,
+		litellm_params: {
+			model: `${providerName}/${modelId}`,
+		},
+		provider: providerName,
+	};
+
+	if (contextLength)
+		modelConfig.litellm_params.context_length = parseInt(contextLength, 10);
+
+	await addModelCommon(modelConfig, providerName);
 }
 
 async function addManualModel() {
@@ -453,6 +579,8 @@ async function addModelCommon(modelConfig, provider) {
 			const data = await res.json();
 			showToast("Model added successfully");
 			showReloadToast(toast, data.reloaded, data.pid);
+			const reloadBtn = document.getElementById("reload-litellm-btn");
+			if (reloadBtn) reloadBtn.classList.add("needs-reload");
 			closeAddModel();
 			loadModels();
 		} else {
@@ -733,7 +861,7 @@ function loadProviderUI(type) {
             <p class="muted" style="font-size: 12px; margin-top: 5px;">See <a href="https://openrouter.ai/models" target="_blank">OpenRouter models</a>.</p>
         `;
 		loadOpenRouterModels();
-	} else if (provider === "ollama") {
+	} else if (type === "ollama") {
 		ui.innerHTML = `
             <h3>Add Ollama Model</h3>
             <div class="inline-row" style="margin-bottom: 8px;">
@@ -748,7 +876,7 @@ function loadProviderUI(type) {
             <button type="button" onclick="addOllamaModel()">Add Model</button>
             <p class="muted" style="font-size: 12px; margin-top: 5px;">Ensure the remote Ollama instance is running and accessible.</p>
         `;
-	} else if (provider === "bedrock") {
+	} else if (type === "bedrock") {
 		ui.innerHTML = `
             <h3>Add Bedrock Model</h3>
             <div style="margin-bottom: 8px;">
@@ -771,7 +899,7 @@ function loadProviderUI(type) {
             <p class="muted" style="font-size: 12px; margin-top: 5px;">Poll fetches live models from Mantle API. "Load from Catalog" uses the static catalog.</p>
         `;
 		loadBedrockModels();
-	} else if (provider === "manual") {
+	} else if (type === "manual") {
 		ui.innerHTML = `
             <h3>Add Model Manually</h3>
             <input id="manual-name" placeholder="Model Name (e.g., my-model)" style="width: 400px;" /><br>

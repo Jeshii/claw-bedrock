@@ -395,11 +395,6 @@ async function onModelProviderSelect() {
 	}
 	const res = await fetch(`/api/providers/${encodeURIComponent(name)}`);
 	const data = await res.json();
-	const p = data.provider;
-	if (p.type === "bedrock") {
-		loadProviderUIForProvider(name, "bedrock");
-	} else {
-		loadProviderUIForProvider(name, "openai-compatible");
-	}
+	loadProviderUIForProvider(data.provider);
 	hint.style.display = "";
 }

@@ -585,6 +585,72 @@ async def fetch_bedrock_models():
         raise HTTPException(500, f"Error reading Bedrock models catalog: {str(e)}")
 
 
+@app.get("/api/providers/{name}/models")
+async def fetch_provider_models(name: str):
+    """Fetch available models from any OpenAI-compatible provider."""
+    provider = db.get_provider(name)
+    if not provider:
+        raise HTTPException(404, f"Provider '{name}' not found")
+    api_base = provider.get("api_base")
+    if not api_base:
+        raise HTTPException(
+            400,
+            f"Provider '{name}' has no api_base configured. Set it in the Providers page first.",
+        )
+
+    api_key = provider.get("api_key") or os.environ.get(f"{name.upper()}_API_KEY")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+    try:
+        resp = requests.get(
+            f"{api_base.rstrip('/')}/v1/models",
+            headers=headers,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        raw = data.get("data", data) if isinstance(data, dict) else data
+        models = []
+        for m in raw:
+            if not isinstance(m, dict):
+                continue
+            model_id = m.get("id", m.get("name", ""))
+            if not model_id:
+                continue
+            ctx = None
+            if m.get("context_length"):
+                ctx = m["context_length"]
+            elif m.get("context_window"):
+                ctx = m["context_window"]
+            models.append({
+                "id": model_id,
+                "name": m.get("name", model_id),
+                "context_length": int(ctx) if ctx else None,
+            })
+
+        return {"models": sorted(models, key=lambda x: x["id"].lower())}
+    except requests.exceptions.ConnectionError as e:
+        raise HTTPException(
+            400,
+            f"Cannot connect to {api_base}. Check the address and ensure the server is running.",
+        ) from e
+    except requests.exceptions.Timeout as e:
+        raise HTTPException(
+            400,
+            f"Connection to {api_base} timed out. The server may be slow or unreachable.",
+        ) from e
+    except requests.exceptions.HTTPError as e:
+        raise HTTPException(
+            400,
+            f"Error from {api_base}: {e.response.status_code} {e.response.reason}",
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            500, f"Failed to fetch models from '{name}': {str(e)}"
+        ) from e
+
+
 @app.get("/api/providers/bedrock/mantle-models")
 async def fetch_bedrock_mantle_models(
     token: Optional[str] = Query(None),
