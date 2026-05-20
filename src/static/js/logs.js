@@ -1,4 +1,4 @@
-async function _loadLogs() {
+async function loadLogs() {
 	const lines = document.getElementById("log-lines").value;
 	const res = await fetch(`/api/logs?lines=${lines}`);
 	const data = await res.json();
@@ -8,7 +8,7 @@ async function _loadLogs() {
 	logsDiv.scrollTop = logsDiv.scrollHeight;
 }
 
-async function _copyLogs() {
+async function copyLogs() {
 	const logsText = document.getElementById("logs-output").innerText;
 	if (!logsText) return showToast("No logs to copy", "warning");
 	try {
@@ -19,7 +19,7 @@ async function _copyLogs() {
 	}
 }
 
-async function _loadDebugLogs() {
+async function loadDebugLogs() {
 	const lines = document.getElementById("debug-log-lines").value;
 	const res = await fetch(`/api/logs/debug?lines=${lines}`);
 	const data = await res.json();
@@ -29,7 +29,7 @@ async function _loadDebugLogs() {
 	logsDiv.scrollTop = logsDiv.scrollHeight;
 }
 
-async function _copyDebugLogs() {
+async function copyDebugLogs() {
 	const logsText = document.getElementById("debug-logs-output").innerText;
 	if (!logsText) return showToast("No debug logs to copy", "warning");
 	try {
@@ -40,7 +40,7 @@ async function _copyDebugLogs() {
 	}
 }
 
-async function _loadContainerLogs() {
+async function loadContainerLogs() {
 	const lines = document.getElementById("container-log-lines").value;
 	const res = await fetch(`/api/logs/container?lines=${lines}`);
 	const data = await res.json();
@@ -49,7 +49,7 @@ async function _loadContainerLogs() {
 	logsDiv.scrollTop = logsDiv.scrollHeight;
 }
 
-async function _copyContainerLogs() {
+async function copyContainerLogs() {
 	const logsText = document.getElementById("container-logs-output").innerText;
 	if (!logsText) return showToast("No container logs to copy", "warning");
 	try {

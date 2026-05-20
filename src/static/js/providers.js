@@ -40,7 +40,7 @@ function renderProvidersList(providers) {
 		.join("");
 }
 
-async function _toggleProvider(name) {
+async function toggleProvider(name) {
 	const detail = document.getElementById(`provider-detail-${name}`);
 	const chevron = document.getElementById(`provider-chevron-${name}`);
 	if (expandedProvider === name) {
@@ -120,7 +120,7 @@ function renderProviderDetail(provider, models) {
     `;
 }
 
-function _toggleDetailProviderFields() {
+function toggleDetailProviderFields() {
 	const type = document.getElementById("prov-type").value;
 	document.getElementById("prov-bedrock-fields").style.display =
 		type === "bedrock" ? "" : "none";
@@ -128,7 +128,7 @@ function _toggleDetailProviderFields() {
 		type === "openai-compatible" ? "" : "none";
 }
 
-function _showProviderColorPalette(name, swatchEl) {
+function showProviderColorPalette(name, swatchEl) {
 	const existing = document.getElementById(`prov-palette-${name}`);
 	if (existing) {
 		existing.remove();
@@ -159,7 +159,7 @@ function _showProviderColorPalette(name, swatchEl) {
 	}, 0);
 }
 
-async function _updateProviderColor(name, color) {
+async function updateProviderColor(name, color) {
 	try {
 		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
 			method: "PATCH",
@@ -180,7 +180,7 @@ async function _updateProviderColor(name, color) {
 	}
 }
 
-function _startProviderRename(name) {
+function startProviderRename(name) {
 	const btn = document.getElementById(`rename-btn-${name}`);
 	const input = document.getElementById(`prov-display-name`);
 	if (btn.dataset.renaming === "true") {
@@ -247,7 +247,7 @@ async function submitProviderRename(oldName, newName) {
 	}
 }
 
-async function _deleteProviderConfirm(name) {
+async function deleteProviderConfirm(name) {
 	const btn = document.getElementById(`delete-btn-${name}`);
 	if (!btn) return;
 
@@ -304,10 +304,10 @@ function resetProviderDeleteBtn(btn, name) {
 	btn.textContent = "Delete";
 	btn.className = "delete-btn";
 	btn.disabled = false;
-	btn.onclick = () => _deleteProviderConfirm(name);
+	btn.onclick = () => deleteProviderConfirm(name);
 }
 
-function _showCreateProviderForm() {
+function showCreateProviderForm() {
 	document.getElementById("create-provider-row").style.display = "block";
 	document.getElementById("new-provider-name").focus();
 }
@@ -316,7 +316,7 @@ function hideCreateProviderForm() {
 	document.getElementById("create-provider-row").style.display = "none";
 }
 
-function _toggleNewProviderFields() {
+function toggleNewProviderFields() {
 	const type = document.getElementById("new-provider-type").value;
 	document.getElementById("new-provider-bedrock-fields").style.display =
 		type === "bedrock" ? "flex" : "none";
@@ -324,7 +324,7 @@ function _toggleNewProviderFields() {
 		type === "openai-compatible" ? "flex" : "none";
 }
 
-async function _createProvider() {
+async function createProvider() {
 	const name = document.getElementById("new-provider-name").value.trim();
 	if (!name) return showToast("Provider name is required", "error");
 	const type = document.getElementById("new-provider-type").value;
@@ -373,7 +373,7 @@ async function _createProvider() {
 	}
 }
 
-async function _saveProviderDetail(name) {
+async function saveProviderDetail(name) {
 	const type = document.getElementById("prov-type").value;
 	const provider = {
 		name,
@@ -415,7 +415,7 @@ async function _saveProviderDetail(name) {
 	}
 }
 
-function _renderProviderSelector() {
+function renderProviderSelector() {
 	const wrap = document.getElementById("model-provider-selector-wrap");
 	const providers = window._allProviders || [];
 	if (providers.length === 0) {
@@ -432,7 +432,7 @@ function _renderProviderSelector() {
     `;
 }
 
-async function _onModelProviderSelect() {
+async function onModelProviderSelect() {
 	const sel = document.getElementById("model-provider-select");
 	const name = sel.value;
 	const hint = document.getElementById("provider-autofill-hint");

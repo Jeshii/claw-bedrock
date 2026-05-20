@@ -1,22 +1,22 @@
-const _CHECK_SVG =
+const CHECK_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>';
-const _X_CIRCLE_SVG =
+const X_CIRCLE_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>';
-const _RELOAD_SVG =
+const RELOAD_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><path d="M1 4v6h6M23 20v-6h-6" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>';
-const _CHEVRON_RIGHT_SVG =
+const CHEVRON_RIGHT_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>';
-const _CHEVRON_DOWN_SVG =
+const CHEVRON_DOWN_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
-const _CLOSE_SVG =
+const CLOSE_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>';
-const _FREE_SVG =
+const FREE_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z" /></svg>';
-const _WARNING_SVG =
+const WARNING_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>';
-const _MOON_SVG =
+const MOON_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>';
-const _SUN_SVG =
+const SUN_SVG =
 	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px" aria-hidden="true"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>';
 
 const autoRefreshIntervals = { logs: null, debug: null, container: null };
@@ -55,7 +55,7 @@ function updateToast(toast, message, type = null, removeSpinner = true) {
 	}
 }
 
-function _showReloadToast(toast, reloaded, pid) {
+function showReloadToast(toast, reloaded, pid) {
 	if (reloaded) {
 		updateToast(toast, `LiteLLM reloaded (PID ${pid || "unknown"})`, "info");
 	} else {
@@ -72,16 +72,16 @@ function _showReloadToast(toast, reloaded, pid) {
 	}, 3000);
 }
 
-function _base64urlEncode(str) {
+function base64urlEncode(str) {
 	return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function _base64urlDecode(str) {
+function base64urlDecode(str) {
 	str += "=".repeat((4 - (str.length % 4)) % 4);
 	return atob(str.replace(/-/g, "+").replace(/_/g, "/"));
 }
 
-function _ansiToHtml(text) {
+function ansiToHtml(text) {
 	const colorMap = {
 		30: "black",
 		31: "red",
@@ -140,7 +140,7 @@ function _ansiToHtml(text) {
 	return result.replace(/\n/g, "<br>");
 }
 
-function _simplifyErrorMessage(text) {
+function simplifyErrorMessage(text) {
 	const lines = text.split("\n");
 	const simplified = [];
 	let inTraceback = false;
@@ -202,14 +202,14 @@ function _simplifyErrorMessage(text) {
 	return simplified.join("\n");
 }
 
-function _formatContextLength(ctx) {
+function formatContextLength(ctx) {
 	if (!ctx) return "";
 	if (ctx >= 1048576) return `${ctx / 1048576}M ctx`;
 	if (ctx >= 1024) return `${ctx / 1024}k ctx`;
 	return `${ctx} ctx`;
 }
 
-function _toggleAutoRefresh(type) {
+function toggleAutoRefresh(type) {
 	const toggleId =
 		type === "logs"
 			? "auto-refresh-toggle"
@@ -245,7 +245,7 @@ function _toggleAutoRefresh(type) {
 	}
 }
 
-function _restoreAutoRefresh() {
+function restoreAutoRefresh() {
 	["logs", "debug", "container"].forEach((type) => {
 		const storageKey = `autoRefresh_${type}`;
 		const toggleId =
@@ -280,7 +280,7 @@ function _restoreAutoRefresh() {
 	});
 }
 
-function _clearAutoRefresh() {
+function clearAutoRefresh() {
 	["logs", "debug", "container"].forEach((type) => {
 		if (autoRefreshIntervals[type]) {
 			clearInterval(autoRefreshIntervals[type]);
@@ -289,7 +289,7 @@ function _clearAutoRefresh() {
 	});
 }
 
-function _toggleLog(id, toggleId) {
+function toggleLog(id, toggleId) {
 	const pre = document.getElementById(id);
 	const toggle = document.getElementById(toggleId);
 	if (pre.style.display === "none") {
@@ -301,7 +301,7 @@ function _toggleLog(id, toggleId) {
 	}
 }
 
-const _TAG_PALETTE = [
+const TAG_PALETTE = [
 	"#4CAF50",
 	"#2196F3",
 	"#FF9800",

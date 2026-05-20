@@ -1,4 +1,4 @@
-function _showPage(pageId) {
+function showPage(pageId) {
 	if (pageId !== "logs") {
 		clearAutoRefresh();
 		[
@@ -36,7 +36,7 @@ function _showPage(pageId) {
 	if (pageId === "auth") loadAuth();
 }
 
-function _showPage2(pageId) {
+function showPage2(pageId) {
 	document.querySelectorAll(".page").forEach((p) => {
 		p.classList.remove("active");
 	});
@@ -51,7 +51,7 @@ function _showPage2(pageId) {
 	if (pageId === "security") loadKeyStatus();
 }
 
-function _hideLoadingOverlay() {
+function hideLoadingOverlay() {
 	const overlay = document.getElementById("loading-overlay");
 	if (overlay) overlay.remove();
 }

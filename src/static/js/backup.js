@@ -1,6 +1,6 @@
 let pendingBackup = null;
 
-async function _loadExportStats() {
+async function loadExportStats() {
 	const [modelsRes, tagsRes, providersRes] = await Promise.all([
 		fetch("/api/models").then((r) => r.json()),
 		fetch("/api/tags").then((r) => r.json()),
@@ -14,7 +14,7 @@ async function _loadExportStats() {
 		`${providersRes.providers.length} providers`;
 }
 
-function _exportBackup() {
+function exportBackup() {
 	const a = document.createElement("a");
 	a.href = "/api/backup/export";
 	a.download = "";
@@ -80,7 +80,7 @@ function showImportError(msg) {
 	document.getElementById("btn-import").style.display = "none";
 }
 
-async function _submitImport() {
+async function submitImport() {
 	if (!pendingBackup) return;
 	const mode = document.querySelector(
 		'input[name="import-mode"]:checked',

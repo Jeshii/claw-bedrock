@@ -1,4 +1,4 @@
-async function _loadDashboard() {
+async function loadDashboard() {
 	try {
 		const ctrl = new AbortController();
 		const timer = setTimeout(() => ctrl.abort(), 5000);
@@ -135,7 +135,7 @@ async function loadAuth() {
 	}
 }
 
-function _copyAuthCode(code) {
+function copyAuthCode(code) {
 	navigator.clipboard
 		.writeText(code)
 		.then(() => {
@@ -146,7 +146,7 @@ function _copyAuthCode(code) {
 		});
 }
 
-async function _submitAWSCode() {
+async function submitAWSCode() {
 	const input = document.getElementById("aws-code-input");
 	const code = input.value.trim();
 	if (!code) {
@@ -172,7 +172,7 @@ async function _submitAWSCode() {
 	}
 }
 
-async function _logout() {
+async function logout() {
 	try {
 		await fetch("/api/logout", { method: "POST" });
 	} catch (_e) {
@@ -181,7 +181,7 @@ async function _logout() {
 	window.location.href = "/login";
 }
 
-async function _retryLogin(isRetry) {
+async function retryLogin(isRetry) {
 	try {
 		const res = await fetch("/api/auth/retry", { method: "POST" });
 		if (res.ok) {
