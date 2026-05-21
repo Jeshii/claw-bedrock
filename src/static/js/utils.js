@@ -205,6 +205,12 @@ function toggleAutoRefresh(type) {
 			: type === "debug"
 				? "auto-refresh-debug-interval"
 				: "auto-refresh-container-interval";
+	const outputId =
+		type === "logs"
+			? "logs-output"
+			: type === "debug"
+				? "debug-logs-output"
+				: "container-logs-output";
 	const toggleBtn = document.getElementById(toggleId);
 	const intervalSelect = document.getElementById(intervalId);
 	const storageKey = `autoRefresh_${type}`;
@@ -217,8 +223,15 @@ function toggleAutoRefresh(type) {
 		localStorage.setItem(storageKey, "off");
 		showToast(`Auto-refresh ${type} disabled`, "info");
 	} else {
+		const output = document.getElementById(outputId);
+		if (output && output.style.display === "none") return;
 		const interval = parseInt(intervalSelect.value, 10);
-		const loadFunc = type === "logs" ? loadLogs : loadDebugLogs;
+		const loadFunc =
+			type === "logs"
+				? loadLogs
+				: type === "debug"
+					? loadDebugLogs
+					: loadContainerLogs;
 		autoRefreshIntervals[type] = setInterval(loadFunc, interval);
 		toggleBtn.style.background = "#28a745";
 		toggleBtn.style.color = "white";
@@ -275,12 +288,39 @@ function clearAutoRefresh() {
 function toggleLog(id, toggleId) {
 	const pre = document.getElementById(id);
 	const toggle = document.getElementById(toggleId);
+	const panel = pre ? pre.closest(".log-panel") : null;
+	const handle = panel ? panel.querySelector(".resize-handle") : null;
+	const type =
+		id === "logs-output"
+			? "logs"
+			: id === "debug-logs-output"
+				? "debug"
+				: "container";
+	const autoToggle = document.getElementById(
+		type === "logs"
+			? "auto-refresh-toggle"
+			: type === "debug"
+				? "auto-refresh-debug-toggle"
+				: "auto-refresh-container-toggle",
+	);
 	if (pre.style.display === "none") {
 		pre.style.display = "block";
 		toggle.textContent = "Hide Logs";
+		if (handle) handle.style.display = "block";
+		if (autoToggle) autoToggle.disabled = false;
 	} else {
 		pre.style.display = "none";
 		toggle.textContent = "Show Logs";
+		if (handle) handle.style.display = "none";
+		if (autoToggle) {
+			autoToggle.disabled = true;
+			if (autoRefreshIntervals[type]) {
+				clearInterval(autoRefreshIntervals[type]);
+				autoRefreshIntervals[type] = null;
+				autoToggle.style.background = "";
+				autoToggle.style.color = "";
+			}
+		}
 	}
 }
 
@@ -299,17 +339,19 @@ const TAG_PALETTE = [
 	"#009688",
 ];
 
-function startResize(event, panelId) {
+function startResize(event, outputId) {
 	event.preventDefault();
-	const panel = document.getElementById(panelId);
-	if (!panel) return;
+	const output = document.getElementById(outputId);
+	if (!output) return;
+	if (output.classList.contains("hidden")) return;
 	const startY = event.clientY;
-	const startHeight = panel.offsetHeight;
+	const startHeight =
+		output.offsetHeight || parseInt(output.style.height, 10) || 400;
 
 	function onMouseMove(e) {
 		const delta = e.clientY - startY;
 		const newHeight = Math.max(100, startHeight + delta);
-		panel.style.height = newHeight + "px";
+		output.style.height = newHeight + "px";
 	}
 
 	function onMouseUp() {

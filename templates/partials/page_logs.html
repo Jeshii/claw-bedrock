@@ -43,6 +43,7 @@
         <button type="button"
                 id="auto-refresh-toggle"
                 onclick="toggleAutoRefresh('logs')"
+                disabled
                 title="Auto-refresh logs"
                 style="padding:4px 8px;
                        border:1px solid #ccc;
@@ -79,11 +80,11 @@
             <pre id="logs-output"
                  class="code-block scroll-panel hidden"
                  style="font-size: 12px; min-height: 100px;"></pre>
-            <div class="resize-handle" onmousedown="startResize(event, 'logs-panel')"></div>
-        </div>
-        <button type="button"
-                onclick="toggleLog('logs-output', 'logs-toggle')"
-                id="logs-toggle"
+             <div class="resize-handle" data-for="logs-output" style="display:none" onmousedown="startResize(event, 'logs-output')"></div>
+         </div>
+         <button type="button"
+                 onclick="toggleLog('logs-output', 'logs-toggle')"
+                 id="logs-toggle"
                 style="font-size: 12px;
                        padding:4px 8px;
                        border:1px solid #ccc;
@@ -134,6 +135,7 @@
         <button type="button"
                 id="auto-refresh-debug-toggle"
                 onclick="toggleAutoRefresh('debug')"
+                disabled
                 title="Auto-refresh debug logs"
                 style="padding:4px 8px;
                        border:1px solid #ccc;
@@ -170,11 +172,11 @@
             <pre id="debug-logs-output"
                  class="code-block scroll-panel hidden"
                  style="font-size: 12px; min-height: 100px;"></pre>
-            <div class="resize-handle" onmousedown="startResize(event, 'debug-logs-panel')"></div>
-        </div>
-        <button type="button"
-                onclick="toggleLog('debug-logs-output', 'debug-logs-toggle')"
-                id="debug-logs-toggle"
+             <div class="resize-handle" data-for="debug-logs-output" style="display:none" onmousedown="startResize(event, 'debug-logs-output')"></div>
+         </div>
+         <button type="button"
+                 onclick="toggleLog('debug-logs-output', 'debug-logs-toggle')"
+                 id="debug-logs-toggle"
                 style="font-size: 12px;
                        padding:4px 8px;
                        border:1px solid #ccc;
@@ -225,6 +227,7 @@
         <button type="button"
                 id="auto-refresh-container-toggle"
                 onclick="toggleAutoRefresh('container')"
+                disabled
                 title="Auto-refresh container logs"
                 style="padding:4px 8px;
                        border:1px solid #ccc;
@@ -261,11 +264,11 @@
             <pre id="container-logs-output"
                  class="code-block scroll-panel hidden"
                  style="font-size: 12px; min-height: 100px;"></pre>
-            <div class="resize-handle" onmousedown="startResize(event, 'container-logs-panel')"></div>
-        </div>
-        <button type="button"
-                onclick="toggleLog('container-logs-output', 'container-logs-toggle')"
-                id="container-logs-toggle"
+             <div class="resize-handle" data-for="container-logs-output" style="display:none" onmousedown="startResize(event, 'container-logs-output')"></div>
+         </div>
+         <button type="button"
+                 onclick="toggleLog('container-logs-output', 'container-logs-toggle')"
+                 id="container-logs-toggle"
                 style="font-size: 12px;
                        padding:4px 8px;
                        border:1px solid #ccc;
