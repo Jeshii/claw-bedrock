@@ -258,6 +258,8 @@ def _is_sensitive_field(field_name: str) -> bool:
     sensitive_keywords = ["key", "secret", "password", "token"]
     field_lower = field_name.lower()
     return any(keyword in field_lower for keyword in sensitive_keywords)
+
+
 def _encrypt_sensitive_fields(provider: dict) -> dict:
     """Encrypt sensitive fields in a provider dict before saving to DB."""
     encrypted = provider.copy()
@@ -265,6 +267,8 @@ def _encrypt_sensitive_fields(provider: dict) -> dict:
         if isinstance(value, str) and _is_sensitive_field(field):
             encrypted[field] = encryption_utils.encrypt_data(value)
     return encrypted
+
+
 def _decrypt_sensitive_fields(provider: dict) -> dict:
     """Decrypt sensitive fields in a provider dict after reading from DB."""
     decrypted = provider.copy()
@@ -272,6 +276,7 @@ def _decrypt_sensitive_fields(provider: dict) -> dict:
         if isinstance(value, str) and _is_sensitive_field(field):
             decrypted[field] = encryption_utils.decrypt_data(value)
     return decrypted
+
 
 def get_all_providers():
     """Get all provider definitions."""
@@ -334,7 +339,7 @@ BACKUP_SCHEMA_VERSION = 1
 
 
 def export_backup() -> dict:
-    """Dump all tables into a portable backup dict."""
+    """Dump all tables into a portable backup dict with decrypted provider fields."""
     return {
         "schema_version": BACKUP_SCHEMA_VERSION,
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
@@ -342,7 +347,9 @@ def export_backup() -> dict:
             "models": [dict(m) for m in models_table.all()],
             "tags": [dict(t) for t in tags_table.all()],
             "settings": get_settings(),
-            "providers": [dict(p) for p in providers_table.all()],
+            "providers": [
+                _decrypt_sensitive_fields(dict(p)) for p in providers_table.all()
+            ],
         },
     }
 
@@ -436,6 +443,7 @@ def _auto_backup_before_replace():
         path = os.path.join(CONFIG_DIR, f"auto-backup-{ts}.json")
         with open(path, "w") as f:
             json.dump(snapshot, f, indent=2)
+        os.chmod(path, 0o600)
         print(f"[Backup] Auto-backup written to {path}")
     except Exception as e:
         print(f"[Backup] Auto-backup failed: {e}")
