@@ -7,7 +7,7 @@ import json
 import encryption_utils
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
-DB_PATH = os.path.join(CONFIG_DIR, "models.db.json")
+DB_PATH = os.path.join(CONFIG_DIR, "clawbedrock.db.json")
 LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 
 # Initialize TinyDB with caching for better performance

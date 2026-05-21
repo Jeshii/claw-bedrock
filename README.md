@@ -7,9 +7,9 @@ A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as a way to
 1. The container starts LiteLLM with `config.yaml` and the Management UI on port 8282.
 2. The `BedrockTokenRefresher` callback checks your AWS session. If expired, it triggers `aws login --remote`, which prints a URL and waits for you to paste back the authorization code shown in the browser.
 3. Once authenticated, a short-lived Bedrock bearer token is fetched and injected as `BEDROCK_MANTLE_API_KEY`.
-4. Models are added via the Management UI (port 8282), which stores them in TinyDB (`models.db.json`). Supported providers: Bedrock (Mantle), OpenRouter, Ollama, and manual entry.
+4. Models are added via the Management UI (port 8282), which stores them in TinyDB (`clawbedrock.db.json`). Supported providers: Bedrock (Mantle), OpenRouter, Ollama, and manual entry.
 5. When you add, rename, or delete models via the UI, `config.yaml` is automatically regenerated and LiteLLM is restarted to pick up the new config - no manual container restart needed.
-6. For persistence across container restarts, mount a host directory to `/app` using the `CONFIG_DIR` environment variable. Models are stored in `models.db.json` (TinyDB format).
+6. For persistence across container restarts, mount a host directory to `/app` using the `CONFIG_DIR` environment variable. Models are stored in `clawbedrock.db.json` (TinyDB format).
 
 ## Prerequisites
 
