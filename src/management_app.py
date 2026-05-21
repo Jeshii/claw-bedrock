@@ -681,12 +681,19 @@ async def fetch_bedrock_mantle_models(
     text_model_ids = set()
     try:
         bedrock_client = boto3.client("bedrock", region_name=region)
-        paginator = bedrock_client.get_paginator("list_foundation_models")
-        for page in paginator.paginate(
-            byInputModality="TEXT",
-            PaginationConfig={"MaxItems": 1000},
-        ):
-            for model in page.get("modelSummaries", []):
+        try:
+            paginator = bedrock_client.get_paginator("list_foundation_models")
+            for page in paginator.paginate(
+                byInputModality="TEXT",
+                PaginationConfig={"MaxItems": 1000},
+            ):
+                for model in page.get("modelSummaries", []):
+                    model_id = model.get("modelId", "")
+                    if model_id:
+                        text_model_ids.add(model_id)
+        except ValueError:
+            response = bedrock_client.list_foundation_models(byInputModality="TEXT")
+            for model in response.get("modelSummaries", []):
                 model_id = model.get("modelId", "")
                 if model_id:
                     text_model_ids.add(model_id)

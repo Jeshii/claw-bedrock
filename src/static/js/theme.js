@@ -6,12 +6,24 @@ function toggleTheme() {
 	btn.innerHTML = isDark ? `${SUN_SVG}Light` : `${MOON_SVG}Dark`;
 	localStorage.setItem("theme", isDark ? "dark" : "light");
 }
-if (localStorage.getItem("theme") === "dark") {
-	document.body.classList.add("dark");
-	document.addEventListener("DOMContentLoaded", () => {
-		document.querySelector(".theme-toggle").innerHTML = `${SUN_SVG}Light`;
-	});
+
+function initTheme() {
+	const btn = document.querySelector(".theme-toggle");
+	const isDark = localStorage.getItem("theme") === "dark";
+	if (isDark) {
+		document.body.classList.add("dark");
+	}
+	if (btn) {
+		btn.innerHTML = isDark ? `${SUN_SVG}Light` : `${MOON_SVG}Dark`;
+	}
 }
+
+if (document.readyState === "loading") {
+	document.addEventListener("DOMContentLoaded", initTheme);
+} else {
+	initTheme();
+}
+
 if (window.AUTH_REQUIRED) {
 	const sidebarFooter = document.querySelector(".sidebar-footer");
 	const logoutBtn = document.createElement("button");

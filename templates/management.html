@@ -30,16 +30,16 @@
                     <a onclick="showPage('security')">Security</a>
                 </li>
                 <li>
-                    <a onclick="showPage('models')">Models</a>
-                </li>
-                <li>
-                    <a onclick="showPage('backup')">Backup</a>
-                </li>
-                <li>
                     <a onclick="showPage('providers')">Providers</a>
                 </li>
                 <li>
+                    <a onclick="showPage('models')">Models</a>
+                </li>
+                <li>
                     <a onclick="showPage('tags')">Tags</a>
+                </li>
+                <li>
+                    <a onclick="showPage('backup')">Backup</a>
                 </li>
                 <li>
                     <a onclick="showPage('logs')">Logs</a>
@@ -57,10 +57,10 @@
             {% include 'partials/page_dashboard.html' %}
             {% include 'partials/page_auth.html' %}
             {% include 'partials/page_security.html' %}
-            {% include 'partials/page_models.html' %}
-            {% include 'partials/page_backup.html' %}
             {% include 'partials/page_providers.html' %}
+            {% include 'partials/page_models.html' %}
             {% include 'partials/page_tags.html' %}
+            {% include 'partials/page_backup.html' %}
             {% include 'partials/page_logs.html' %}
             {% include 'partials/page_help.html' %}
         </div>

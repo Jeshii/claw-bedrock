@@ -298,3 +298,25 @@ const TAG_PALETTE = [
 	"#3F51B5",
 	"#009688",
 ];
+
+function startResize(event, panelId) {
+	event.preventDefault();
+	const panel = document.getElementById(panelId);
+	if (!panel) return;
+	const startY = event.clientY;
+	const startHeight = panel.offsetHeight;
+
+	function onMouseMove(e) {
+		const delta = e.clientY - startY;
+		const newHeight = Math.max(100, startHeight + delta);
+		panel.style.height = newHeight + "px";
+	}
+
+	function onMouseUp() {
+		document.removeEventListener("mousemove", onMouseMove);
+		document.removeEventListener("mouseup", onMouseUp);
+	}
+
+	document.addEventListener("mousemove", onMouseMove);
+	document.addEventListener("mouseup", onMouseUp);
+}

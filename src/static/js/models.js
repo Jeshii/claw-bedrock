@@ -3,6 +3,7 @@ let openRouterModels = [];
 let bedrockNewModels = [];
 let currentSort = "default";
 let activeFilter = "all";
+let needsReload = false;
 
 const SORT_LABELS = {
 	default: "Default",
@@ -576,6 +577,7 @@ async function addBedrockModel() {
 			max_tokens: modelData.max_tokens,
 			context_length: modelData.context_length,
 		},
+		provider: "bedrock",
 	};
 	await addModelCommon(modelConfig, "bedrock");
 	select.selectedIndex = 0;
@@ -593,8 +595,14 @@ async function addModelCommon(modelConfig, _provider) {
 			updateToast(toast, "Model added — reload LiteLLM to apply", "success");
 			const reloadBtn = document.getElementById("reload-litellm-btn");
 			if (reloadBtn) reloadBtn.classList.add("needs-reload");
+			needsReload = true;
 			closeAddModel();
 			loadModels();
+			setTimeout(() => {
+				toast.style.opacity = "0";
+				toast.style.transition = "opacity 0.3s";
+				setTimeout(() => toast.remove(), 300);
+			}, 3000);
 		} else {
 			const error = await res.json();
 			updateToast(
@@ -938,6 +946,7 @@ async function reloadLiteLLM() {
 			);
 			const reloadBtn = document.getElementById("reload-litellm-btn");
 			if (reloadBtn) reloadBtn.classList.remove("needs-reload");
+			needsReload = false;
 		} else {
 			updateToast(toast, data.message || "LiteLLM reload failed", "warning");
 		}

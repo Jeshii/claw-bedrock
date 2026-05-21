@@ -75,9 +75,12 @@
             <option value="100">Last 100 lines</option>
             <option value="200">Last 200 lines</option>
         </select>
-        <pre id="logs-output"
-             class="code-block scroll-panel hidden"
-             style="font-size: 12px"></pre>
+        <div class="log-panel" id="logs-panel" style="position:relative;">
+            <pre id="logs-output"
+                 class="code-block scroll-panel hidden"
+                 style="font-size: 12px; min-height: 100px;"></pre>
+            <div class="resize-handle" onmousedown="startResize(event, 'logs-panel')"></div>
+        </div>
         <button type="button"
                 onclick="toggleLog('logs-output', 'logs-toggle')"
                 id="logs-toggle"
@@ -163,9 +166,12 @@
             <option value="100">Last 100 lines</option>
             <option value="200">Last 200 lines</option>
         </select>
-        <pre id="debug-logs-output"
-             class="code-block scroll-panel hidden"
-             style="font-size: 12px"></pre>
+        <div class="log-panel" id="debug-logs-panel" style="position:relative;">
+            <pre id="debug-logs-output"
+                 class="code-block scroll-panel hidden"
+                 style="font-size: 12px; min-height: 100px;"></pre>
+            <div class="resize-handle" onmousedown="startResize(event, 'debug-logs-panel')"></div>
+        </div>
         <button type="button"
                 onclick="toggleLog('debug-logs-output', 'debug-logs-toggle')"
                 id="debug-logs-toggle"
@@ -251,9 +257,12 @@
             <option value="100">Last 100 lines</option>
             <option value="200">Last 200 lines</option>
         </select>
-        <pre id="container-logs-output"
-             class="code-block scroll-panel hidden"
-             style="font-size: 12px"></pre>
+        <div class="log-panel" id="container-logs-panel" style="position:relative;">
+            <pre id="container-logs-output"
+                 class="code-block scroll-panel hidden"
+                 style="font-size: 12px; min-height: 100px;"></pre>
+            <div class="resize-handle" onmousedown="startResize(event, 'container-logs-panel')"></div>
+        </div>
         <button type="button"
                 onclick="toggleLog('container-logs-output', 'container-logs-toggle')"
                 id="container-logs-toggle"

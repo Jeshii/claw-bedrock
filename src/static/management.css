@@ -1146,20 +1146,36 @@ body.dark .loading-text {
 @keyframes reloadPulse {
 	0%,
 	100% {
-		box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.5);
+		box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7);
+		background: #e6f0ff;
 	}
 	50% {
-		box-shadow: 0 0 0 6px rgba(0, 123, 255, 0);
+		box-shadow: 0 0 0 10px rgba(0, 123, 255, 0);
+		background: #cce0ff;
 	}
 }
 #reload-litellm-btn.needs-reload {
-	animation: reloadPulse 1.5s ease-in-out infinite;
+	animation: reloadPulse 1.2s ease-in-out infinite;
 	border-color: #007bff;
 	color: #007bff;
+	font-weight: 600;
 }
 body.dark #reload-litellm-btn.needs-reload {
+	animation: reloadPulseDark 1.2s ease-in-out infinite;
 	border-color: #66b3ff;
 	color: #66b3ff;
+	background: #1a3050;
+}
+@keyframes reloadPulseDark {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(102, 179, 255, 0.7);
+		background: #1a3050;
+	}
+	50% {
+		box-shadow: 0 0 0 10px rgba(102, 179, 255, 0);
+		background: #204060;
+	}
 }
 
 /* Utility classes */
@@ -1223,6 +1239,25 @@ body.dark .code-block {
 	max-height: 400px;
 	overflow-y: auto;
 }
+.log-panel {
+	position: relative;
+}
+.log-panel .resize-handle {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	height: 6px;
+	cursor: ns-resize;
+	background: transparent;
+	z-index: 10;
+}
+.log-panel .resize-handle:hover {
+	background: rgba(0, 123, 255, 0.2);
+}
+body.dark .log-panel .resize-handle:hover {
+	background: rgba(102, 179, 255, 0.3);
+}
 .hidden {
 	display: none;
 }
@@ -1239,4 +1274,32 @@ body.dark .code-block {
 	font-size: 12px;
 	color: #007bff;
 	margin-left: 8px;
+}
+
+/* Dialog/modal styles */
+dialog {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	margin: 0;
+	background: white;
+	color: #333;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+body.dark dialog {
+	background: #2a2a2a;
+	color: #e0e0e0;
+	border-color: #555;
+}
+dialog::backdrop {
+	background: rgba(0, 0, 0, 0.5);
+}
+#key-reveal-modal code {
+	background: #f5f5f5;
+	color: #333;
+}
+body.dark #key-reveal-modal code {
+	background: #333;
+	color: #e0e0e0;
 }
