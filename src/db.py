@@ -12,6 +12,8 @@ LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 
 # Initialize TinyDB with caching for better performance
 db = TinyDB(DB_PATH, indent=2, sort_keys=True)
+# Set secure file permissions for the database
+os.chmod(DB_PATH, 0o600)
 models_table = db.table("models")
 settings_table = db.table("settings")
 tags_table = db.table("tags")
@@ -251,19 +253,44 @@ def seed_default_providers():
     )
 
 
+def _is_sensitive_field(field_name: str) -> bool:
+    """Check if a field name is sensitive (contains key, secret, password, or token)."""
+    sensitive_keywords = ["key", "secret", "password", "token"]
+    field_lower = field_name.lower()
+    return any(keyword in field_lower for keyword in sensitive_keywords)
+def _encrypt_sensitive_fields(provider: dict) -> dict:
+    """Encrypt sensitive fields in a provider dict before saving to DB."""
+    encrypted = provider.copy()
+    for field, value in provider.items():
+        if isinstance(value, str) and _is_sensitive_field(field):
+            encrypted[field] = encryption_utils.encrypt_data(value)
+    return encrypted
+def _decrypt_sensitive_fields(provider: dict) -> dict:
+    """Decrypt sensitive fields in a provider dict after reading from DB."""
+    decrypted = provider.copy()
+    for field, value in provider.items():
+        if isinstance(value, str) and _is_sensitive_field(field):
+            decrypted[field] = encryption_utils.decrypt_data(value)
+    return decrypted
+
 def get_all_providers():
     """Get all provider definitions."""
-    return providers_table.all()
+    providers = providers_table.all()
+    return [_decrypt_sensitive_fields(p) for p in providers]
 
 
 def get_provider(name):
     """Get a single provider by name."""
-    return providers_table.get(where("name") == name)
+    provider = providers_table.get(where("name") == name)
+    if provider:
+        return _decrypt_sensitive_fields(provider)
+    return None
 
 
 def upsert_provider(provider: dict):
     """Create or update a provider. `provider` must include a `name` key."""
-    providers_table.upsert(provider, where("name") == provider["name"])
+    encrypted = _encrypt_sensitive_fields(provider)
+    providers_table.upsert(encrypted, where("name") == provider["name"])
 
 
 def delete_provider(name):

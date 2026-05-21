@@ -7,6 +7,17 @@
             <button type="button" class="go-auth-btn" onclick="showPage2('auth')">Go to Authentication →</button>
         </div>
     </div>
+    <!-- Encryption warning banner: shown when using dev encryption key -->
+    <div id="encryption-warning-banner">
+        <button type="button"
+                class="banner-dismiss"
+                onclick="dismissEncryptionBanner()"
+                title="Dismiss">✕</button>
+        <div class="banner-title">Encryption Warning</div>
+        <div class="banner-message">
+            Using development encryption key. Provider API keys are encrypted with a predictable key. Set <code>ENCRYPTION_KEY</code> or <code>ENCRYPTION_PASSWORD</code> for production use.
+        </div>
+    </div>
     <div class="section" id="dashboard-info">
         <h2>Server Information</h2>
         <div id="server-status">Loading...</div>

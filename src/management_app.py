@@ -18,6 +18,7 @@ from typing import Optional, Dict
 import db
 import token_refresher
 import password_utils
+import encryption_utils
 import hmac
 
 
@@ -292,6 +293,13 @@ async def retry_auth():
     """Reset failure state and start a new aws login --remote process."""
     token_refresher.token_refresher.retry_login()
     return {"success": True}
+
+
+@app.get("/api/security/encryption-status")
+async def encryption_status():
+    """Return encryption configuration status."""
+    configured, mode = encryption_utils.get_encryption_mode()
+    return {"configured": configured, "using": mode}
 
 
 @app.get("/api/security/key")

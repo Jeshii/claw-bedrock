@@ -87,3 +87,15 @@ def decrypt_data(token: str) -> str:
         return f.decrypt(token.encode("utf-8")).decode("utf-8")
     except (InvalidToken, Exception):
         return token
+
+
+def get_encryption_mode() -> tuple[bool, str]:
+    """Get encryption status: (configured: bool, mode: str).
+
+    Returns (configured, mode) where mode is 'key', 'password', or 'dev'.
+    """
+    if os.environ.get("ENCRYPTION_KEY"):
+        return True, "key"
+    if os.environ.get("ENCRYPTION_PASSWORD"):
+        return True, "password"
+    return False, "dev"

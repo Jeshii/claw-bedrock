@@ -35,3 +35,25 @@ async function revokeKey() {
 	await fetch("/api/security/key", { method: "DELETE" });
 	loadKeyStatus();
 }
+
+async function loadEncryptionStatus() {
+	if (document.getElementById("DISABLE_ENCRYPTION_WARNING") === "1") return;
+	const banner = document.getElementById("encryption-warning-banner");
+	if (!banner) return;
+	try {
+		const res = await fetch("/api/security/encryption-status");
+		const data = await res.json();
+		if (data.configured) {
+			banner.style.display = "none";
+		} else {
+			banner.style.display = "";
+		}
+	} catch {
+		banner.style.display = "none";
+	}
+}
+
+function dismissEncryptionBanner() {
+	const banner = document.getElementById("encryption-warning-banner");
+	if (banner) banner.style.display = "none";
+}

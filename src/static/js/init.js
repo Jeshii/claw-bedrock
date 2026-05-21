@@ -1,6 +1,7 @@
 loadDashboard();
 loadAuth();
 loadModels();
+loadEncryptionStatus();
 setTimeout(hideLoadingOverlay, 8000);
 setTimeout(loadDashboard, 5000);
 setInterval(loadAuth, 10000);

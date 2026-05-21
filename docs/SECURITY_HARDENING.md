@@ -11,7 +11,7 @@ Mitigate risks from storing sensitive API keys in TinyDB by adding encryption at
 If neither `ENCRYPTION_KEY` nor `ENCRYPTION_PASSWORD` is set, the app falls back to a hardcoded dev encryption key. Data is still encrypted, but the key is predictable.
 
 ### Solution
-- **New API endpoint**: `GET /api/security/encryption-status`
+- Use `GET /api/security/encryption-status`
   - Returns `{ configured: bool, using: "key" | "password" | "dev" }`
 - **Dashboard banner**: Add `#encryption-warning-banner` div (similar to existing `#dashboard-auth-banner`)
   - Shown by default, hidden when encryption is properly configured
