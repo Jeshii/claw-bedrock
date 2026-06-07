@@ -264,7 +264,6 @@ async def auth_status():
             auth_url = f.read().strip()
 
     openrouter_key = bool(os.environ.get("OPENROUTER_API_KEY"))
-    ollama_host = os.environ.get("OLLAMA_API_BASE", "")
 
     return {
         "auth_needed": auth_needed,
@@ -272,7 +271,6 @@ async def auth_status():
         "awaiting_code": token_refresher.token_refresher._awaiting_code,
         "auth_error": token_refresher.token_refresher.get_auth_error(),
         "openrouter": {"configured": openrouter_key},
-        "ollama": {"configured": bool(ollama_host), "host": ollama_host},
     }
 
 
@@ -523,63 +521,6 @@ async def fetch_openrouter_models(
         return {"models": enriched}
     except Exception as e:
         raise HTTPException(500, f"Failed to fetch OpenRouter models: {str(e)}")
-
-
-@app.get("/api/providers/ollama/models")
-async def fetch_ollama_models(api_base: Optional[str] = Query(None)):
-    """Fetch models from a remote Ollama instance."""
-    api_base = api_base or os.environ.get("OLLAMA_API_BASE", "")
-    if not api_base:
-        raise HTTPException(
-            400,
-            "No Ollama API base provided. Set OLLAMA_API_BASE or provide api_base parameter.",
-        )
-
-    try:
-        resp = requests.get(f"{api_base.rstrip('/')}/api/tags", timeout=10)
-        resp.raise_for_status()
-        models = resp.json().get("models", [])
-        return {"models": sorted(models, key=lambda m: m.get("name", "").lower())}
-    except requests.exceptions.ConnectionError as e:
-        raise HTTPException(
-            400,
-            f"Cannot connect to Ollama at {api_base}. Check the address and ensure Ollama is running.",
-        ) from e
-    except requests.exceptions.Timeout as e:
-        raise HTTPException(
-            400,
-            f"Connection to Ollama at {api_base} timed out. The server may be slow or unreachable.",
-        ) from e
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(
-            400, f"Error communicating with Ollama at {api_base}: {str(e)}"
-        ) from e
-    except Exception as e:
-        raise HTTPException(400, f"Failed to fetch Ollama models: {str(e)}") from e
-
-
-@app.get("/api/providers/ollama/model-details")
-async def fetch_ollama_model_details(
-    name: str = Query(...), api_base: Optional[str] = Query(None)
-):
-    """Fetch details for a specific Ollama model including context length."""
-    api_base = api_base or os.environ.get("OLLAMA_API_BASE", "")
-    if not api_base:
-        raise HTTPException(400, "No Ollama API base provided.")
-    try:
-        resp = requests.post(
-            f"{api_base.rstrip('/')}/api/show",
-            json={"name": name},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        ctx = data.get("details", {}).get("context_length")
-        return {"name": name, "context_length": ctx}
-    except Exception as e:
-        raise HTTPException(
-            400, f"Failed to fetch Ollama model details: {str(e)}"
-        ) from e
 
 
 @app.get("/api/providers/bedrock/models")

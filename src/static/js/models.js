@@ -471,7 +471,7 @@ function onGenericModelSelect() {
 
 	selectedGenericModel = {
 		id: option.value,
-		name: option.dataset.name || option.value,
+		name: (option.dataset.name && option.dataset.name !== "undefined") ? option.dataset.name : option.value,
 		context_length: option.dataset.contextLength
 			? parseInt(option.dataset.contextLength, 10)
 			: null,
