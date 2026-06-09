@@ -754,6 +754,25 @@ body.dark .color-palette-swatch:hover {
 	border-color: #fff;
 }
 
+/* Group badges */
+.group-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 7px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+	background: #e8f0fe;
+	color: #1967d2;
+	border: 1px solid #1967d2;
+}
+body.dark .group-badge {
+	background: #1a3a5c;
+	color: #66b3ff;
+	border-color: #66b3ff;
+}
+
 /* Provider badges */
 .provider-badge {
 	display: inline-flex;

@@ -253,6 +253,22 @@ async def update_settings(
     }
 
 
+@app.get("/api/settings/router")
+async def get_router_settings_route():
+    """Get current router settings for model groups."""
+    return db.get_router_settings()
+
+
+@app.post("/api/settings/router")
+async def set_router_settings_route(body: Dict):
+    """Update router settings for model groups."""
+    allowed = {"routing_strategy", "allowed_fails", "num_retries"}
+    filtered = {k: v for k, v in body.items() if k in allowed}
+    db.set_router_settings(filtered)
+    merge_configs()
+    return {"success": True}
+
+
 @app.get("/api/auth/status")
 async def auth_status():
     """Check if AWS auth is needed and get auth URL."""
@@ -802,7 +818,7 @@ async def update_model(encoded_name: str, update: Dict):
         raise HTTPException(400, "Invalid model name encoding")
 
     # Allow updating specific fields
-    allowed_fields = {"reasoning_effort", "tags"}
+    allowed_fields = {"reasoning_effort", "tags", "model_group"}
     updates = {k: v for k, v in update.items() if k in allowed_fields}
     if not updates:
         raise HTTPException(400, "No valid fields to update")

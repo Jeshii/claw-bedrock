@@ -62,6 +62,9 @@ function renderModelList(models, preserveExpanded) {
 			const providerBadge = m._provider
 				? `<span class="provider-badge" style="background:${m._provider.color}20;border:1px solid ${m._provider.color};color:${m._provider.color}">${m._provider.display_name || m._provider.name}</span>`
 				: "";
+			const groupBadge = m.model_group
+				? `<span class="group-badge">${m.model_group}</span>`
+				: "";
 			return `
         <div class="model-item" data-model-name="${m.model_name}">
             <div class="model-row" onclick="toggleModel('${escName}')" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleTagDrop(event, '${escName}')">
@@ -70,11 +73,19 @@ function renderModelList(models, preserveExpanded) {
                  ${ctxStr ? `<span class="muted" style="font-size: 12px;">${ctxStr}</span>` : ""}
                  ${reasoning ? `<span style="color: #007bff; font-size: 12px;">${reasoning}</span>` : ""}
                 ${providerBadge}
+                ${groupBadge}
                 ${tagChips}
             </div>
             <div class="model-detail" id="detail-${escName}">
                 <div class="model-detail-path">${m.litellm_params.model}</div>
                 <div class="model-detail-actions">
+                    <label style="font-size:12px;display:flex;align-items:center;gap:4px;">
+                        Group:
+                        <input type="text" value="${m.model_group || ""}"
+                               onchange="updateModelGroup('${escName}', this.value)"
+                               placeholder="none"
+                               style="width:120px;font-size:12px;padding:2px 4px;margin:0;" />
+                    </label>
                     <select onchange="updateReasoningEffort('${escName}', this)">
                         <option value="">Reasoning: default</option>
                         <option value="low" ${m.reasoning_effort === "low" ? "selected" : ""}>Low</option>
@@ -264,6 +275,42 @@ async function updateReasoningEffort(modelName, selectElement) {
 		}
 	} catch (e) {
 		showToast(`Error: ${e.message}`, "error");
+	}
+}
+
+async function updateModelGroup(modelName, groupName) {
+	const toast = showToast("Updating group...", "info", 0, true);
+	try {
+		const encoded = base64urlEncode(modelName);
+		const res = await fetch(`/api/models/${encoded}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ model_group: groupName || null }),
+		});
+		if (res.ok) {
+			updateToast(toast, "Group updated — reload LiteLLM to apply", "success");
+			const reloadBtn = document.getElementById("reload-litellm-btn");
+			if (reloadBtn) reloadBtn.classList.add("needs-reload");
+		} else {
+			const error = await res.json();
+			updateToast(
+				toast,
+				`Error: ${error.detail || "Failed to update group"}`,
+				"error",
+			);
+			setTimeout(() => {
+				toast.style.opacity = "0";
+				toast.style.transition = "opacity 0.3s";
+				setTimeout(() => toast.remove(), 300);
+			}, 3000);
+		}
+	} catch (e) {
+		updateToast(toast, `Error: ${e.message}`, "error");
+		setTimeout(() => {
+			toast.style.opacity = "0";
+			toast.style.transition = "opacity 0.3s";
+			setTimeout(() => toast.remove(), 300);
+		}, 3000);
 	}
 }
 
@@ -471,7 +518,10 @@ function onGenericModelSelect() {
 
 	selectedGenericModel = {
 		id: option.value,
-		name: (option.dataset.name && option.dataset.name !== "undefined") ? option.dataset.name : option.value,
+		name:
+			option.dataset.name && option.dataset.name !== "undefined"
+				? option.dataset.name
+				: option.value,
 		context_length: option.dataset.contextLength
 			? parseInt(option.dataset.contextLength, 10)
 			: null,
@@ -958,6 +1008,47 @@ async function reloadLiteLLM() {
 		toast.style.transition = "opacity 0.3s";
 		setTimeout(() => toast.remove(), 300);
 	}, 3000);
+}
+
+async function loadRouterSettings() {
+	try {
+		const res = await fetch("/api/settings/router");
+		const s = await res.json();
+		const strategyEl = document.getElementById("routing-strategy");
+		const failsEl = document.getElementById("allowed-fails");
+		const retriesEl = document.getElementById("num-retries");
+		if (strategyEl && s.routing_strategy) strategyEl.value = s.routing_strategy;
+		if (failsEl && s.allowed_fails != null) failsEl.value = s.allowed_fails;
+		if (retriesEl && s.num_retries != null) retriesEl.value = s.num_retries;
+	} catch (_e) {
+		// Router settings UI may not be rendered yet; that's fine
+	}
+}
+
+async function saveRouterSetting() {
+	const body = {
+		routing_strategy: document.getElementById("routing-strategy").value,
+		allowed_fails: parseInt(document.getElementById("allowed-fails").value),
+		num_retries: parseInt(document.getElementById("num-retries").value),
+	};
+	try {
+		const res = await fetch("/api/settings/router", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		if (res.ok) {
+			showToast("Router settings saved");
+		} else {
+			const error = await res.json();
+			showToast(
+				`Error: ${error.detail || "Failed to save router settings"}`,
+				"error",
+			);
+		}
+	} catch (e) {
+		showToast(`Error: ${e.message}`, "error");
+	}
 }
 
 function sortModels(models, sortKey) {

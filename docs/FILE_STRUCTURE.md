@@ -62,7 +62,9 @@ claw-bedrock/
 │       ├── page_security.html
 │       ├── page_tags.html
 ├── docs/
-│   └── FILE_STRUCTURE.md
+│   ├── CHANGELOG.md
+│   ├── FILE_STRUCTURE.md
+│   └── ROADMAP.md
 ├── Dockerfile
 ├── AGENTS.md
 ├── biome.json
@@ -129,7 +131,10 @@ HTML templates for the management UI:
 - `partials/` — Page fragments included by management.html (dashboard, auth, security, models, backup, providers, tags, logs, help)
 
 ### `docs/`
-Project documentation including this file structure reference.
+Project documentation:
+- `CHANGELOG.md` — Version history and feature changelog
+- `FILE_STRUCTURE.md` — This file, directory structure reference
+- `ROADMAP.md` — Full development roadmap with all planned phases
 
 ### Root Files
 - `Dockerfile` — Container build instructions at root (standard convention)

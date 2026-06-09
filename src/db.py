@@ -153,8 +153,24 @@ def model_name_exists(model_name):
 
 
 def get_models_for_litellm():
-    """Get full config for LiteLLM including models, router_settings, and litellm_settings."""
-    config = {"model_list": [dict(m) for m in models_table.all()]}
+    """Get full config for LiteLLM including models, router_settings, and litellm_settings.
+
+    If a model has `model_group` set, its `model_name` in the LiteLLM config
+    becomes the group name (with prefix applied if enabled). Multiple models
+    sharing the same `model_group` form a failover group in LiteLLM.
+    """
+    use_prefix = get_setting("use_prefix", True)
+    config = {"model_list": []}
+
+    for m in models_table.all():
+        entry = dict(m)
+        if entry.get("model_group"):
+            group = entry["model_group"]
+            if use_prefix and not group.startswith("claw-bedrock/"):
+                entry["model_name"] = f"claw-bedrock/{group}"
+            else:
+                entry["model_name"] = group
+        config["model_list"].append(entry)
 
     # Add router_settings from DB
     router_settings = get_router_settings()
