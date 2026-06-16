@@ -66,7 +66,9 @@
         <div class="stack-sm">
             <label class="inline-row" style="gap: 8px;">
                 <span style="min-width: 140px; font-size: 13px;">Routing strategy:</span>
-                <select id="routing-strategy" onchange="saveRouterSetting()" style="width: auto;">
+                <select id="routing-strategy"
+                        onchange="saveRouterSetting()"
+                        style="width: auto">
                     <option value="latency-based">Latency-based</option>
                     <option value="usage-based">Usage-based</option>
                     <option value="cost-based">Cost-based</option>
@@ -75,14 +77,24 @@
             </label>
             <label class="inline-row" style="gap: 8px;">
                 <span style="min-width: 140px; font-size: 13px;">Allowed fails:</span>
-                <input type="number" id="allowed-fails" min="1" max="20" value="3"
-                       onchange="saveRouterSetting()" style="width: 80px;" />
+                <input type="number"
+                       id="allowed-fails"
+                       min="1"
+                       max="20"
+                       value="3"
+                       onchange="saveRouterSetting()"
+                       style="width: 80px" />
                 <span class="muted" style="font-size: 11px;">fails before model deactivated</span>
             </label>
             <label class="inline-row" style="gap: 8px;">
                 <span style="min-width: 140px; font-size: 13px;">Retries on failure:</span>
-                <input type="number" id="num-retries" min="0" max="10" value="2"
-                       onchange="saveRouterSetting()" style="width: 80px;" />
+                <input type="number"
+                       id="num-retries"
+                       min="0"
+                       max="10"
+                       value="2"
+                       onchange="saveRouterSetting()"
+                       style="width: 80px" />
                 <span class="muted" style="font-size: 11px;">retries within the group</span>
             </label>
         </div>

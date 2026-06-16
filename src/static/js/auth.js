@@ -120,14 +120,7 @@ async function loadAuth() {
 			X_CIRCLE_SVG +
 			" OpenRouter not configured (set OPENROUTER_API_KEY).</p>";
 	}
-	if (data.ollama.configured) {
-		html += `<p>${CHECK_SVG} Ollama configured (${data.ollama.host}).</p>`;
-	} else {
-		html +=
-			"<p>" +
-			X_CIRCLE_SVG +
-			" Ollama not configured (set OLLAMA_API_BASE).</p>";
-	}
+
 	authDiv.innerHTML = html;
 	if (preservedValue && data.awaiting_code) {
 		const input = document.getElementById("aws-code-input");
