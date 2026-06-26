@@ -2,19 +2,28 @@ let playgroundAbortController = null;
 
 async function loadPlayground() {
 	const modelSelect = document.getElementById("playground-model");
+	const placeholder = document.querySelector(".playground-placeholder");
 	if (!modelSelect) return;
 	const idx = modelSelect.selectedIndex;
 	const prevVal = modelSelect.options[idx]?.value || "";
+	modelSelect.disabled = true;
 
 	try {
 		const resp = await fetch("/api/chat/models");
 		if (!resp.ok) {
-			showToast("Failed to load models", "error");
+			const errText = resp.status === 502 ? "LiteLLM not reachable" : `Error ${resp.status}`;
+			if (placeholder) placeholder.innerHTML = `<p>${errText}. Make sure LiteLLM is running.</p>`;
 			return;
 		}
 		const data = await resp.json();
 		const models = data.models || [];
+		modelSelect.disabled = false;
 		modelSelect.innerHTML = '<option value="">— Select a model —</option>';
+		if (models.length === 0) {
+			modelSelect.innerHTML = '<option value="">— No models configured —</option>';
+			if (placeholder) placeholder.innerHTML = "<p>No models found. Add models on the Models page first.</p>";
+			return;
+		}
 		for (const id of models) {
 			const opt = document.createElement("option");
 			opt.value = id;
@@ -25,7 +34,7 @@ async function loadPlayground() {
 			modelSelect.value = prevVal;
 		}
 	} catch (e) {
-		showToast("Error loading models: " + e.message, "error");
+		if (placeholder) placeholder.innerHTML = `<p>Could not load models: ${e.message}</p>`;
 	}
 }
 

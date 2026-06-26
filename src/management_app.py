@@ -355,19 +355,27 @@ async def version_endpoint():
 
 @app.get("/api/chat/models")
 async def chat_models():
-    """Return available model IDs from LiteLLM for the playground model selector."""
-    key = db.get_master_key()
-    headers = {"Authorization": f"Bearer {key}"} if key else {}
-    try:
-        resp = requests.get(
-            f"{LITELLM_BASE_URL}/v1/models", headers=headers, timeout=10
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        model_ids = [m["id"] for m in data.get("data", [])]
-        return {"models": sorted(model_ids)}
-    except Exception as e:
-        raise HTTPException(502, f"Failed to fetch models from LiteLLM: {str(e)}")
+    """Return available model names for the playground selector.
+
+    Uses TinyDB directly (same naming logic as get_models_for_litellm)
+    so the playground can list models even before LiteLLM has been reloaded.
+    """
+    use_prefix = db.get_setting("use_prefix", True)
+    names = []
+    for m in db.get_all_models():
+        group = m.get("model_group")
+        if group:
+            if use_prefix and not group.startswith("claw-bedrock/"):
+                names.append(f"claw-bedrock/{group}")
+            else:
+                names.append(group)
+        else:
+            raw = m.get("model_name", "")
+            if use_prefix and not raw.startswith("claw-bedrock/"):
+                names.append(f"claw-bedrock/{raw}")
+            else:
+                names.append(raw)
+    return {"models": sorted(set(names))}
 
 
 @app.post("/api/chat/completions")
