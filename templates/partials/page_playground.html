@@ -1,0 +1,46 @@
+<div id="page-playground" class="page">
+    <h1>Playground</h1>
+    <p class="muted" style="font-size: 13px; margin-bottom: 12px;">
+        Stateless chat — select a model and send a message. Responses stream in real time.
+    </p>
+    <div class="playground-layout">
+        <div class="playground-toolbar">
+            <select id="playground-model" class="playground-model-selector">
+                <option value="">— Select a model —</option>
+            </select>
+            <div class="playground-toolbar-actions">
+                <button type="button"
+                        onclick="toggleSystemPrompt()"
+                        class="btn-secondary"
+                        id="sysprompt-toggle"
+                        title="Add a system prompt">System</button>
+                <button type="button" onclick="clearChat()" class="btn-secondary">Clear</button>
+            </div>
+        </div>
+        <div id="playground-system-section"
+             class="playground-system-section hidden">
+            <textarea id="playground-system-prompt"
+                      placeholder="System prompt (optional)…"
+                      rows="2"></textarea>
+        </div>
+        <div id="playground-messages" class="playground-messages">
+            <div class="playground-placeholder">
+                <p>Select a model and send a message to start.</p>
+            </div>
+        </div>
+        <div class="playground-input-area">
+            <textarea id="playground-input"
+                      placeholder="Type a message…"
+                      rows="2"
+                      onkeydown="handlePlaygroundKeydown(event)"></textarea>
+            <button type="button"
+                    id="playground-send-btn"
+                    onclick="sendPlaygroundMessage()"
+                    class="btn-primary">Send</button>
+            <button type="button"
+                    id="playground-stop-btn"
+                    onclick="stopPlaygroundStream()"
+                    class="btn-danger hidden">Stop</button>
+        </div>
+    </div>
+</div>

@@ -34,6 +34,7 @@ function showPage(pageId) {
 	if (pageId === "models") loadModels();
 	if (pageId === "backup") loadExportStats();
 	if (pageId === "providers") loadProvidersPage();
+	if (pageId === "playground") loadPlayground();
 	if (pageId === "tags") loadTagsPage();
 	if (pageId === "logs") {
 		loadLogs();
@@ -70,6 +71,7 @@ function dismissReloadWarning(doReload) {
 		if (pageId === "security") loadKeyStatus();
 		if (pageId === "backup") loadExportStats();
 		if (pageId === "providers") loadProvidersPage();
+		if (pageId === "playground") loadPlayground();
 		if (pageId === "tags") loadTagsPage();
 		if (pageId === "logs") {
 			loadLogs();

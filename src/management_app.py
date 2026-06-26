@@ -1,7 +1,12 @@
 from collections import defaultdict
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import (
+    HTMLResponse,
+    RedirectResponse,
+    JSONResponse,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 import yaml
 import json
@@ -346,6 +351,56 @@ async def revoke_key():
 async def version_endpoint():
     """Return the current version of claw-bedrock."""
     return {"version": get_version()}
+
+
+@app.get("/api/chat/models")
+async def chat_models():
+    """Return available model IDs from LiteLLM for the playground model selector."""
+    key = db.get_master_key()
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    try:
+        resp = requests.get(
+            f"{LITELLM_BASE_URL}/v1/models", headers=headers, timeout=10
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        model_ids = [m["id"] for m in data.get("data", [])]
+        return {"models": sorted(model_ids)}
+    except Exception as e:
+        raise HTTPException(502, f"Failed to fetch models from LiteLLM: {str(e)}")
+
+
+@app.post("/api/chat/completions")
+async def chat_completion(body: Dict):
+    """Proxy to LiteLLM /v1/chat/completions with SSE streaming."""
+    body["stream"] = True
+    key = db.get_master_key()
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    try:
+        resp = requests.post(
+            f"{LITELLM_BASE_URL}/v1/chat/completions",
+            json=body,
+            headers=headers,
+            stream=True,
+            timeout=(10, 300),
+        )
+        resp.raise_for_status()
+        return StreamingResponse(
+            resp.iter_lines(),
+            media_type="text/event-stream",
+            headers={"X-Accel-Buffering": "no"},
+        )
+    except requests.exceptions.HTTPError as e:
+        detail = "Unknown error"
+        try:
+            detail = e.response.json().get("error", {}).get("message", str(e))
+        except Exception:
+            detail = str(e)
+        raise HTTPException(e.response.status_code, detail)
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(502, "Cannot connect to LiteLLM")
+    except requests.exceptions.Timeout:
+        raise HTTPException(504, "LiteLLM request timed out")
 
 
 @app.get("/api/dashboard")
