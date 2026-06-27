@@ -539,6 +539,9 @@ function onGenericModelSelect() {
 async function addGenericModel(providerName) {
 	const contextLength = document.getElementById("generic-context-length").value;
 	const manualInput = document.getElementById("generic-manual-model-id");
+	const provider = (window._allProviders || []).find(
+		(p) => p.name === providerName,
+	);
 
 	let modelId;
 	if (manualInput) {
@@ -553,10 +556,17 @@ async function addGenericModel(providerName) {
 	const modelConfig = {
 		model_name: (window.USE_PREFIX ? "claw-bedrock/" : "") + modelId,
 		litellm_params: {
-			model: `${providerName}/${modelId}`,
+			model: `openai/${modelId}`,
 		},
 		provider: providerName,
 	};
+
+	if (provider?.api_base) {
+		modelConfig.litellm_params.api_base = provider.api_base;
+	}
+	if (provider?.api_key) {
+		modelConfig.litellm_params.api_key = provider.api_key;
+	}
 
 	if (contextLength)
 		modelConfig.litellm_params.context_length = parseInt(contextLength, 10);

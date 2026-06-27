@@ -828,6 +828,7 @@ async def delete_model(encoded_model_name: str):
 
     db.delete_model(model_name)
     merge_configs()
+    _reload_litellm_config()
 
     return {
         "status": "success",
@@ -840,6 +841,7 @@ async def add_model(model: Dict):
     """Add a new model to TinyDB."""
     db.add_model(model)
     merge_configs()
+    _reload_litellm_config()
 
     return {
         "status": "success",
@@ -864,6 +866,7 @@ async def rename_model(encoded_old_name: str, update: Dict):
         raise HTTPException(404, f"Model {old_model_name} not found")
 
     merge_configs()
+    _reload_litellm_config()
 
     return {
         "status": "success",
@@ -891,6 +894,7 @@ async def update_model(encoded_name: str, update: Dict):
         raise HTTPException(404, f"Model {model_name} not found")
 
     merge_configs()
+    _reload_litellm_config()
     return {"status": "success", "updated": updates}
 
 

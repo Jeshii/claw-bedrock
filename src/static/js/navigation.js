@@ -18,6 +18,8 @@ function showPage(pageId) {
 		if (modal) {
 			modal.showModal();
 			window._pendingPage = pageId;
+			// Load playground models from TinyDB even before reload completes
+			if (pageId === "playground") loadPlayground();
 			return;
 		}
 	}
