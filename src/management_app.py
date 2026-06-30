@@ -877,17 +877,29 @@ async def rename_model(encoded_old_name: str, update: Dict):
 
 @app.patch("/api/models/{encoded_name:path}")
 async def update_model(encoded_name: str, update: Dict):
-    """Update fields on a model (e.g., reasoning_effort)."""
+    """Update fields on a model (e.g., reasoning_effort, litellm_params.thinking)."""
     try:
         model_name = base64url_decode(encoded_name)
     except Exception:
         raise HTTPException(400, "Invalid model name encoding")
 
-    # Allow updating specific fields
-    allowed_fields = {"reasoning_effort", "tags", "model_group"}
+    allowed_fields = {"reasoning_effort", "tags", "model_group", "litellm_params"}
     updates = {k: v for k, v in update.items() if k in allowed_fields}
     if not updates:
         raise HTTPException(400, "No valid fields to update")
+
+    # Deep-merge litellm_params to avoid replacing unrelated keys
+    if "litellm_params" in updates:
+        model = db.get_model_by_name(model_name)
+        if model:
+            existing_lp = dict(model.get("litellm_params", {}))
+            new_lp = updates.pop("litellm_params")
+            for key, value in new_lp.items():
+                if value is None:
+                    existing_lp.pop(key, None)
+                else:
+                    existing_lp[key] = value
+            updates["litellm_params"] = existing_lp
 
     updated = db.update_model_field(model_name, updates)
     if not updated:

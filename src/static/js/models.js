@@ -49,7 +49,9 @@ function renderModelList(models, preserveExpanded) {
 			const reasoning = m.reasoning_effort
 				? m.reasoning_effort.charAt(0).toUpperCase() +
 					m.reasoning_effort.slice(1)
-				: "";
+				: m.litellm_params?.thinking?.type === "enabled"
+					? `Thinking (${m.litellm_params.thinking.budget_tokens})`
+					: "";
 			const escName = m.model_name.replace(/'/g, "\\'");
 			const tags = m.tags || [];
 			const tagChips = tags
@@ -250,12 +252,40 @@ async function submitRename(oldName, newName) {
 
 async function updateReasoningEffort(modelName, selectElement) {
 	const effort = selectElement.value || null;
+	const model = (window._allModels || []).find(
+		(x) => x.model_name === modelName,
+	);
+	const isBedrock =
+		model?.litellm_params?.model?.startsWith("bedrock_mantle/") ||
+		model?.provider === "bedrock";
+
+	let payload;
+	if (isBedrock && effort) {
+		const budgetMap = { low: 1024, medium: 8000, high: 16000 };
+		payload = {
+			litellm_params: {
+				thinking: {
+					type: "enabled",
+					budget_tokens: budgetMap[effort],
+				},
+			},
+			reasoning_effort: null,
+		};
+	} else if (isBedrock && !effort) {
+		payload = {
+			litellm_params: { thinking: null },
+			reasoning_effort: null,
+		};
+	} else {
+		payload = { reasoning_effort: effort };
+	}
+
 	try {
 		const encoded = base64urlEncode(modelName);
 		const res = await fetch(`/api/models/${encoded}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ reasoning_effort: effort }),
+			body: JSON.stringify(payload),
 		});
 		if (res.ok) {
 			const m = (window._allModels || []).find(
@@ -263,10 +293,35 @@ async function updateReasoningEffort(modelName, selectElement) {
 			);
 			if (m) {
 				m.reasoning_effort = effort;
+				if (isBedrock) {
+					if (effort) {
+						const budgetMap = { low: 1024, medium: 8000, high: 16000 };
+						m.litellm_params = m.litellm_params || {};
+						m.litellm_params.thinking = {
+							type: "enabled",
+							budget_tokens: budgetMap[effort],
+						};
+					} else if (m.litellm_params) {
+						delete m.litellm_params.thinking;
+					}
+				}
 			}
 			const rendered = window._renderedModels || [];
 			const idx = rendered.findIndex((x) => x.model_name === modelName);
-			if (idx !== -1) rendered[idx].reasoning_effort = effort;
+			if (idx !== -1) {
+				rendered[idx].reasoning_effort = effort;
+				if (isBedrock && rendered[idx].litellm_params) {
+					if (effort) {
+						const budgetMap = { low: 1024, medium: 8000, high: 16000 };
+						rendered[idx].litellm_params.thinking = {
+							type: "enabled",
+							budget_tokens: budgetMap[effort],
+						};
+					} else {
+						delete rendered[idx].litellm_params.thinking;
+					}
+				}
+			}
 			renderModelList(rendered, true);
 			showToast(`Reasoning effort updated for ${modelName}`);
 		} else {
@@ -1083,10 +1138,15 @@ function sortModels(models, sortKey) {
 			break;
 		case "reasoning": {
 			const order = { low: 1, medium: 2, high: 3 };
-			sorted.sort(
-				(a, b) =>
-					(order[b.reasoning_effort] || 0) - (order[a.reasoning_effort] || 0),
-			);
+			const effortLevel = (m) => {
+				if (m.reasoning_effort) return order[m.reasoning_effort] || 0;
+				if (m.litellm_params?.thinking?.type === "enabled") {
+					const t = m.litellm_params.thinking.budget_tokens;
+					return t >= 12000 ? 3 : t >= 2000 ? 2 : 1;
+				}
+				return 0;
+			};
+			sorted.sort((a, b) => effortLevel(b) - effortLevel(a));
 			break;
 		}
 	}
