@@ -11,8 +11,10 @@ async function loadPlayground() {
 	try {
 		const resp = await fetch("/api/chat/models");
 		if (!resp.ok) {
-			const errText = resp.status === 502 ? "LiteLLM not reachable" : `Error ${resp.status}`;
-			if (placeholder) placeholder.innerHTML = `<p>${errText}. Make sure LiteLLM is running.</p>`;
+			const errText =
+				resp.status === 502 ? "LiteLLM not reachable" : `Error ${resp.status}`;
+			if (placeholder)
+				placeholder.innerHTML = `<p>${errText}. Make sure LiteLLM is running. <button type="button" onclick="loadPlayground()">Retry</button></p>`;
 			return;
 		}
 		const data = await resp.json();
@@ -20,8 +22,10 @@ async function loadPlayground() {
 		modelSelect.disabled = false;
 		modelSelect.innerHTML = '<option value="">— Select a model —</option>';
 		if (models.length === 0) {
-			modelSelect.innerHTML = '<option value="">— No models configured —</option>';
-			if (placeholder) placeholder.innerHTML = "<p>No models found. Add models on the Models page first.</p>";
+			modelSelect.innerHTML =
+				'<option value="">— No models configured —</option>';
+			if (placeholder)
+				placeholder.innerHTML = `<p>No models found. Add models on the Models page first. <button type="button" onclick="loadPlayground()">Retry</button></p>`;
 			return;
 		}
 		for (const id of models) {
@@ -34,7 +38,8 @@ async function loadPlayground() {
 			modelSelect.value = prevVal;
 		}
 	} catch (e) {
-		if (placeholder) placeholder.innerHTML = `<p>Could not load models: ${e.message}</p>`;
+		if (placeholder)
+			placeholder.innerHTML = `<p>Could not load models: ${e.message} <button type="button" onclick="loadPlayground()">Retry</button></p>`;
 	}
 }
 
