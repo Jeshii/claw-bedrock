@@ -423,20 +423,14 @@ function renderProviderSelector() {
 		wrap.innerHTML = "";
 		return;
 	}
-	const bedrockProvider = providers.find((p) => p.type === "bedrock");
-	const defaultName = bedrockProvider
-		? bedrockProvider.name
-		: providers[0].name;
 	wrap.innerHTML = `
         <label for="model-provider-select" class="muted" style="font-size:13px;">Provider</label><br>
         <select id="model-provider-select" onchange="onModelProviderSelect()">
-            ${providers.map((p) => `<option value="${p.name}" ${p.name === defaultName ? "selected" : ""}>${p.display_name || p.name}</option>`).join("")}
+            <option value="">-- Select a provider --</option>
+            ${providers.map((p) => `<option value="${p.name}">${p.display_name || p.name}</option>`).join("")}
         </select>
         <span id="provider-autofill-hint" class="hidden">Provider fields pre-filled below</span>
     `;
-	setTimeout(() => {
-		onModelProviderSelect();
-	}, 0);
 }
 
 async function onModelProviderSelect() {
