@@ -1042,9 +1042,29 @@ async def get_provider_detail(name: str):
 
 @app.put("/api/providers/{name}")
 async def update_provider(name: str, body: Dict):
-    """Update a provider."""
-    body["name"] = name
-    db.upsert_provider(body)
+    """Update a provider — merges into existing record, guards sensitive fields."""
+    existing = db.get_provider(name)
+    if not existing:
+        raise HTTPException(404, "Provider not found")
+    merged = dict(existing)
+    for field in (
+        "display_name",
+        "type",
+        "color",
+        "notes",
+        "api_base",
+        "aws_region",
+        "aws_access_key_env",
+        "aws_secret_key_env",
+    ):
+        if field in body:
+            merged[field] = body[field]
+    if "api_key" in body and body["api_key"]:
+        merged["api_key"] = body["api_key"]
+    elif body.get("clear_api_key"):
+        merged.pop("api_key", None)
+    merged["name"] = name
+    db.upsert_provider(merged)
     return {"success": True}
 
 

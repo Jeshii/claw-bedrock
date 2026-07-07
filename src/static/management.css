@@ -105,6 +105,28 @@ body.dark .main a:hover {
 body.dark .sidebar-footer {
 	border-color: #444;
 }
+.sidebar-reload-btn {
+	width: 100%;
+	padding: 10px;
+	cursor: pointer;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	background: white;
+	font-size: 14px;
+	transition: all 0.2s;
+	margin-bottom: 8px;
+}
+body.dark .sidebar-reload-btn {
+	background: #333;
+	color: #e0e0e0;
+	border-color: #666;
+}
+.sidebar-reload-btn:hover {
+	background: #f8f9fa;
+}
+body.dark .sidebar-reload-btn:hover {
+	background: #444;
+}
 .theme-toggle {
 	width: 100%;
 	padding: 10px;

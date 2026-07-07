@@ -95,7 +95,7 @@ function renderProviderDetail(provider, models) {
 			: '<span style="color:#888;font-size:13px;">No models use this provider</span>';
 	detail.innerHTML = `
         <div class="provider-detail-header">
-            <span class="provider-color-swatch" id="prov-color-swatch-${provider.name}" style="background:${provider.color || "#888"};width:20px;height:20px;border-radius:4px;flex-shrink:0;cursor:pointer;border:1px solid rgba(0,0,0,0.15);" onclick="showProviderColorPalette('${escName}', this)"></span>
+            <span class="provider-color-swatch" id="prov-color-swatch-${provider.name}" data-color="${provider.color || "#888"}" style="background:${provider.color || "#888"};width:20px;height:20px;border-radius:4px;flex-shrink:0;cursor:pointer;border:1px solid rgba(0,0,0,0.15);" onclick="showProviderColorPalette('${escName}', this)"></span>
             <input id="prov-display-name" value="${provider.display_name || provider.name}" placeholder="Display Name" />
         </div>
         <div class="provider-field-row"><label>Type</label>
@@ -169,7 +169,10 @@ async function updateProviderColor(name, color) {
 		if (res.ok) {
 			showToast("Color updated");
 			const swatch = document.getElementById(`prov-color-swatch-${name}`);
-			if (swatch) swatch.style.background = color;
+			if (swatch) {
+				swatch.style.background = color;
+				swatch.dataset.color = color;
+			}
 			loadProvidersPage();
 		} else {
 			const err = await res.json();
@@ -375,13 +378,12 @@ async function createProvider() {
 
 async function saveProviderDetail(name) {
 	const type = document.getElementById("prov-type").value;
+	const swatch = document.getElementById(`prov-color-swatch-${name}`);
 	const provider = {
 		name,
 		display_name: document.getElementById("prov-display-name").value.trim(),
 		type,
-		color:
-			document.getElementById(`prov-color-swatch-${name}`)?.style
-				?.backgroundColor || "#888888",
+		color: swatch?.dataset?.color || "#888888",
 		notes: document.getElementById("prov-notes").value.trim(),
 	};
 	if (type === "bedrock") {
@@ -395,7 +397,10 @@ async function saveProviderDetail(name) {
 		const apiBase = document.getElementById("prov-api-base");
 		if (apiBase) provider.api_base = apiBase.value.trim();
 		const apiKey = document.getElementById("prov-api-key");
-		if (apiKey) provider.api_key = apiKey.value.trim();
+		if (apiKey) {
+			const val = apiKey.value.trim();
+			if (val) provider.api_key = val;
+		}
 	}
 	try {
 		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
