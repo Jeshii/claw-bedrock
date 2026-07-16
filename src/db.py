@@ -1,3 +1,4 @@
+import logging
 from tinydb import TinyDB, where, Query
 import os
 import secrets
@@ -6,6 +7,8 @@ import datetime
 import json
 import sys
 import encryption_utils
+
+logger = logging.getLogger(__name__)
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 DB_PATH = os.path.join(CONFIG_DIR, "clawbedrock.db.json")
@@ -170,6 +173,7 @@ def get_models_for_litellm():
     config = {"model_list": []}
     provider_cache: dict[str, dict | None] = {}
 
+    skipped = 0
     for m in models_table.all():
         entry = dict(m)
 
@@ -181,10 +185,15 @@ def get_models_for_litellm():
                 entry["model_name"] = group
 
         resolved_params = _merge_provider_defaults(entry, provider_cache)
-        if resolved_params is not None:
-            entry["litellm_params"] = resolved_params
+        if resolved_params is None:
+            skipped += 1
+            continue
 
+        entry["litellm_params"] = resolved_params
         config["model_list"].append(entry)
+
+    if skipped:
+        logger.warning("Skipped %d model(s) with missing or unset providers", skipped)
 
     router_settings = get_router_settings()
     if router_settings:
@@ -212,10 +221,14 @@ def _merge_provider_defaults(
 
     provider = cache[provider_name]
     if not provider:
-        raise ValueError(
-            f"Provider '{provider_name}' referenced by model '{model.get('model_name')}' "
-            f"does not exist. Create or reassign the provider."
+        model_name = model.get("model_name", "<unknown>")
+        logger.warning(
+            "Skipping model %r: referenced provider %r no longer exists. "
+            "Restore the provider or reassign/delete the model in Management UI.",
+            model_name,
+            provider_name,
         )
+        return None
 
     lp = dict(model.get("litellm_params", {}))
     provider_type = provider.get("type", "custom")
