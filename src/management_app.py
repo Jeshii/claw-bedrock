@@ -1058,30 +1058,61 @@ async def get_provider_detail(name: str):
     return {"provider": db.sanitize_provider_for_response(provider), "models": models}
 
 
+ALLOWED_PROVIDER_FIELDS = frozenset({
+    "name", "display_name", "type", "color", "notes",
+    "api_base", "aws_region",
+    "api_key", "clear_api_key",
+    "aws_access_key_env", "aws_secret_key_env",
+})
+
+VALID_PROVIDER_TYPES = frozenset({"bedrock", "openai-compatible", "custom"})
+
+
 @app.put("/api/providers/{name}")
 async def update_provider(name: str, body: Dict):
     """Update a provider with explicit field semantics.
 
-    - Non-sensitive fields (display_name, type, color, notes, api_base, aws_region):
-      updated when present in body.
-    - api_key:
-        omitted        → retains existing encrypted blob
-        present, empty → treated as no-change (keep existing)
-        non-empty      → encrypts and replaces
-        clear_api_key  → removes the key field entirely
-    - aws_access_key_env, aws_secret_key_env:
-        present        → encrypted and stored
-        omitted        → retains existing encrypted blob
+    Flow:
+      1. Validate and normalize submitted fields.
+      2. Detect runtime changes BEFORE persisting.
+      3. Persist to TinyDB.
+      4. If runtime-relevant fields changed, regenerate config and reload LiteLLM.
+      5. Return the sanitized persisted DTO (freshly read from DB).
+      6. On merge/reload failure — return structured 503, NO DB rollback.
+
+    Field semantics:
+      - Non-sensitive fields (display_name, type, color, notes, api_base, aws_region):
+        updated when present in body.
+      - api_key:
+          omitted        → retains existing encrypted blob
+          present, empty → treated as no-change (keep existing)
+          non-empty      → encrypts and replaces
+          clear_api_key  → removes the key field entirely
+      - aws_access_key_env, aws_secret_key_env:
+          present        → encrypted and stored
+          omitted        → retains existing encrypted blob
     """
     existing_raw = db._get_provider_raw(name)
     if not existing_raw:
         raise HTTPException(404, "Provider not found")
 
+    unknown = [k for k in body if k not in ALLOWED_PROVIDER_FIELDS]
+    if unknown:
+        raise HTTPException(400, f"Unknown field(s): {', '.join(unknown)}")
+
+    if body.get("name") and body["name"] != name:
+        raise HTTPException(
+            400, "Renaming via PUT is not supported; use the rename endpoint"
+        )
+
+    if "type" in body and body["type"] not in VALID_PROVIDER_TYPES:
+        raise HTTPException(400, f"Invalid type '{body['type']}'; must be one of: {', '.join(sorted(VALID_PROVIDER_TYPES))}")
+
     merged = dict(existing_raw)
 
     for field in ("display_name", "type", "color", "notes", "api_base", "aws_region"):
         if field in body:
-            merged[field] = body[field]
+            merged[field] = (body[field] or "").strip() if isinstance(body[field], str) else body[field]
 
     if "api_key" not in body:
         pass
@@ -1100,47 +1131,46 @@ async def update_provider(name: str, body: Dict):
             else:
                 merged.pop(field, None)
 
-    if body.get("name") and body["name"] != name:
-        raise HTTPException(
-            400, "Renaming via PUT is not supported; use the rename endpoint"
-        )
-
-    runtime_changed = _detect_provider_runtime_change(existing_raw, merged)
     merged["name"] = name
 
-    try:
-        db._upsert_provider_raw(merged)
-    except Exception as e:
-        print(f"[Provider] DB write FAILED name={name} error={e}", file=sys.stderr)
-        raise HTTPException(500, f"Failed to persist provider: {e}")
+    runtime_changed = _detect_provider_runtime_change(existing_raw, merged)
 
+    db._upsert_provider_raw(merged)
     print(f"[Provider] Updated name={name} runtime_changed={runtime_changed}")
 
     if runtime_changed:
         success, detail = merge_configs_atomic()
         if not success:
             print(
-                f"[Provider] Config merge FAILED name={name} — rolling back DB",
+                f"[Provider] RECONCILIATION WARNING: provider '{name}' persisted but "
+                f"config generation FAILED at merge stage: {detail}",
                 file=sys.stderr,
             )
-            db._upsert_provider_raw(existing_raw)
-            raise HTTPException(503, f"Saved but not applied: {detail}")
-
-        reload_result = _reload_litellm_config()
-        if not reload_result:
-            print(
-                f"[Provider] LiteLLM reload FAILED name={name} — rolling back DB and config",
-                file=sys.stderr,
-            )
-            db._upsert_provider_raw(existing_raw)
-            merge_configs()
             raise HTTPException(
                 503,
                 detail={
                     "saved": True,
                     "applied": False,
-                    "message": "Provider saved but LiteLLM configuration was not applied. "
-                    "The previous configuration has been restored.",
+                    "stage": "merge",
+                    "message": f"Provider saved but config generation failed: {detail}",
+                },
+            )
+
+        reload_result = _reload_litellm_config()
+        if not reload_result:
+            print(
+                f"[Provider] RECONCILIATION WARNING: provider '{name}' persisted but "
+                f"LiteLLM reload FAILED at reload stage",
+                file=sys.stderr,
+            )
+            raise HTTPException(
+                503,
+                detail={
+                    "saved": True,
+                    "applied": False,
+                    "stage": "reload",
+                    "message": "Provider saved but LiteLLM was not reloaded. "
+                    "The new config has been written but is not yet active.",
                 },
             )
 
