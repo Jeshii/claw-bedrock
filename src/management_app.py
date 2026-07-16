@@ -19,7 +19,9 @@ import psutil
 import base64
 import threading
 import datetime
+import shutil
 from typing import Optional, Dict
+from tinydb import where
 import db
 import token_refresher
 import password_utils
@@ -49,20 +51,28 @@ BEDROCK_MODELS_PATH = os.path.join(BASE_DIR, "bedrock_models.json")
 LITELLM_BASE_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
 
 
-def _reload_litellm_config():
-    """Push updated config to LiteLLM without restart."""
+def _reload_litellm_config() -> bool:
+    """Push updated config to LiteLLM without restart. Returns True on success."""
     config = db.get_models_for_litellm()
     try:
         key = db.get_master_key()
         headers = {"Authorization": f"Bearer {key}"} if key else {}
-        requests.post(
+        resp = requests.post(
             f"{LITELLM_BASE_URL}/config/update",
             json=config,
             headers=headers,
             timeout=5,
         )
+        success = resp.status_code < 500
+        if not success:
+            print(
+                f"[reload] Config reload returned HTTP {resp.status_code}",
+                file=sys.stderr,
+            )
+        return success
     except Exception as e:
-        print(f"[reload] Config reload failed: {e}")
+        print(f"[reload] Config reload failed: {e}", file=sys.stderr)
+        return False
 
 
 def get_version():
@@ -1017,55 +1027,128 @@ async def remove_model_tag(encoded_name: str, tag_name: str):
 
 @app.get("/api/providers")
 async def list_providers():
-    """List all provider definitions."""
-    return {"providers": db.get_all_providers()}
+    """List all provider definitions (sanitized)."""
+    providers = db.get_all_providers()
+    return {"providers": [db.sanitize_provider_for_response(p) for p in providers]}
 
 
 @app.post("/api/providers")
 async def create_provider(body: Dict):
-    """Create or update a provider."""
+    """Create a new provider."""
     if not body.get("name"):
         raise HTTPException(400, "name is required")
-    db.upsert_provider(body)
-    return {"success": True}
+    if db.providers_table.contains(where("name") == body["name"]):
+        raise HTTPException(409, f"Provider '{body['name']}' already exists")
+    try:
+        db.upsert_provider(body)
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    created = db.get_provider(body["name"])
+    print(f"[Provider] Created name={body['name']} type={body.get('type')}")
+    return {"provider": db.sanitize_provider_for_response(created)}
 
 
 @app.get("/api/providers/{name}")
 async def get_provider_detail(name: str):
-    """Get a single provider and its models."""
+    """Get a single provider (sanitized) and its models."""
     provider = db.get_provider(name)
     if not provider:
         raise HTTPException(404, "Not found")
     models = db.get_models_by_provider(name)
-    return {"provider": provider, "models": models}
+    return {"provider": db.sanitize_provider_for_response(provider), "models": models}
 
 
 @app.put("/api/providers/{name}")
 async def update_provider(name: str, body: Dict):
-    """Update a provider — merges into existing record, guards sensitive fields."""
-    existing = db.get_provider(name)
-    if not existing:
+    """Update a provider with explicit field semantics.
+
+    - Non-sensitive fields (display_name, type, color, notes, api_base, aws_region):
+      updated when present in body.
+    - api_key:
+        omitted        → retains existing encrypted blob
+        present, empty → treated as no-change (keep existing)
+        non-empty      → encrypts and replaces
+        clear_api_key  → removes the key field entirely
+    - aws_access_key_env, aws_secret_key_env:
+        present        → encrypted and stored
+        omitted        → retains existing encrypted blob
+    """
+    existing_raw = db._get_provider_raw(name)
+    if not existing_raw:
         raise HTTPException(404, "Provider not found")
-    merged = dict(existing)
-    for field in (
-        "display_name",
-        "type",
-        "color",
-        "notes",
-        "api_base",
-        "aws_region",
-        "aws_access_key_env",
-        "aws_secret_key_env",
-    ):
+
+    merged = dict(existing_raw)
+
+    for field in ("display_name", "type", "color", "notes", "api_base", "aws_region"):
         if field in body:
             merged[field] = body[field]
-    if "api_key" in body and body["api_key"]:
-        merged["api_key"] = body["api_key"]
+
+    if "api_key" not in body:
+        pass
     elif body.get("clear_api_key"):
         merged.pop("api_key", None)
+    else:
+        val = body["api_key"]
+        if val:
+            merged["api_key"] = encryption_utils.encrypt_data(val)
+
+    for field in ("aws_access_key_env", "aws_secret_key_env"):
+        if field in body:
+            val = body[field]
+            if val:
+                merged[field] = encryption_utils.encrypt_data(val)
+            else:
+                merged.pop(field, None)
+
+    if body.get("name") and body["name"] != name:
+        raise HTTPException(
+            400, "Renaming via PUT is not supported; use the rename endpoint"
+        )
+
+    runtime_changed = _detect_provider_runtime_change(existing_raw, merged)
     merged["name"] = name
-    db.upsert_provider(merged)
-    return {"success": True}
+
+    try:
+        db._upsert_provider_raw(merged)
+    except Exception as e:
+        print(f"[Provider] DB write FAILED name={name} error={e}", file=sys.stderr)
+        raise HTTPException(500, f"Failed to persist provider: {e}")
+
+    print(f"[Provider] Updated name={name} runtime_changed={runtime_changed}")
+
+    if runtime_changed:
+        success, detail = merge_configs_atomic()
+        if not success:
+            print(
+                f"[Provider] Config merge FAILED name={name} — rolling back DB",
+                file=sys.stderr,
+            )
+            db._upsert_provider_raw(existing_raw)
+            raise HTTPException(503, f"Saved but not applied: {detail}")
+
+        reload_result = _reload_litellm_config()
+        if not reload_result:
+            print(
+                f"[Provider] LiteLLM reload FAILED name={name} — rolling back DB and config",
+                file=sys.stderr,
+            )
+            db._upsert_provider_raw(existing_raw)
+            merge_configs()
+            raise HTTPException(
+                503,
+                detail={
+                    "saved": True,
+                    "applied": False,
+                    "message": "Provider saved but LiteLLM configuration was not applied. "
+                    "The previous configuration has been restored.",
+                },
+            )
+
+    persisted = db.get_provider(name)
+    return {
+        "provider": db.sanitize_provider_for_response(persisted),
+        "runtime_changed": runtime_changed,
+    }
 
 
 @app.delete("/api/providers/{name}")
@@ -1153,12 +1236,28 @@ async def preview_backup(request: Request):
 
 
 def enrich_model_with_provider(model: dict) -> dict:
-    """Attach provider display info to a model for UI use."""
+    """Attach sanitized provider display info to a model for UI use."""
     provider_name = model.get("provider")
     if provider_name:
         provider = db.get_provider(provider_name)
-        model["_provider"] = provider
+        if provider:
+            model["_provider"] = db.sanitize_provider_for_response(provider)
     return model
+
+
+def _detect_provider_runtime_change(before_raw: dict, after_raw: dict) -> bool:
+    """Return True if any runtime-relevant field differs between before and after."""
+    runtime_fields = {
+        "type",
+        "api_base",
+        "aws_region",
+        "api_key",
+        "aws_access_key_env",
+        "aws_secret_key_env",
+    }
+    before_norm = {k: v for k, v in before_raw.items() if k in runtime_fields}
+    after_norm = {k: v for k, v in after_raw.items() if k in runtime_fields}
+    return before_norm != after_norm
 
 
 def merge_configs():
@@ -1179,6 +1278,42 @@ def merge_configs():
         )
     except Exception as e:
         print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
+
+
+def merge_configs_atomic() -> tuple[bool, str]:
+    """Write merged config to a temp file, validate, then atomically replace.
+    Returns (success, error_message).
+    """
+    merged = db.get_models_for_litellm()
+    tmp_path = CONFIG_PATH + ".tmp"
+
+    try:
+        with open(tmp_path, "w") as f:
+            yaml.dump(
+                merged, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+            )
+        with open(tmp_path, "r") as f:
+            yaml.safe_load(f)
+        shutil.move(tmp_path, CONFIG_PATH)
+        print(
+            f"[Merge] Atomic config merge complete. Total models: {len(merged.get('model_list', []))}"
+        )
+        return True, ""
+    except yaml.YAMLError as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        print(f"[Merge] Config validation FAILED: {e}", file=sys.stderr)
+        return False, f"Generated config is invalid: {e}"
+    except OSError as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        print(f"[Merge] Config write FAILED: {e}", file=sys.stderr)
+        return False, f"Config file write failed: {e}"
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        print(f"[Merge] Config merge FAILED: {e}", file=sys.stderr)
+        return False, str(e)
 
 
 def validate_config() -> tuple[bool, str]:

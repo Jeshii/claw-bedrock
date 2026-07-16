@@ -4,6 +4,7 @@ import secrets
 import yaml
 import datetime
 import json
+import sys
 import encryption_utils
 
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
@@ -158,29 +159,85 @@ def get_models_for_litellm():
     If a model has `model_group` set, its `model_name` in the LiteLLM config
     becomes the group name (with prefix applied if enabled). Multiple models
     sharing the same `model_group` form a failover group in LiteLLM.
+
+    Provider-level defaults are dynamically merged into each model's litellm_params:
+      - OpenAI-compatible: api_base, api_key
+      - Bedrock: aws_region, credential env refs
+    Precedence: model explicit override > provider default > application default
     """
     use_prefix = get_setting("use_prefix", True)
+    use_prefix_bool = use_prefix if isinstance(use_prefix, bool) else True
     config = {"model_list": []}
+    provider_cache: dict[str, dict | None] = {}
 
     for m in models_table.all():
         entry = dict(m)
+
         if entry.get("model_group"):
             group = entry["model_group"]
-            if use_prefix and not group.startswith("claw-bedrock/"):
+            if use_prefix_bool and not group.startswith("claw-bedrock/"):
                 entry["model_name"] = f"claw-bedrock/{group}"
             else:
                 entry["model_name"] = group
+
+        resolved_params = _merge_provider_defaults(entry, provider_cache)
+        if resolved_params is not None:
+            entry["litellm_params"] = resolved_params
+
         config["model_list"].append(entry)
 
-    # Add router_settings from DB
     router_settings = get_router_settings()
     if router_settings:
         config["router_settings"] = router_settings
 
-    # Add litellm_settings (token_refresher is baked in)
     config["litellm_settings"] = get_litellm_settings()
 
     return config
+
+
+def _merge_provider_defaults(
+    model: dict,
+    cache: dict[str, dict | None],
+) -> dict | None:
+    """Merge provider-level defaults into model's litellm_params.
+    Returns updated litellm_params dict, or None if no provider is referenced.
+    Model-level explicit values always take precedence.
+    """
+    provider_name = model.get("provider")
+    if not provider_name:
+        return None
+
+    if provider_name not in cache:
+        cache[provider_name] = providers_table.get(where("name") == provider_name)
+
+    provider = cache[provider_name]
+    if not provider:
+        raise ValueError(
+            f"Provider '{provider_name}' referenced by model '{model.get('model_name')}' "
+            f"does not exist. Create or reassign the provider."
+        )
+
+    lp = dict(model.get("litellm_params", {}))
+    provider_type = provider.get("type", "custom")
+
+    if provider_type == "openai-compatible":
+        if "api_base" not in lp and provider.get("api_base"):
+            lp["api_base"] = provider["api_base"]
+        if "api_key" not in lp:
+            raw_key = provider.get("api_key")
+            if raw_key and _is_sensitive_field("api_key"):
+                try:
+                    lp["api_key"] = encryption_utils.decrypt_data(raw_key)
+                except Exception:
+                    print(
+                        f"[DB] Failed to decrypt api_key for provider '{provider_name}'",
+                        file=sys.stderr,
+                    )
+    elif provider_type == "bedrock":
+        if provider.get("aws_region"):
+            lp["aws_region"] = provider["aws_region"]
+
+    return lp
 
 
 def get_all_tags():
@@ -308,10 +365,51 @@ def get_provider(name):
     return None
 
 
+def sanitize_provider_for_response(provider: dict) -> dict:
+    """Return a provider dict with all secret/encrypted values stripped.
+    Includes a boolean `has_api_key` instead of the actual key.
+    """
+    sanitized = {}
+    for field, value in provider.items():
+        if _is_sensitive_field(field) and isinstance(value, str):
+            sanitized[field] = None
+        else:
+            sanitized[field] = value
+    sanitized["has_api_key"] = any(
+        _is_sensitive_field(k) and isinstance(v, str) and len(v) > 0
+        for k, v in provider.items()
+    )
+    return sanitized
+
+
+def _get_provider_raw(name: str) -> dict | None:
+    """Get a provider record from TinyDB without decrypting sensitive fields."""
+    record = providers_table.get(where("name") == name)
+    return dict(record) if record else None
+
+
+def _upsert_provider_raw(provider: dict):
+    """Write a provider record directly without re-encrypting sensitive fields.
+    The caller is responsible for encrypting any new sensitive field values.
+    """
+    providers_table.upsert(provider, where("name") == provider["name"])
+
+
 def upsert_provider(provider: dict):
-    """Create or update a provider. `provider` must include a `name` key."""
-    encrypted = _encrypt_sensitive_fields(provider)
-    providers_table.upsert(encrypted, where("name") == provider["name"])
+    """Create or update a provider. `provider` must include a `name` key.
+    Raises RuntimeError on TinyDB failure. Sensitive fields are auto-encrypted.
+    """
+    name = provider.get("name", "<unknown>")
+    changed_fields = [
+        k for k in provider if k not in ("name", "api_key", "aws_secret_key_env")
+    ]
+    try:
+        encrypted = _encrypt_sensitive_fields(provider)
+        providers_table.upsert(encrypted, where("name") == name)
+    except Exception as e:
+        print(f"[DB] upsert_provider FAILED name={name} error={e}", file=sys.stderr)
+        raise RuntimeError(f"Failed to persist provider '{name}': {e}") from e
+    print(f"[DB] upsert_provider name={name} fields={changed_fields}")
 
 
 def delete_provider(name):

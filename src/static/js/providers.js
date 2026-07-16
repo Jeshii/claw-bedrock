@@ -402,6 +402,7 @@ async function saveProviderDetail(name) {
 			if (val) provider.api_key = val;
 		}
 	}
+	const toast = showToast("Saving provider...", "info", 0, true);
 	try {
 		const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
 			method: "PUT",
@@ -409,14 +410,33 @@ async function saveProviderDetail(name) {
 			body: JSON.stringify(provider),
 		});
 		if (res.ok) {
-			showToast("Provider updated");
+			const data = await res.json();
+			const runtimeChanged = data.runtime_changed;
+			updateToast(
+				toast,
+				runtimeChanged
+					? "Provider saved and LiteLLM reloaded"
+					: "Provider saved",
+				"success",
+			);
 			loadProvidersPage();
+		} else if (res.status >= 500) {
+			const err = await res.json();
+			const detail =
+				typeof err.detail === "object" && err.detail !== null
+					? err.detail.message || "Provider saved but not applied"
+					: err.detail;
+			updateToast(toast, detail, "warning");
 		} else {
 			const err = await res.json();
-			showToast(`Error: ${err.detail}`, "error");
+			updateToast(
+				toast,
+				`Error: ${typeof err.detail === "string" ? err.detail : "Failed to save provider"}`,
+				"error",
+			);
 		}
 	} catch (e) {
-		showToast(`Error: ${e.message}`, "error");
+		updateToast(toast, `Error: ${e.message}`, "error");
 	}
 }
 
