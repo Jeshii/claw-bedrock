@@ -17,3 +17,7 @@ Providers are necessary. Default is bedrock since it should always exist.
 "Error: Failed to connect to Bedrock in region us-east-1: Operation cannot be paginated: list_foundation_models. Check network and region name." Additionally, the region dropdowns should be configurable in Providers
 
 ## 5. Bedrock Mantle models don't get a provider tag
+
+## 6. Provider page "Save Changes" does not persist after LiteLLM reload
+
+On the Providers page, clicking "Save Changes" shows a "Provider updated" success popup, but after reloading LiteLLM the provider configuration reverts to its previous state. Changes are not actually being saved/written through to the underlying config.
