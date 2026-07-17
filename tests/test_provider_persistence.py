@@ -564,7 +564,7 @@ class TestPutFlow:
             },
         )
 
-        NEW_BASE = "http://new:8080/v2"
+        NEW_BASE = "http://new:8080/v1"
         client.put(
             "/api/providers/cfg-prov",
             json={"api_base": NEW_BASE},
@@ -725,3 +725,82 @@ class TestPutFlow:
 
         unchanged = get_provider_by_name(db_mod, "bedrock")
         assert unchanged == original
+
+
+class TestApiBaseNormalization:
+    """_merge_provider_defaults() must normalize api_base to include /v1."""
+
+    def _make_openai_provider(self, db_mod, name: str, api_base: str):
+        db_mod.upsert_provider(
+            {
+                "name": name,
+                "type": "openai-compatible",
+                "api_base": api_base,
+            }
+        )
+
+    def _normalize(
+        self, db_mod, provider_name: str, model_base: str | None = None
+    ) -> str | None:
+        model = {"provider": provider_name, "litellm_params": {}}
+        if model_base is not None:
+            model["litellm_params"]["api_base"] = model_base
+        result = db_mod._merge_provider_defaults(model, {})
+        return result.get("api_base") if result else None
+
+    def test_provider_base_no_v1(self, test_env):
+        _, _, db_mod = test_env
+        self._make_openai_provider(db_mod, "p1", "http://host:1234")
+        assert self._normalize(db_mod, "p1") == "http://host:1234/v1"
+
+    def test_provider_base_with_v1(self, test_env):
+        _, _, db_mod = test_env
+        self._make_openai_provider(db_mod, "p2", "http://host:1234/v1")
+        assert self._normalize(db_mod, "p2") == "http://host:1234/v1"
+
+    def test_provider_base_trailing_slash(self, test_env):
+        _, _, db_mod = test_env
+        self._make_openai_provider(db_mod, "p3", "http://host:1234/")
+        assert self._normalize(db_mod, "p3") == "http://host:1234/v1"
+
+    def test_model_override_normalized(self, test_env):
+        _, _, db_mod = test_env
+        self._make_openai_provider(db_mod, "p4", "http://provider:1234")
+        assert (
+            self._normalize(db_mod, "p4", "http://model:5678") == "http://model:5678/v1"
+        )
+
+    def test_model_override_already_v1(self, test_env):
+        _, _, db_mod = test_env
+        self._make_openai_provider(db_mod, "p5", "http://provider:1234/v1")
+        assert (
+            self._normalize(db_mod, "p5", "http://model:5678/v1")
+            == "http://model:5678/v1"
+        )
+
+    def test_whitespace_override_uses_provider(self, test_env):
+        _, _, db_mod = test_env
+        self._make_openai_provider(db_mod, "p6", "http://host:1234")
+        assert self._normalize(db_mod, "p6", "   ") == "http://host:1234/v1"
+
+    def test_empty_override_uses_provider(self, test_env):
+        _, _, db_mod = test_env
+        self._make_openai_provider(db_mod, "p7", "http://host:1234")
+        assert self._normalize(db_mod, "p7", "") == "http://host:1234/v1"
+
+    def test_bedrock_type_untouched(self, test_env):
+        _, _, db_mod = test_env
+        db_mod.upsert_provider(
+            {
+                "name": "bedrock-test",
+                "type": "bedrock",
+                "aws_region": "us-east-1",
+            }
+        )
+        model = {
+            "provider": "bedrock-test",
+            "litellm_params": {"model": "anthropic.claude-v3"},
+        }
+        result = db_mod._merge_provider_defaults(model, {})
+        assert result is not None
+        assert "api_base" not in result

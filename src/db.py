@@ -234,8 +234,14 @@ def _merge_provider_defaults(
     provider_type = provider.get("type", "custom")
 
     if provider_type == "openai-compatible":
-        if "api_base" not in lp and provider.get("api_base"):
-            base = provider["api_base"].rstrip("/")
+        model_base = lp.get("api_base")
+        api_base = (
+            model_base.strip()
+            if isinstance(model_base, str) and model_base.strip()
+            else provider.get("api_base")
+        )
+        if isinstance(api_base, str) and api_base.strip():
+            base = api_base.rstrip("/")
             lp["api_base"] = base if base.endswith("/v1") else f"{base}/v1"
         if "api_key" not in lp:
             raw_key = provider.get("api_key")
