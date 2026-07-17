@@ -1737,3 +1737,102 @@ dialog::backdrop {
 	border-color: #555;
 	color: #e0e0e0;
 }
+
+/* ── Mobile hamburger toggle ── */
+.sidebar-toggle {
+	display: none;
+}
+.sidebar-backdrop {
+	display: none;
+}
+
+@media (max-width: 768px) {
+	.sidebar-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: fixed;
+		top: calc(10px + env(safe-area-inset-top));
+		left: calc(10px + env(safe-area-inset-left));
+		z-index: 1001;
+		width: 40px;
+		height: 40px;
+		font-size: 24px;
+		background: #f8f9fa;
+		border: 1px solid #ddd;
+		border-radius: 6px;
+		cursor: pointer;
+		margin: 0;
+		padding: 0;
+	}
+	.dark .sidebar-toggle {
+		background: #333;
+		border-color: #666;
+		color: #e0e0e0;
+	}
+
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		height: 100vh;
+		/* biome-ignore lint/suspicious/noDuplicateProperties: 100dvh is intentional iOS Safari fallback */
+		height: 100dvh;
+		z-index: 1000;
+		transform: translateX(-100%);
+		transition: transform 0.2s ease;
+		-webkit-overflow-scrolling: touch;
+		overflow-y: auto;
+	}
+	.sidebar.sidebar-open {
+		transform: translateX(0);
+	}
+
+	.sidebar-backdrop {
+		display: block;
+		opacity: 0;
+		visibility: hidden;
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.5);
+		z-index: 999;
+		transition:
+			opacity 0.2s ease,
+			visibility 0.2s ease;
+		-webkit-tap-highlight-color: transparent;
+	}
+	.sidebar-backdrop.active {
+		opacity: 1;
+		visibility: visible;
+	}
+
+	.main {
+		margin-left: 0;
+		padding-top: 60px;
+	}
+
+	.playground-toolbar {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.playground-model-selector {
+		width: 100%;
+		max-width: 100%;
+	}
+	.playground-toolbar-actions {
+		display: flex;
+		gap: 8px;
+	}
+
+	.playground-input-area {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.playground-input-area textarea {
+		width: 100%;
+		min-height: 44px;
+	}
+	.playground-input-area button {
+		width: 100%;
+	}
+}

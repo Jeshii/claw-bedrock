@@ -2,6 +2,7 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="color-scheme" content="light dark">
         <script>
             try {
@@ -43,7 +44,7 @@
             <div class="loading-spinner"></div>
             <div class="loading-text">Loading…</div>
         </div>
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2>🦞claw-bedrock🪨</h2>
                 <div class="version">v{{ version }}</div>
@@ -103,7 +104,13 @@
                 <button type="button" class="theme-toggle" onclick="toggleTheme()"></button>
             </div>
         </div>
+        <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
         <div class="main">
+            <button id="sidebar-toggle"
+                    class="sidebar-toggle"
+                    aria-label="Toggle navigation"
+                    aria-controls="sidebar"
+                    aria-expanded="false">☰</button>
             <div id="toast-container"></div>
             {% include 'partials/page_dashboard.html' %}
             {% include 'partials/page_auth.html' %}

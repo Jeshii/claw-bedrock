@@ -44,3 +44,29 @@ if (!("closedBy" in HTMLDialogElement.prototype)) {
 		});
 	});
 }
+
+/* ── Mobile sidebar ── */
+const mqMobile = window.matchMedia("(max-width: 768px)");
+const sidebarEl = document.getElementById("sidebar");
+const toggleBtn = document.getElementById("sidebar-toggle");
+const backdrop = document.getElementById("sidebar-backdrop");
+
+function closeSidebar() {
+	sidebarEl?.classList.remove("sidebar-open");
+	backdrop?.classList.remove("active");
+	toggleBtn?.setAttribute("aria-expanded", "false");
+}
+
+toggleBtn?.addEventListener("click", () => {
+	const opening = sidebarEl?.classList.toggle("sidebar-open");
+	backdrop?.classList.toggle("active", !!opening);
+	toggleBtn?.setAttribute("aria-expanded", String(!!opening));
+});
+
+backdrop?.addEventListener("click", closeSidebar);
+
+document.querySelectorAll(".nav a").forEach((link) => {
+	link.addEventListener("click", () => {
+		if (mqMobile.matches) closeSidebar();
+	});
+});
