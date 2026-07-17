@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MarkdownRenderer Tests</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"
+          integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"
+          integrity="sha384-eEu5CTj3qGvu9PdJuS+YlkNi7d2XxQROAFYOr59zgObtlcux1ae1Il3u7jvdCSWu"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/highlight.min.js"
+          integrity="sha384-5yxvCQJ/5mlSMbO4D+C7gCRI73t5QwCCeIacEpdHGNmUaSw1Lcc/yBOkvouwUYoO"
+          crossorigin="anonymous"></script>
+  <style>
+    body { font-family: monospace; padding: 20px; max-width: 800px; margin: 0 auto; }
+    h1 { font-size: 1.3em; }
+    .summary { font-weight: bold; font-size: 1.1em; margin: 20px 0 10px; padding: 8px 12px; border-radius: 4px; }
+    .summary.pass { background: #d4edda; color: #155724; }
+    .summary.fail { background: #f8d7da; color: #721c24; }
+    .test-case { margin: 4px 0 12px; }
+    .test-case summary { cursor: pointer; padding: 4px 8px; border-radius: 3px; }
+    .test-case summary:hover { background: #f0f0f0; }
+    .test-case .pass { color: #28a745; }
+    .test-case .fail { color: #dc3545; font-weight: bold; }
+    .test-case .detail { margin: 4px 0 0 20px; padding: 6px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; font-size: 12px; }
+  </style>
+</head>
+<body>
+<h1>MarkdownRenderer Test Suite</h1>
+<p>Opens a suite of tests for the Markdown renderer used in the Playground.</p>
+<div id="results"></div>
+
+<script src="../src/static/js/markdown.js"></script>
+<script>
+  const R = window.MarkdownRenderer;
+  let passed = 0;
+  let failed = 0;
+
+  function test(name, fn) {
+    try {
+      fn();
+      passed++;
+      log(name, true);
+    } catch (e) {
+      failed++;
+      log(name, false, e.message);
+    }
+  }
+
+  function assert(cond, msg) {
+    if (!cond) throw new Error(msg || "assertion failed");
+  }
+
+  function assertNot(cond, msg) {
+    if (cond) throw new Error(msg || "unexpected truthy value");
+  }
+
+  function log(name, ok, detail) {
+    const d = document.createElement("div");
+    d.className = "test-case";
+    const s = document.createElement("summary");
+    s.className = ok ? "pass" : "fail";
+    s.textContent = (ok ? "\u2713 " : "\u2717 ") + name;
+    d.appendChild(s);
+    if (detail) {
+      const p = document.createElement("div");
+      p.className = "detail";
+      p.textContent = detail;
+      d.appendChild(p);
+    }
+    document.getElementById("results").appendChild(d);
+  }
+
+  /* ── TC-1: Valid GFM Markdown ── */
+  test("TC-1 Valid Markdown elements", () => {
+    const md = "# Heading\n\n**bold** *italic* `code`\n\n- list item\n\n```js\nconst x = 1;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n> blockquote";
+    const html = R.renderAssistantMessage(md);
+    assert(html.includes("<h1"), "missing h1");
+    assert(html.includes("<strong>bold</strong>") || html.includes("<strong>bold"), "missing bold");
+    assert(html.includes("<em>italic</em>") || html.includes("<em>italic"), "missing italic");
+    assert(html.includes("<code>"), "missing inline code");
+    assert(html.includes("<li>"), "missing list item");
+    assert(html.includes("<pre>"), "missing pre block");
+    assert(html.includes("<table>"), "missing table");
+    assert(html.includes("<blockquote>"), "missing blockquote");
+  });
+
+  /* ── TC-2: Malformed Markdown ── */
+  test("TC-2 Malformed Markdown", () => {
+    const inputs = [
+      "**unclosed _nested",
+      "### #no space",
+      ">unclosed blockquote\n\n\n",
+      "* item 1\n* item 2\n  no list continuation",
+      "```\nunclosed code fence",
+    ];
+    for (const md of inputs) {
+      const html = R.renderAssistantMessage(md);
+      assert(typeof html === "string", `non-string for: ${md}`);
+    }
+  });
+
+  /* ── TC-3: XSS payloads stripped ── */
+  test("TC-3 XSS sanitization", () => {
+    const payloads = [
+      "<script>alert(1)</script>",
+      "<SCRIPT>alert(1)</SCRIPT>",
+      "<img src=x onerror=alert(1)>",
+      "<img src=x onLoad=alert(1)>",
+      "[click](javascript:alert(1))",
+      "<iframe src=\"evil.com\"></iframe>",
+      "<div onmouseover=\"alert(1)\">hover me</div>",
+      "<svg onload=alert(1)>",
+    ];
+    for (const p of payloads) {
+      const html = R.renderAssistantMessage(p);
+      assertNot(html.includes("<script"), `script tag leaked: ${p.substring(0, 30)}`);
+      assertNot(html.includes("<SCRIPT"), "SCRIPT variant leaked");
+      assertNot(html.includes("onerror"), `onerror leaked: ${p.substring(0, 30)}`);
+      assertNot(html.includes("onload"), "onload leaked");
+      assertNot(html.includes("onLoad"), "onLoad leaked");
+      assertNot(html.includes("onmouseover"), "onmouseover leaked");
+      assertNot(html.includes("javascript:"), `javascript: URL leaked: ${p.substring(0, 30)}`);
+      assertNot(html.includes("<iframe"), "iframe leaked");
+      assertNot(html.includes("<svg"), "svg leaked");
+    }
+  });
+
+  /* ── TC-4: Large code block ── */
+  test("TC-4 Large code block (200+ lines)", () => {
+    const lines = Array.from({ length: 210 }, (_, i) => `line ${i + 1} = ${i * 2};`).join("\n");
+    const md = "```js\n" + lines + "\n```";
+    const html = R.renderAssistantMessage(md);
+    assert(html.includes("<pre>"), "no pre block");
+    assert(html.includes("line 210"), "content truncated");
+    assert(html.includes("hljs"), "no syntax highlighting");
+    // Verify no layout-breaking characteristics
+    assertNot(html.includes("\n"), "rendered HTML should not contain raw newlines outside pre");
+  });
+
+  /* ── TC-5: Tables with alignment ── */
+  test("TC-5 Table alignment", () => {
+    const md = "| L | C | R |\n|:--|:--:|--:|\n| a | b | c |";
+    const html = R.renderAssistantMessage(md);
+    assert(html.includes("<table>"), "no table");
+    assert(html.includes("<th"), "no th cells");
+    assert(html.includes("<td"), "no td cells");
+  });
+
+  /* ── TC-6: Mixed inline code and emphasis ── */
+  test("TC-6 Inline code + emphasis", () => {
+    const md = "Use `foo()` for **bold** and _italic_ and ~~strikethrough~~";
+    const html = R.renderAssistantMessage(md);
+    assert(html.includes("<code>foo()"), "no inline code");
+    assert(html.includes("<strong>"), "no bold");
+    assert(html.includes("<em>"), "no italic");
+    assert(html.includes("<s>") || html.includes("<del>"), "no strikethrough");
+  });
+
+  /* ── TC-7: Empty input ── */
+  test("TC-7 Empty input", () => {
+    const html = R.renderAssistantMessage("");
+    assert(typeof html === "string", "non-string result");
+    assert(html === "", "expected empty string for empty input");
+  });
+
+  /* ── TC-8: Long unbroken strings ── */
+  test("TC-8 Long unbroken string", () => {
+    const long = "a".repeat(5000);
+    const html = R.renderAssistantMessage(long);
+    assert(typeof html === "string", "non-string result");
+    assert(html.includes("a".repeat(100)), "content truncated in rendering");
+  });
+
+  /* ── TC-9: Links ── */
+  test("TC-9 Links", () => {
+    const md = "[OpenCode](https://opencode.ai)";
+    const html = R.renderAssistantMessage(md);
+    assert(html.includes('<a href="https://opencode.ai"'), "missing link href");
+    assert(html.includes(">OpenCode<"), "missing link text");
+  });
+
+  /* ── Summary ── */
+  const summary = document.createElement("div");
+  summary.className = "summary " + (failed === 0 ? "pass" : "fail");
+  summary.textContent = `Results: ${passed} passed, ${failed} failed`;
+  document.getElementById("results").prepend(summary);
+</script>
+</body>
+</html>

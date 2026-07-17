@@ -1,3 +1,8 @@
+function toggleHljsTheme(isDark) {
+	const link = document.querySelector(".hljs-dark-theme");
+	if (link) link.disabled = !isDark;
+}
+
 function toggleTheme() {
 	const root = document.documentElement;
 	const btn = document.querySelector(".theme-toggle");
@@ -5,6 +10,7 @@ function toggleTheme() {
 	const isDark = root.classList.contains("dark");
 	btn.innerHTML = isDark ? `${SUN_SVG}Light` : `${MOON_SVG}Dark`;
 	localStorage.setItem("theme", isDark ? "dark" : "light");
+	toggleHljsTheme(isDark);
 }
 
 function initTheme() {
@@ -18,6 +24,7 @@ function initTheme() {
 	} else {
 		document.documentElement.classList.remove("dark");
 	}
+	toggleHljsTheme(isDark);
 	if (btn) {
 		btn.innerHTML = isDark ? `${SUN_SVG}Light` : `${MOON_SVG}Dark`;
 	}
@@ -32,6 +39,7 @@ function initTheme() {
 				} else {
 					document.documentElement.classList.remove("dark");
 				}
+				toggleHljsTheme(shouldBeDark);
 				if (btn) {
 					btn.innerHTML = shouldBeDark ? `${SUN_SVG}Light` : `${MOON_SVG}Dark`;
 				}

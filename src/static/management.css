@@ -1586,3 +1586,154 @@ dialog::backdrop {
 	background: #333;
 	color: #e0e0e0;
 }
+
+/* ── Markdown rendered message content ─────────────────────────────── */
+.message-text.markdown-rendered {
+	white-space: normal;
+}
+
+.message-text.markdown-rendered h1 {
+	font-size: 1.15em;
+	font-weight: 700;
+	margin: 0.6em 0 0.3em;
+}
+.message-text.markdown-rendered h2 {
+	font-size: 1.05em;
+	font-weight: 700;
+	margin: 0.5em 0 0.25em;
+}
+.message-text.markdown-rendered h3,
+.message-text.markdown-rendered h4 {
+	font-size: 0.95em;
+	font-weight: 600;
+	margin: 0.4em 0 0.2em;
+}
+
+.message-text.markdown-rendered p {
+	margin: 0 0 0.5em;
+}
+.message-text.markdown-rendered p:last-child {
+	margin-bottom: 0;
+}
+
+.message-text.markdown-rendered ul,
+.message-text.markdown-rendered ol {
+	padding-left: 1.4em;
+	margin: 0.3em 0;
+}
+
+.message-text.markdown-rendered blockquote {
+	border-left: 3px solid #ccc;
+	padding-left: 0.75em;
+	margin: 0.4em 0;
+	font-style: italic;
+	color: #666;
+}
+.dark .message-text.markdown-rendered blockquote {
+	border-color: #555;
+	color: #999;
+}
+
+.message-text.markdown-rendered code {
+	background: rgba(0, 0, 0, 0.07);
+	border-radius: 3px;
+	padding: 1px 4px;
+	font-family: monospace;
+	font-size: 0.9em;
+}
+.dark .message-text.markdown-rendered code {
+	background: rgba(255, 255, 255, 0.1);
+}
+
+.message-text.markdown-rendered pre {
+	overflow-x: auto;
+	background: #f5f5f5;
+	border-radius: 6px;
+	padding: 10px 12px;
+	margin: 0.5em 0;
+	position: relative;
+}
+.dark .message-text.markdown-rendered pre {
+	background: #1e1e1e;
+}
+
+.message-text.markdown-rendered pre code {
+	background: transparent;
+	padding: 0;
+	border-radius: 0;
+}
+
+.message-text.markdown-rendered table {
+	border-collapse: collapse;
+	width: 100%;
+	margin: 0.5em 0;
+	font-size: 0.9em;
+}
+.message-text.markdown-rendered th,
+.message-text.markdown-rendered td {
+	border: 1px solid #ddd;
+	padding: 5px 10px;
+	text-align: left;
+}
+.dark .message-text.markdown-rendered th,
+.dark .message-text.markdown-rendered td {
+	border-color: #444;
+}
+.message-text.markdown-rendered tbody tr:nth-child(even) {
+	background: rgba(0, 0, 0, 0.03);
+}
+.dark .message-text.markdown-rendered tbody tr:nth-child(even) {
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.message-text.markdown-rendered a {
+	color: #007bff;
+	text-decoration: underline;
+}
+.dark .message-text.markdown-rendered a {
+	color: #66b0ff;
+}
+
+.message-text.markdown-rendered img {
+	max-width: 100%;
+	border-radius: 4px;
+}
+
+.message-text.markdown-rendered hr {
+	border: none;
+	border-top: 1px solid #ccc;
+	margin: 0.8em 0;
+}
+.dark .message-text.markdown-rendered hr {
+	border-color: #555;
+}
+
+.code-copy-btn {
+	position: absolute;
+	top: 6px;
+	right: 8px;
+	padding: 2px 8px;
+	font-size: 11px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.85);
+	border: 1px solid #ccc;
+	cursor: pointer;
+	margin: 0;
+	opacity: 1;
+}
+
+@media (hover: hover) {
+	.code-copy-btn {
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	.message-text.markdown-rendered pre:hover .code-copy-btn {
+		opacity: 1;
+	}
+}
+
+.dark .code-copy-btn {
+	background: rgba(0, 0, 0, 0.6);
+	border-color: #555;
+	color: #e0e0e0;
+}

@@ -231,6 +231,10 @@ async function sendPlaygroundMessage() {
 			}
 		}
 
+		if (messageTextEl && fullContent && window.MarkdownRenderer) {
+			MarkdownRenderer.finalizeStreamingMessage(messageTextEl, fullContent);
+		}
+
 		if (!fullContent && !reasoning && !messageTextEl) {
 			hideStreamingIndicator();
 			addMessageBubble("assistant", "(empty response)");
