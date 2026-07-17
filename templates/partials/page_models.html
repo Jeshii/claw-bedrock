@@ -84,11 +84,13 @@
     </div>
 </div>
 <dialog id="reload-warning-modal"
+        closedby="any"
+        aria-labelledby="reload-warning-title"
         style="padding:24px;
                border:1px solid #ddd;
                border-radius:8px;
                max-width:500px">
-    <h3 style="margin-top:0;">Reload LiteLLM?</h3>
+    <h3 id="reload-warning-title" style="margin-top:0;">Reload LiteLLM?</h3>
     <p style="font-size:14px;">You have pending model changes that require a LiteLLM reload.</p>
     <div class="inline-row" style="margin-top:16px;">
         <button type="button"

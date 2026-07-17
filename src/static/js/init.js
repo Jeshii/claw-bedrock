@@ -26,3 +26,21 @@ if (prefixToggle) {
 	document.getElementById("help-curl-base").textContent = apiUrlV1;
 	document.getElementById("help-py-base").textContent = apiUrlV1;
 })();
+
+// Fallback backdrop click dismiss for dialogs (e.g. Safari)
+if (!("closedBy" in HTMLDialogElement.prototype)) {
+	document.querySelectorAll("dialog").forEach((dialog) => {
+		dialog.addEventListener("click", (event) => {
+			if (event.target !== dialog) return;
+			const rect = dialog.getBoundingClientRect();
+			const isInside =
+				rect.top <= event.clientY &&
+				event.clientY <= rect.top + rect.height &&
+				rect.left <= event.clientX &&
+				event.clientX <= rect.left + rect.width;
+			if (!isInside) {
+				dialog.close();
+			}
+		});
+	});
+}

@@ -2,6 +2,16 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8">
+        <meta name="color-scheme" content="light dark">
+        <script>
+            try {
+                const pinnedTheme = localStorage.getItem("theme");
+                const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                if (pinnedTheme === "dark" || (!pinnedTheme && prefersDark)) {
+                    document.documentElement.classList.add("dark");
+                }
+            } catch (e) {}
+        </script>
         <title>Claw Bedrock Management</title>
         <script id="config-data" type="application/json">{"use_prefix": {{ use_prefix|lower }}}</script>
         <script>window.USE_PREFIX = JSON.parse(document.getElementById('config-data').textContent).use_prefix;</script>

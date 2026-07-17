@@ -86,7 +86,7 @@ def get_version():
 
 # Authentication
 MANAGEMENT_PASSWORD = os.environ.get("MANAGEMENT_UI_PASSWORD")
-AUTH_COOKIE = "management_auth"
+AUTH_COOKIE = "__Host-management_auth"
 AUTH_TOKEN = (
     password_utils.hash_password(MANAGEMENT_PASSWORD) if MANAGEMENT_PASSWORD else None
 )
@@ -142,9 +142,9 @@ async def login(request: Request, body: Dict):
 @app.post("/api/logout")
 async def logout():
     """Logout by clearing the auth cookie."""
-    response = {"success": True}
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie(key=AUTH_COOKIE, path="/")
+    response.headers["Clear-Site-Data"] = '"cookies", "storage", "cache"'
     return response
 
 

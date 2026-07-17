@@ -27,11 +27,13 @@
     </div>
 </div>
 <dialog id="key-reveal-modal"
+        closedby="any"
+        aria-labelledby="key-reveal-title"
         style="padding:24px;
                border:1px solid #ddd;
                border-radius:8px;
                max-width:600px">
-    <h3 style="margin-top:0;">Your New API Key</h3>
+    <h3 id="key-reveal-title" style="margin-top:0;">Your New API Key</h3>
     <p style="color:#dc3545;font-size:14px;">Copy this now — it will not be shown again.</p>
     <code id="revealed-key"
           style="display:block;

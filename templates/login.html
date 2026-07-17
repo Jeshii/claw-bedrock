@@ -1,12 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
     <head>
+        <meta charset="UTF-8">
+        <meta name="color-scheme" content="light dark">
         <title>claw-bedrock - Login</title>
         <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height:100vh; margin:0; background: #f5f5f5; }
-        .login-box { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+        :root {
+            color-scheme: light dark;
+            --bg-body: light-dark(#f5f5f5, #121212);
+            --bg-box: light-dark(white, #1e1e1e);
+            --text-color: light-dark(#333333, #e0e0e0);
+            --border-color: light-dark(#ccc, #444);
+        }
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height:100vh; margin:0; background: var(--bg-body); color: var(--text-color); }
+        .login-box { background: var(--bg-box); padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.15); text-align: center; }
         h1 { margin-top: 0; }
-        input { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; width: 200px; margin-bottom: 10px; }
+        input { padding: 8px 12px; font-size: 14px; border: 1px solid var(--border-color); border-radius: 4px; width: 200px; margin-bottom: 10px; background: var(--bg-box); color: var(--text-color); }
         button { padding: 8px 20px; font-size: 14px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background: #0056b3; }
         .error { color: #dc3545; margin-top: 10px; }
@@ -16,13 +25,21 @@
         <div class="login-box">
             <h1>claw-bedrock</h1>
             <p>Enter password to access the management UI.</p>
-            <input type="password"
-                   id="password"
-                   placeholder="Password"
-                   onkeydown="if(event.key==='Enter') login()" />
-            <br />
-            <button onclick="login()">Login</button>
-            <div class="error" id="error" style="display:none;"></div>
+            <form onsubmit="event.preventDefault(); login();">
+                <input type="password"
+                       id="password"
+                       name="password"
+                       autocomplete="current-password"
+                       placeholder="Password"
+                       required />
+                <br />
+                <button type="submit">Login</button>
+            </form>
+            <div class="error"
+                 id="error"
+                 role="alert"
+                 aria-live="assertive"
+                 style="display:none"></div>
         </div>
         <script>
         async function login() {
