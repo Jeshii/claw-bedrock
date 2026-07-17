@@ -9,7 +9,6 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 import yaml
-import json
 import os
 import sys
 import requests
@@ -46,7 +45,6 @@ CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
 LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
 VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
-BEDROCK_MODELS_PATH = os.path.join(BASE_DIR, "bedrock_models.json")
 
 LITELLM_BASE_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
 
@@ -612,17 +610,6 @@ async def fetch_openrouter_models(
         raise HTTPException(500, f"Failed to fetch OpenRouter models: {str(e)}")
 
 
-@app.get("/api/providers/bedrock/models")
-async def fetch_bedrock_models():
-    """Fetch available Bedrock Mantle models from static catalog."""
-    try:
-        with open(BEDROCK_MODELS_PATH, "r") as f:
-            models = json.load(f)
-        return {"models": models}
-    except Exception as e:
-        raise HTTPException(500, f"Error reading Bedrock models catalog: {str(e)}")
-
-
 @app.get("/api/providers/{name}/models")
 async def fetch_provider_models(name: str):
     """Fetch available models from any OpenAI-compatible provider."""
@@ -690,141 +677,6 @@ async def fetch_provider_models(name: str):
     except Exception as e:
         raise HTTPException(
             500, f"Failed to fetch models from '{name}': {str(e)}"
-        ) from e
-
-
-@app.get("/api/providers/bedrock/mantle-models")
-async def fetch_bedrock_mantle_models(
-    token: Optional[str] = Query(None),
-    region: str = Query("ap-northeast-1"),
-):
-    """Fetch available text models from Bedrock Mantle API (intersected with Bedrock foundation models)."""
-    import boto3
-    from botocore.exceptions import ClientError, NoCredentialsError
-
-    api_key = token or os.environ.get("BEDROCK_MANTLE_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            400,
-            "No Bedrock Mantle API key provided. Set BEDROCK_MANTLE_API_KEY or provide token parameter.",
-        )
-
-    # Step 1: Get text-only model IDs from Bedrock foundation models
-    text_model_ids = set()
-    try:
-        bedrock_client = boto3.client("bedrock", region_name=region)
-        try:
-            paginator = bedrock_client.get_paginator("list_foundation_models")
-            for page in paginator.paginate(
-                byInputModality="TEXT",
-                PaginationConfig={"MaxItems": 1000},
-            ):
-                for model in page.get("modelSummaries", []):
-                    model_id = model.get("modelId", "")
-                    if model_id:
-                        text_model_ids.add(model_id)
-        except ValueError:
-            response = bedrock_client.list_foundation_models(byInputModality="TEXT")
-            for model in response.get("modelSummaries", []):
-                model_id = model.get("modelId", "")
-                if model_id:
-                    text_model_ids.add(model_id)
-    except NoCredentialsError as e:
-        raise HTTPException(
-            400,
-            "AWS credentials not configured. Run 'aws configure' or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.",
-        ) from e
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_msg = e.response.get("Error", {}).get("Message", str(e))
-        raise HTTPException(
-            400,
-            f"AWS API error ({error_code}): {error_msg}. Check region and permissions for bedrock:ListFoundationModels.",
-        ) from e
-    except Exception as e:
-        raise HTTPException(
-            400,
-            f"Failed to connect to Bedrock in region {region}: {str(e)}. Check network and region name.",
-        ) from e
-
-    if not text_model_ids:
-        raise HTTPException(
-            400,
-            "No TEXT modality models found in Bedrock foundation models. Check AWS credentials and region.",
-        )
-
-    # Load static catalog to check which models are "new"
-    catalog_model_ids = set()
-    try:
-        with open(BEDROCK_MODELS_PATH, "r") as f:
-            catalog = json.load(f)
-        catalog_model_ids = {m.get("model", "") for m in catalog if m.get("model")}
-    except Exception:
-        pass  # If catalog can't be loaded, all models will be "new"
-
-    # Step 2: Fetch models from Mantle API
-    mantle_url = f"https://bedrock-mantle.{region}.api.aws/v1/models"
-    headers = {"Authorization": f"Bearer {api_key}"}
-
-    try:
-        resp = requests.get(mantle_url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-
-        # Transform and filter to only text models
-        models = []
-        mantle_models = data.get("data", data) if isinstance(data, dict) else data
-        for model in mantle_models:
-            if not isinstance(model, dict):
-                continue
-            model_id = model.get("id", model.get("modelId", ""))
-            # Only include if in text_model_ids
-            if model_id in text_model_ids:
-                # Determine max_tokens based on model name
-                model_lower = model_id.lower()
-                if any(
-                    word in model_lower for word in ["thinking", "reasoning", "coder"]
-                ):
-                    max_tokens = 16384
-                else:
-                    max_tokens = 8192
-
-                models.append(
-                    {
-                        "id": model_id,
-                        "model": model_id,
-                        "context_length": model.get(
-                            "context_length", model.get("inputTokenLimit")
-                        ),
-                        "max_tokens": max_tokens,
-                        "in_catalog": model_id in catalog_model_ids,
-                    }
-                )
-
-        return {
-            "models": sorted(models, key=lambda x: x["model"]),
-            "region": region,
-            "total_mantle": len(mantle_models)
-            if isinstance(mantle_models, list)
-            else 0,
-            "text_models": len(text_model_ids),
-            "filtered": len(models),
-        }
-    except requests.exceptions.Timeout as e:
-        raise HTTPException(
-            400, f"Request to Bedrock Mantle API timed out: {str(e)}"
-        ) from e
-    except requests.exceptions.ConnectionError as e:
-        raise HTTPException(
-            400, f"Cannot connect to Bedrock Mantle API: {str(e)}"
-        ) from e
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(
-            400, f"Error fetching from Bedrock Mantle API: {str(e)}"
-        ) from e
-    except Exception as e:
-        raise HTTPException(
-            500, f"Failed to fetch Bedrock Mantle models: {str(e)}"
         ) from e
 
 

@@ -1,6 +1,5 @@
 let expandedModel = null;
 let openRouterModels = [];
-let bedrockNewModels = [];
 let currentSort = "default";
 let activeFilter = "all";
 let needsReload = false;
@@ -416,10 +415,6 @@ let selectedGenericModel = null;
 async function loadProviderUIForProvider(provider) {
 	if (provider.type === "bedrock") {
 		loadProviderUI("bedrock");
-		setTimeout(() => {
-			const regionEl = document.getElementById("bedrock-region");
-			if (regionEl && provider.aws_region) regionEl.value = provider.aws_region;
-		}, 100);
 	} else {
 		loadGenericProviderUI(provider);
 	}
@@ -640,22 +635,32 @@ async function addOllamaModel() {
 }
 
 async function addBedrockModel() {
-	const select = document.getElementById("bedrock-select");
-	const selected = select.value;
-	if (!selected) return showToast("Please select a model", "error");
-	const modelData = JSON.parse(selected);
+	const modelId = document.getElementById("bedrock-model-id").value.trim();
+	if (!modelId) return showToast("Model ID is required", "error");
+
+	const ctxValue = document
+		.getElementById("bedrock-context-length")
+		.value.trim();
+	let contextLength = null;
+	if (ctxValue) {
+		const n = Number(ctxValue);
+		if (!Number.isInteger(n) || n <= 0) {
+			return showToast("Context Length must be a positive integer", "error");
+		}
+		contextLength = n;
+	}
+
 	const modelConfig = {
-		model_name: (window.USE_PREFIX ? "claw-bedrock/" : "") + modelData.model,
+		model_name: (window.USE_PREFIX ? "claw-bedrock/" : "") + modelId,
 		litellm_params: {
-			model: `bedrock_mantle/${modelData.model}`,
-			api_base: "os.environ/BEDROCK_MANTLE_API_BASE",
-			max_tokens: modelData.max_tokens,
-			context_length: modelData.context_length,
+			model: `bedrock_mantle/${modelId}`,
 		},
 		provider: "bedrock",
 	};
+	if (contextLength) {
+		modelConfig.litellm_params.context_length = contextLength;
+	}
 	await addModelCommon(modelConfig, "bedrock");
-	select.selectedIndex = 0;
 }
 
 async function addModelCommon(modelConfig, _provider) {
@@ -683,102 +688,6 @@ async function addModelCommon(modelConfig, _provider) {
 		}
 	} catch (e) {
 		updateToast(toast, `Error: ${e.message}`, "error");
-	}
-}
-
-async function loadBedrockModels() {
-	try {
-		const res = await fetch("/api/providers/bedrock/models");
-		const data = await res.json();
-		const select = document.getElementById("bedrock-select");
-		select.innerHTML =
-			'<option value="">-- Select a model (from catalog) --</option>';
-		data.models.forEach((m) => {
-			const option = document.createElement("option");
-			option.value = JSON.stringify(m);
-			option.textContent = `${m.model} (${m.context_length || "?"} ctx)`;
-			select.appendChild(option);
-		});
-	} catch (_e) {
-		showToast("Failed to load Bedrock models catalog", "error");
-	}
-}
-
-async function pollBedrockModels() {
-	const token = document.getElementById("bedrock-token").value;
-	const region = document.getElementById("bedrock-region").value;
-	const statusSpan = document.getElementById("bedrock-poll-status");
-
-	statusSpan.textContent = "Polling...";
-	statusSpan.style.color = "";
-	bedrockNewModels = [];
-
-	try {
-		const url = `/api/providers/bedrock/mantle-models?region=${encodeURIComponent(region)}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
-		const res = await fetch(url);
-		if (!res.ok) {
-			const error = await res.json();
-			throw new Error(error.detail || "Failed to poll models");
-		}
-		const data = await res.json();
-		const select = document.getElementById("bedrock-select");
-		select.innerHTML =
-			'<option value="">-- Select a model (from Mantle API) --</option>';
-		(data.models || []).forEach((m) => {
-			const option = document.createElement("option");
-			option.value = JSON.stringify(m);
-			const ctx = m.context_length
-				? ` (${formatContextLength(m.context_length)})`
-				: "";
-			const newBadge = m.in_catalog === false ? " [NEW]" : "";
-			option.textContent = `${m.model || m.id}${ctx}${newBadge}`;
-			if (m.in_catalog === false) {
-				option.style.color = "#dc3545";
-				bedrockNewModels.push(m.model || m.id);
-			}
-			select.appendChild(option);
-		});
-		statusSpan.textContent = `Found ${data.models?.length || 0} models`;
-		statusSpan.style.color = "#28a745";
-
-		const contextInfo = document.getElementById("bedrock-context-info");
-		if (bedrockNewModels.length > 0) {
-			contextInfo.innerHTML = `<span style="color: #dc3545;">${bedrockNewModels.length} model(s) not in default catalog. <a href="https://github.com/Jeshii/claw-bedrock/issues" target="_blank">This model is not included by default, please open an Issue to have it added.</a></span>`;
-		}
-	} catch (e) {
-		statusSpan.textContent = `Error: ${e.message}`;
-		statusSpan.style.color = "#dc3545";
-		showToast(`Failed to poll Bedrock models: ${e.message}`, "error");
-	}
-}
-
-function onBedrockSelect() {
-	const select = document.getElementById("bedrock-select");
-	const selectedOption = select.options[select.selectedIndex];
-	const contextInfo = document.getElementById("bedrock-context-info");
-
-	if (!selectedOption.value) {
-		contextInfo.textContent = "";
-		return;
-	}
-
-	try {
-		const modelData = JSON.parse(selectedOption.value);
-		let info = "";
-		if (modelData.context_length) {
-			info = `Context Length: ${formatContextLength(modelData.context_length)}`;
-		} else {
-			info = "Context length not available";
-		}
-		if (modelData.max_tokens) {
-			info += ` | Max Tokens: ${modelData.max_tokens}`;
-		}
-		if (modelData.in_catalog === false) {
-			info += `<br><span style="color: #dc3545;">This model is not included by default. <a href="https://github.com/Jeshii/claw-bedrock/issues" target="_blank">Please open an Issue to have it added.</a></span>`;
-		}
-		contextInfo.innerHTML = info;
-	} catch (_e) {
-		contextInfo.textContent = "";
 	}
 }
 
@@ -958,27 +867,42 @@ function loadProviderUI(type) {
         `;
 	} else if (type === "bedrock") {
 		ui.innerHTML = `
-            <h3>Add Bedrock Model</h3>
-            <div style="margin-bottom: 8px;">
-                <input id="bedrock-token" type="password" placeholder="Bedrock Mantle API Key (or set BEDROCK_MANTLE_API_KEY)" style="width: 400px;" />
-            </div>
-            <div class="inline-row" style="margin-bottom: 8px;">
-                <select id="bedrock-region" style="width: 200px; padding: 5px;">
-                    <option value="ap-northeast-1">ap-northeast-1</option>
-                    <option value="us-east-1">us-east-1</option>
-                    <option value="us-west-2">us-west-2</option>
-                    <option value="eu-west-1">eu-west-1</option>
-                </select>
-                <button type="button" onclick="pollBedrockModels()">Poll Models</button>
-                <span id="bedrock-poll-status" style="font-size: 12px; margin-left: 8px;"></span>
-            </div>
-            <select id="bedrock-select" style="width: 400px; padding: 5px;" size="10" onchange="onBedrockSelect()"></select>
-            <div id="bedrock-context-info" class="muted" style="font-size: 12px; margin: 8px 0;"></div>
+            <h3>Add Bedrock Mantle Model</h3>
+            <p class="muted" style="font-size: 13px;">
+                Only models available through the
+                <a href="https://docs.litellm.ai/docs/providers/bedrock_mantle"
+                   target="_blank"
+                   rel="noopener noreferrer">Bedrock Mantle endpoint</a>
+                are supported. Bedrock model availability varies by region and
+                supported access/routing mode &mdash; an AWS-listed model is not
+                automatically Mantle-compatible.
+            </p>
+            <p style="font-size: 13px; margin-bottom: 12px;">
+                <a href="https://amazonbedrockmodels.github.io/"
+                   target="_blank"
+                   rel="noopener noreferrer">
+                    Browse Amazon Bedrock model IDs
+                </a>
+                &nbsp;|&nbsp;
+                <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/foundation-models-reference.html"
+                   target="_blank"
+                   rel="noopener noreferrer">
+                    AWS Bedrock model reference
+                </a>
+            </p>
+            <input id="bedrock-model-id"
+                   placeholder="Model ID (e.g., deepseek.v3.2, inference-profile-id, or ARN)"
+                   style="width: 400px;" />
+            <br>
+            <input id="bedrock-context-length"
+                   type="number"
+                   min="1"
+                   step="1"
+                   placeholder="Context Length (optional)"
+                   style="width: 400px; margin-top: 6px;" />
+            <br><br>
             <button type="button" onclick="addBedrockModel()">Add Model</button>
-            <button type="button" onclick="loadBedrockModels()">Load from Catalog</button>
-            <p class="muted" style="font-size: 12px; margin-top: 5px;">Poll fetches live models from Mantle API. "Load from Catalog" uses the static catalog.</p>
         `;
-		loadBedrockModels();
 	} else if (type === "manual") {
 		ui.innerHTML = `
             <h3>Add Model Manually</h3>

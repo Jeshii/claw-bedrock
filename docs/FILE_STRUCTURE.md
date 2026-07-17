@@ -36,7 +36,7 @@ claw-bedrock/
 │   │       └── utils.js
 │   └── token_refresher.py
 ├── config/
-│   ├── bedrock_models.json
+│   ├── policy.json
 │   └── policy.json
 ├── deploy/
 │   ├── .env.example
@@ -94,7 +94,6 @@ Contains all Python source files and static assets for the application:
 
 ### `config/`
 Configuration and data files:
-- `bedrock_models.json` — Bedrock model definitions
 - `policy.json` — LiteLLM policy configuration
 
 ### `deploy/`

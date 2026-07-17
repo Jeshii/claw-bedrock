@@ -203,52 +203,14 @@ claw-code --model claw-bedrock/<modelname>
 
 ## Available Models
 
-### Bedrock Model Selection Criteria
+### Bedrock Models
 
-The baked-in Bedrock models were selected based on the following criteria:
+Bedrock model IDs are entered manually via the Management UI. Use the following resources to find the correct model ID for your use case:
 
-- **Non-marketplace** — models available directly via Bedrock Mantle without a separate AWS Marketplace subscription, making them credits-friendly
-- **Bedrock Mantle compatible** — accessible via the `bedrock_mantle/` provider prefix
-- **Coding-focused** — evaluated for usefulness in code generation and editing tasks; vision-only models are excluded
-- **Region availability** — verified available in `ap-northeast-1`
+- [amazonbedrockmodels.github.io](https://amazonbedrockmodels.github.io/) — browse and search available Bedrock model IDs
+- [AWS Bedrock model reference](https://docs.aws.amazon.com/bedrock/latest/userguide/foundation-models-reference.html) — official documentation on model IDs, inference profiles, and ARN forms
 
-Models that did not work reliably during testing were removed. If you'd like a model added, open an issue or PR.
-
-### Bedrock Models Baked In
-Since Bedrock doesn't have a method for discovery via API, the following models have been baked in. If you would like another added, feel free to open an issue or PR.
-
-| Model name | Underlying model |
-|---|---|
-| `claw-bedrock/qwen3-next-80b` | `qwen.qwen3-next-80b-a3b-instruct` |
-| `claw-bedrock/kimi-k2.5` | `moonshotai.kimi-k2.5` |
-| `claw-bedrock/qwen3-235b` | `qwen.qwen3-235b-a22b-2507` |
-| `claw-bedrock/mistral-large-3` | `mistral.mistral-large-3-675b-instruct` |
-| `claw-bedrock/deepseek-v3.2` | `deepseek.v3.2` |
-| `claw-bedrock/nemotron-nano-30b` | `nvidia.nemotron-nano-3-30b` |
-| `claw-bedrock/deepseek-v3.1` | `deepseek.v3.1` |
-| `claw-bedrock/ministral-14b` | `mistral.ministral-3-14b-instruct` |
-| `claw-bedrock/ministral-8b` | `mistral.ministral-3-8b-instruct` |
-| `claw-bedrock/ministral-3b` | `mistral.ministral-3-3b-instruct` |
-| `claw-bedrock/qwen3-coder-480b` | `qwen.qwen3-coder-480b-a35b-instruct` |
-| `claw-bedrock/gpt-oss-20b` | `openai.gpt-oss-20b` |
-| `claw-bedrock/gpt-oss-120b` | `openai.gpt-oss-120b` |
-| `claw-bedrock/gemma-3-4b` | `google.gemma-3-4b-it` |
-| `claw-bedrock/gemma-3-12b` | `google.gemma-3-12b-it` |
-| `claw-bedrock/gemma-3-27b` | `google.gemma-3-27b-it` |
-| `claw-bedrock/glm-4.7` | `zai.glm-4.7` |
-| `claw-bedrock/glm-4.7-flash` | `zai.glm-4.7-flash` |
-| `claw-bedrock/minimax-m2` | `minimax.minimax-m2` |
-| `claw-bedrock/minimax-m2.1` | `minimax.minimax-m2.1` |
-| `claw-bedrock/magistral-small` | `mistral.magistral-small-2509` |
-| `claw-bedrock/devstral-2-123b` | `mistral.devstral-2-123b` |
-| `claw-bedrock/kimi-k2-thinking` | `moonshotai.kimi-k2-thinking` |
-| `claw-bedrock/nemotron-nano-9b` | `nvidia.nemotron-nano-9b-v2` |
-| `claw-bedrock/nemotron-nano-12b` | `nvidia.nemotron-nano-12b-v2` |
-| `claw-bedrock/qwen3-32b` | `qwen.qwen3-32b` |
-| `claw-bedrock/qwen3-coder-30b` | `qwen.qwen3-coder-30b-a3b-instruct` |
-| `claw-bedrock/qwen3-coder-next` | `qwen.qwen3-coder-next` |
-
-> ⚠️ Reasoning models (`claw-bedrock/gpt-oss-*`, `claw-bedrock/minimax-m2`, `claw-bedrock/minimax-m2.1`, `claw-bedrock/kimi-k2-thinking`) require sufficiently high `max_tokens` or responses may return `null` content.
+Model availability varies by region and supported access mode (on-demand, provisioned throughput, or Bedrock Mantle). An AWS-listed model is not automatically Mantle-compatible. See the [LiteLLM Bedrock Mantle docs](https://docs.litellm.ai/docs/providers/bedrock_mantle) for endpoint compatibility.
 
 ## Adding Models
 

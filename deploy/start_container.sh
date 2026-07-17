@@ -5,18 +5,11 @@ set -euo pipefail
 CONFIG_DIR="${CONFIG_DIR:-/app}"
 CONFIG_PATH="${CONFIG_DIR}/config.yaml"
 export CONFIG_PATH  # Make available to child processes
-BEDROCK_MODELS="${CONFIG_DIR}/bedrock_models.json"
 DB_PATH="${CONFIG_DIR}/clawbedrock.db.json"
 PID_FILE="/tmp/litellm.pid"
 
 # Initialize default configs if they don't exist
 init_configs() {
-    # Copy bedrock models catalog if it doesn't exist
-    if [[ ! -f "${BEDROCK_MODELS}" ]] && [[ -f "/app/bedrock_models.json" ]]; then
-        echo "Copying bedrock models catalog to ${BEDROCK_MODELS}..."
-        cp "/app/bedrock_models.json" "${BEDROCK_MODELS}"
-    fi
-
     # Always copy token_refresher so it stays in sync with the image
     if [[ -f "/app/token_refresher.py" ]]; then
         cp "/app/token_refresher.py" "${CONFIG_DIR}/token_refresher.py"
