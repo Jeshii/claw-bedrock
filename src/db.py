@@ -235,7 +235,8 @@ def _merge_provider_defaults(
 
     if provider_type == "openai-compatible":
         if "api_base" not in lp and provider.get("api_base"):
-            lp["api_base"] = provider["api_base"]
+            base = provider["api_base"].rstrip("/")
+            lp["api_base"] = base if base.endswith("/v1") else f"{base}/v1"
         if "api_key" not in lp:
             raw_key = provider.get("api_key")
             if raw_key and _is_sensitive_field("api_key"):
@@ -388,10 +389,7 @@ def sanitize_provider_for_response(provider: dict) -> dict:
             sanitized[field] = None
         else:
             sanitized[field] = value
-    sanitized["has_api_key"] = any(
-        _is_sensitive_field(k) and isinstance(v, str) and len(v) > 0
-        for k, v in provider.items()
-    )
+    sanitized["has_api_key"] = bool(provider.get("api_key"))
     return sanitized
 
 

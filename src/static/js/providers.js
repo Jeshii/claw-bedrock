@@ -289,20 +289,10 @@ async function deleteProviderConfirm(name) {
 					"error",
 				);
 				resetProviderDeleteBtn(btn, name);
-				setTimeout(() => {
-					toast.style.opacity = "0";
-					toast.style.transition = "opacity 0.3s";
-					setTimeout(() => toast.remove(), 300);
-				}, 3000);
 			}
 		} catch (e) {
 			updateToast(toast, `Error: ${e.message}`, "error", true, 8000);
 			resetProviderDeleteBtn(btn, name);
-			setTimeout(() => {
-				toast.style.opacity = "0";
-				toast.style.transition = "opacity 0.3s";
-				setTimeout(() => toast.remove(), 300);
-			}, 3000);
 		}
 	};
 }

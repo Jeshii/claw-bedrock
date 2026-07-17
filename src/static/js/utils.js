@@ -51,7 +51,7 @@ function updateToast(
 	message,
 	type = null,
 	removeSpinner = true,
-	duration = 0,
+	duration = 3000,
 ) {
 	if (type) toast.className = `toast toast-${type}`;
 	if (removeSpinner) {

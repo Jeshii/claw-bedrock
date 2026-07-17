@@ -222,11 +222,6 @@ async function submitRename(oldName, newName) {
 			const reloadBtn = document.getElementById("reload-litellm-btn");
 			if (reloadBtn) reloadBtn.classList.add("needs-reload");
 			loadModels();
-			setTimeout(() => {
-				toast.style.opacity = "0";
-				toast.style.transition = "opacity 0.3s";
-				setTimeout(() => toast.remove(), 300);
-			}, 3000);
 		} else {
 			const error = await res.json();
 			updateToast(
@@ -234,19 +229,9 @@ async function submitRename(oldName, newName) {
 				`Error: ${error.detail || "Failed to rename model"}`,
 				"error",
 			);
-			setTimeout(() => {
-				toast.style.opacity = "0";
-				toast.style.transition = "opacity 0.3s";
-				setTimeout(() => toast.remove(), 300);
-			}, 3000);
 		}
 	} catch (e) {
 		updateToast(toast, `Error: ${e.message}`, "error");
-		setTimeout(() => {
-			toast.style.opacity = "0";
-			toast.style.transition = "opacity 0.3s";
-			setTimeout(() => toast.remove(), 300);
-		}, 3000);
 	}
 }
 
@@ -353,19 +338,9 @@ async function updateModelGroup(modelName, groupName) {
 				`Error: ${error.detail || "Failed to update group"}`,
 				"error",
 			);
-			setTimeout(() => {
-				toast.style.opacity = "0";
-				toast.style.transition = "opacity 0.3s";
-				setTimeout(() => toast.remove(), 300);
-			}, 3000);
 		}
 	} catch (e) {
 		updateToast(toast, `Error: ${e.message}`, "error");
-		setTimeout(() => {
-			toast.style.opacity = "0";
-			toast.style.transition = "opacity 0.3s";
-			setTimeout(() => toast.remove(), 300);
-		}, 3000);
 	}
 }
 
@@ -399,11 +374,6 @@ async function deleteModel(btn, modelName) {
 				const reloadBtn = document.getElementById("reload-litellm-btn");
 				if (reloadBtn) reloadBtn.classList.add("needs-reload");
 				loadModels();
-				setTimeout(() => {
-					toast.style.opacity = "0";
-					toast.style.transition = "opacity 0.3s";
-					setTimeout(() => toast.remove(), 300);
-				}, 3000);
 			} else {
 				const error = await res.json();
 				updateToast(
@@ -412,20 +382,10 @@ async function deleteModel(btn, modelName) {
 					"error",
 				);
 				resetDeleteBtn(btn, modelItem, modelName);
-				setTimeout(() => {
-					toast.style.opacity = "0";
-					toast.style.transition = "opacity 0.3s";
-					setTimeout(() => toast.remove(), 300);
-				}, 3000);
 			}
 		} catch (e) {
 			updateToast(toast, `Error: ${e.message}`, "error");
 			resetDeleteBtn(btn, modelItem, modelName);
-			setTimeout(() => {
-				toast.style.opacity = "0";
-				toast.style.transition = "opacity 0.3s";
-				setTimeout(() => toast.remove(), 300);
-			}, 3000);
 		}
 	};
 }
@@ -713,11 +673,6 @@ async function addModelCommon(modelConfig, _provider) {
 			needsReload = true;
 			closeAddModel();
 			loadModels();
-			setTimeout(() => {
-				toast.style.opacity = "0";
-				toast.style.transition = "opacity 0.3s";
-				setTimeout(() => toast.remove(), 300);
-			}, 3000);
 		} else {
 			const error = await res.json();
 			updateToast(
@@ -725,19 +680,9 @@ async function addModelCommon(modelConfig, _provider) {
 				`Error: ${error.detail || "Failed to add model"}`,
 				"error",
 			);
-			setTimeout(() => {
-				toast.style.opacity = "0";
-				toast.style.transition = "opacity 0.3s";
-				setTimeout(() => toast.remove(), 300);
-			}, 3000);
 		}
 	} catch (e) {
 		updateToast(toast, `Error: ${e.message}`, "error");
-		setTimeout(() => {
-			toast.style.opacity = "0";
-			toast.style.transition = "opacity 0.3s";
-			setTimeout(() => toast.remove(), 300);
-		}, 3000);
 	}
 }
 
@@ -1068,11 +1013,6 @@ async function reloadLiteLLM() {
 	} catch (e) {
 		updateToast(toast, `Error: ${e.message}`, "error");
 	}
-	setTimeout(() => {
-		toast.style.opacity = "0";
-		toast.style.transition = "opacity 0.3s";
-		setTimeout(() => toast.remove(), 300);
-	}, 3000);
 }
 
 async function loadRouterSettings() {
