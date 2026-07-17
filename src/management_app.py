@@ -640,8 +640,10 @@ async def fetch_provider_models(name: str):
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
     try:
+        base = api_base.rstrip("/")
+        models_url = f"{base}/models" if base.endswith("/v1") else f"{base}/v1/models"
         resp = requests.get(
-            f"{api_base.rstrip('/')}/v1/models",
+            models_url,
             headers=headers,
             timeout=30,
         )

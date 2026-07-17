@@ -904,6 +904,29 @@ select {
 	flex: 1;
 	max-width: 400px;
 }
+.api-key-set {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	max-width: 400px;
+}
+.api-key-masked {
+	font-size: 14px;
+	letter-spacing: 2px;
+	color: #888;
+}
+.dark .api-key-masked {
+	color: #aaa;
+}
+.api-key-saved-label {
+	font-size: 12px;
+	color: #888;
+	margin-right: 4px;
+}
+.dark .api-key-saved-label {
+	color: #aaa;
+}
 .provider-models-list {
 	margin-top: 12px;
 }

@@ -46,12 +46,25 @@ function showToast(
 	return toast;
 }
 
-function updateToast(toast, message, type = null, removeSpinner = true) {
+function updateToast(
+	toast,
+	message,
+	type = null,
+	removeSpinner = true,
+	duration = 0,
+) {
 	if (type) toast.className = `toast toast-${type}`;
 	if (removeSpinner) {
 		toast.innerHTML = message;
 	} else {
 		toast.innerHTML = `<span class="toast-spinner"></span>${message}`;
+	}
+	if (duration > 0) {
+		setTimeout(() => {
+			toast.style.opacity = "0";
+			toast.style.transition = "opacity 0.3s";
+			setTimeout(() => toast.remove(), 300);
+		}, duration);
 	}
 }
 

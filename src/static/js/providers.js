@@ -75,9 +75,18 @@ function renderProviderDetail(provider, models) {
         <div class="provider-field-row"><label>Access Key Env</label><input id="prov-aws-key-env" value="${provider.aws_access_key_env || ""}" /></div>
         <div class="provider-field-row"><label>Secret Key Env</label><input id="prov-aws-secret-env" value="${provider.aws_secret_key_env || ""}" /></div>
     `;
+	const apiKeyField = provider.has_api_key
+		? `<div class="api-key-set" id="api-key-set-indicator">
+			 <span class="api-key-masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+			 <span class="api-key-saved-label">(saved)</span>
+			 <button type="button" class="delete-btn" id="clear-api-key-btn" onclick="clearApiKeyConfirm('${escName}')">Clear</button>
+			 <button type="button" class="rename-btn" id="change-api-key-btn" onclick="showChangeApiKey()">Change</button>
+		   </div>
+		   <input id="prov-api-key" type="password" class="hidden" placeholder="New API key" />`
+		: `<input id="prov-api-key" type="password" value="" placeholder="Enter API key" />`;
 	const openaiFields = `
         <div class="provider-field-row"><label>API Base</label><input id="prov-api-base" value="${provider.api_base || ""}" /></div>
-        <div class="provider-field-row"><label>API Key</label><input id="prov-api-key" type="password" value="${provider.api_key || ""}" /></div>
+        <div class="provider-field-row"><label>API Key</label>${apiKeyField}</div>
     `;
 	const modelChips =
 		models.length > 0
@@ -287,7 +296,7 @@ async function deleteProviderConfirm(name) {
 				}, 3000);
 			}
 		} catch (e) {
-			updateToast(toast, `Error: ${e.message}`, "error");
+			updateToast(toast, `Error: ${e.message}`, "error", true, 8000);
 			resetProviderDeleteBtn(btn, name);
 			setTimeout(() => {
 				toast.style.opacity = "0";
@@ -392,9 +401,9 @@ async function saveProviderDetail(name) {
 	} else if (type === "openai-compatible") {
 		const apiBase = document.getElementById("prov-api-base");
 		if (apiBase) provider.api_base = apiBase.value.trim();
-		const apiKey = document.getElementById("prov-api-key");
-		if (apiKey) {
-			const val = apiKey.value.trim();
+		const apiKeyInput = document.getElementById("prov-api-key");
+		if (apiKeyInput && !apiKeyInput.classList.contains("hidden")) {
+			const val = apiKeyInput.value.trim();
 			if (val) provider.api_key = val;
 		}
 	}
@@ -414,6 +423,8 @@ async function saveProviderDetail(name) {
 					? "Provider saved and LiteLLM reloaded"
 					: "Provider saved",
 				"success",
+				true,
+				3000,
 			);
 			loadProvidersPage();
 		} else if (res.status >= 500) {
@@ -422,18 +433,82 @@ async function saveProviderDetail(name) {
 				typeof err.detail === "object" && err.detail !== null
 					? err.detail.message || "Provider saved but not applied"
 					: err.detail;
-			updateToast(toast, detail, "warning");
+			updateToast(toast, detail, "warning", true, 5000);
 		} else {
 			const err = await res.json();
 			updateToast(
 				toast,
 				`Error: ${typeof err.detail === "string" ? err.detail : "Failed to save provider"}`,
 				"error",
+				true,
+				8000,
 			);
 		}
 	} catch (e) {
-		updateToast(toast, `Error: ${e.message}`, "error");
+		updateToast(toast, `Error: ${e.message}`, "error", true, 8000);
 	}
+}
+
+function showChangeApiKey() {
+	document.getElementById("api-key-set-indicator")?.classList.add("hidden");
+	const input = document.getElementById("prov-api-key");
+	if (input) {
+		input.classList.remove("hidden");
+		input.focus();
+	}
+}
+
+async function clearApiKeyConfirm(name) {
+	const btn = document.getElementById("clear-api-key-btn");
+	if (!btn) return;
+
+	if (btn.dataset.confirming === "true") {
+		const toast = showToast("Clearing API key...", "info", 0, true);
+		try {
+			const res = await fetch(`/api/providers/${encodeURIComponent(name)}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ clear_api_key: true }),
+			});
+			if (res.ok) {
+				updateToast(toast, "API key cleared", "success");
+				expandedProvider = null;
+				loadProvidersPage();
+			} else {
+				const err = await res.json();
+				updateToast(
+					toast,
+					`Error: ${err.detail || "Failed to clear API key"}`,
+					"error",
+				);
+				resetClearApiKeyBtn(btn);
+			}
+		} catch (e) {
+			updateToast(toast, `Error: ${e.message}`, "error");
+			resetClearApiKeyBtn(btn);
+		}
+		return;
+	}
+
+	btn.dataset.confirming = "true";
+	btn.textContent = "Confirm Clear";
+	btn.className = "confirm-btn";
+	btn.disabled = true;
+
+	setTimeout(() => {
+		btn.disabled = false;
+	}, 1000);
+
+	setTimeout(() => {
+		if (btn.dataset.confirming === "true") resetClearApiKeyBtn(btn);
+	}, 5000);
+}
+
+function resetClearApiKeyBtn(btn) {
+	btn.dataset.confirming = "false";
+	btn.textContent = "Clear";
+	btn.className = "delete-btn";
+	btn.disabled = false;
 }
 
 function renderProviderSelector() {
