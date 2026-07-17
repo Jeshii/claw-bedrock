@@ -98,12 +98,21 @@ body {
 	color: #66b3ff;
 }
 .sidebar-footer {
-	margin-top: auto;
-	padding-top: 20px;
+	margin-top: 12px;
+	padding-top: 12px;
 	border-top: 1px solid #ddd;
+	display: grid;
+	gap: 8px;
 }
 .dark .sidebar-footer {
 	border-color: #444;
+}
+.sidebar-divider {
+	height: 1px;
+	background: #ddd;
+}
+.dark .sidebar-divider {
+	background: #444;
 }
 .sidebar-reload-btn {
 	width: 100%;
@@ -114,7 +123,6 @@ body {
 	background: white;
 	font-size: 14px;
 	transition: all 0.2s;
-	margin-bottom: 8px;
 }
 .dark .sidebar-reload-btn {
 	background: #333;
