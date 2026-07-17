@@ -171,7 +171,9 @@ async function sendPlaygroundMessage() {
 		const decoder = new TextDecoder();
 		let buffer = "";
 		let fullContent = "";
+		let reasoning = "";
 		let messageTextEl = null;
+		let reasoningDetailsEl = null;
 
 		while (true) {
 			const { done, value } = await reader.read();
@@ -191,14 +193,37 @@ async function sendPlaygroundMessage() {
 					if (!choices || choices.length === 0) continue;
 					const delta = choices[0].delta;
 					if (!delta) continue;
-					const token = delta.content;
-					if (!token) continue;
+					const content = delta.content ?? "";
+					const reasoningDelta = delta.reasoning_content ?? "";
+
+					if (!content && !reasoningDelta) continue;
+
+					fullContent += content;
+					reasoning += reasoningDelta;
 
 					if (!messageTextEl) {
 						hideStreamingIndicator();
 						messageTextEl = addMessageBubble("assistant", "");
 					}
-					fullContent += token;
+
+					if (reasoningDelta && !reasoningDetailsEl) {
+						reasoningDetailsEl = document.createElement("details");
+						reasoningDetailsEl.className = "reasoning-details";
+						const summary = document.createElement("summary");
+						summary.textContent = "Show reasoning";
+						const pre = document.createElement("pre");
+						pre.className = "reasoning-content";
+						reasoningDetailsEl.append(summary, pre);
+						messageTextEl.parentNode.insertBefore(
+							reasoningDetailsEl,
+							messageTextEl,
+						);
+					}
+
+					if (reasoningDetailsEl) {
+						reasoningDetailsEl.querySelector(".reasoning-content").textContent =
+							reasoning;
+					}
 					messageTextEl.textContent = fullContent;
 					const container = document.getElementById("playground-messages");
 					if (container) container.scrollTop = container.scrollHeight;
@@ -206,7 +231,7 @@ async function sendPlaygroundMessage() {
 			}
 		}
 
-		if (!fullContent && !messageTextEl) {
+		if (!fullContent && !reasoning && !messageTextEl) {
 			hideStreamingIndicator();
 			addMessageBubble("assistant", "(empty response)");
 		}

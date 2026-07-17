@@ -402,9 +402,12 @@ async def chat_completion(body: Dict):
         )
         resp.raise_for_status()
         return StreamingResponse(
-            resp.iter_lines(),
-            media_type="text/event-stream",
-            headers={"X-Accel-Buffering": "no"},
+            resp.iter_content(chunk_size=None),
+            media_type=resp.headers.get("content-type", "text/event-stream"),
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
         )
     except requests.exceptions.HTTPError as e:
         detail = "Unknown error"

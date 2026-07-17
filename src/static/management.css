@@ -1499,6 +1499,29 @@ dialog::backdrop {
 	white-space: pre-wrap;
 	word-break: break-word;
 }
+.reasoning-details {
+	margin: 0 0 8px;
+	color: #666;
+	font-size: 0.85em;
+}
+.dark .reasoning-details {
+	color: #999;
+}
+.reasoning-details summary {
+	cursor: pointer;
+}
+.reasoning-content {
+	margin: 6px 0 0;
+	padding: 8px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	background: #f5f5f5;
+	border-radius: 4px;
+}
+.dark .reasoning-content {
+	background: #2a2a2a;
+}
 .playground-input-area {
 	display: flex;
 	align-items: flex-end;
