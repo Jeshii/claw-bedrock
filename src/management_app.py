@@ -1058,12 +1058,21 @@ async def get_provider_detail(name: str):
     return {"provider": db.sanitize_provider_for_response(provider), "models": models}
 
 
-ALLOWED_PROVIDER_FIELDS = frozenset({
-    "name", "display_name", "type", "color", "notes",
-    "api_base", "aws_region",
-    "api_key", "clear_api_key",
-    "aws_access_key_env", "aws_secret_key_env",
-})
+ALLOWED_PROVIDER_FIELDS = frozenset(
+    {
+        "name",
+        "display_name",
+        "type",
+        "color",
+        "notes",
+        "api_base",
+        "aws_region",
+        "api_key",
+        "clear_api_key",
+        "aws_access_key_env",
+        "aws_secret_key_env",
+    }
+)
 
 VALID_PROVIDER_TYPES = frozenset({"bedrock", "openai-compatible", "custom"})
 
@@ -1106,19 +1115,24 @@ async def update_provider(name: str, body: Dict):
         )
 
     if "type" in body and body["type"] not in VALID_PROVIDER_TYPES:
-        raise HTTPException(400, f"Invalid type '{body['type']}'; must be one of: {', '.join(sorted(VALID_PROVIDER_TYPES))}")
+        raise HTTPException(
+            400,
+            f"Invalid type '{body['type']}'; must be one of: {', '.join(sorted(VALID_PROVIDER_TYPES))}",
+        )
 
     merged = dict(existing_raw)
 
     for field in ("display_name", "type", "color", "notes", "api_base", "aws_region"):
         if field in body:
-            merged[field] = (body[field] or "").strip() if isinstance(body[field], str) else body[field]
+            merged[field] = (
+                (body[field] or "").strip()
+                if isinstance(body[field], str)
+                else body[field]
+            )
 
-    if "api_key" not in body:
-        pass
-    elif body.get("clear_api_key"):
-        merged.pop("api_key", None)
-    else:
+    if body.get("clear_api_key"):
+        merged["api_key"] = None
+    elif "api_key" in body:
         val = body["api_key"]
         if val:
             merged["api_key"] = encryption_utils.encrypt_data(val)

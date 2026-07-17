@@ -70,19 +70,15 @@ async function toggleProvider(name) {
 function renderProviderDetail(provider, models) {
 	const detail = document.getElementById(`provider-detail-${provider.name}`);
 	const escName = provider.name.replace(/'/g, "\\'");
-	const typeFields =
-		provider.type === "bedrock"
-			? `
+	const bedrockFields = `
         <div class="provider-field-row"><label>AWS Region</label><input id="prov-aws-region" value="${provider.aws_region || ""}" /></div>
         <div class="provider-field-row"><label>Access Key Env</label><input id="prov-aws-key-env" value="${provider.aws_access_key_env || ""}" /></div>
         <div class="provider-field-row"><label>Secret Key Env</label><input id="prov-aws-secret-env" value="${provider.aws_secret_key_env || ""}" /></div>
-    `
-			: provider.type === "openai-compatible"
-				? `
+    `;
+	const openaiFields = `
         <div class="provider-field-row"><label>API Base</label><input id="prov-api-base" value="${provider.api_base || ""}" /></div>
         <div class="provider-field-row"><label>API Key</label><input id="prov-api-key" type="password" value="${provider.api_key || ""}" /></div>
-    `
-				: "";
+    `;
 	const modelChips =
 		models.length > 0
 			? models
@@ -105,8 +101,8 @@ function renderProviderDetail(provider, models) {
                 <option value="custom" ${provider.type === "custom" ? "selected" : ""}>Custom</option>
             </select>
         </div>
-        <div id="prov-bedrock-fields" class="${provider.type === "bedrock" ? "" : "hidden"}">${typeFields}</div>
-        <div id="prov-openai-fields" class="${provider.type === "openai-compatible" ? "" : "hidden"}">${provider.type === "openai-compatible" ? typeFields : ""}</div>
+        <div id="prov-bedrock-fields" class="${provider.type === "bedrock" ? "" : "hidden"}">${bedrockFields}</div>
+        <div id="prov-openai-fields" class="${provider.type === "openai-compatible" ? "" : "hidden"}">${openaiFields}</div>
         <div class="provider-field-row"><label>Notes</label><input id="prov-notes" value="${provider.notes || ""}" /></div>
         <div style="margin-top:16px;">
             <h3>Models Using This Provider</h3>
