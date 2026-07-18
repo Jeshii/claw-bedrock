@@ -42,16 +42,16 @@ SQLite is ideal here: stdlib (no new deps), single file (`conversations.db` alon
 
 ---
 
-## Phase 2 — Playground V1 (Stateless Chat)
+## Phase 2 — Playground V1 (Session-Scoped Multi-Turn Chat)
 
-**Goal:** An inline chatbox in the management UI. Select a model, type a message, stream a response. No persistence — transient session only. Validates that Phase 1 groups actually work.
+**Goal:** An inline chatbox in the management UI. Select a model, type a message, and stream a response. Conversation context is retained in browser memory for the current Playground session only; no database persistence, conversation list, or reload recovery. This establishes the message-state contract reused by Phase 6.
 
 ### Files created
 
 | File | Purpose |
 |---|---|
 | `templates/partials/page_playground.html` | Chat UI layout — model selector, message input, conversation display |
-| `src/static/js/playground.js` | EventSource for SSE streaming, message rendering, model selection |
+| `src/static/js/playground.js` | In-memory `messages` array, sends full history, streams SSE responses, renders bubbles, supports New Chat/reset |
 
 ### Files modified
 
@@ -194,7 +194,7 @@ Costs are manually entered in Phase 4. Auto-population from provider APIs is def
 
 ## Phase 6 — Playground V2 (Persistent Conversations)
 
-**Goal:** Conversations persist. Users can create, rename, search, and delete conversations. Messages auto-save during chat. Full-text search across all messages.
+**Goal:** Conversations persist to SQLite. Users can create, rename, search, and delete conversations. Messages auto-save during chat. Full-text search across all messages.
 
 ### Files created
 
@@ -207,7 +207,7 @@ Costs are manually entered in Phase 4. Auto-population from provider APIs is def
 | File | Change |
 |---|---|
 | `src/management_app.py` | REST endpoints for conversations + messages; `startup_event()` calls `conversations_db.init_db()` |
-| `src/static/js/playground.js` | Add conversation sidebar — list, create, rename, delete, search; persist toggle |
+| `src/static/js/playground.js` | Add conversation sidebar — list, create, rename, delete, search; replace in-memory state with SQLite persistence |
 | `templates/partials/page_playground.html` | Restructure for persistent mode — sidebar + main area |
 | `src/static/management.css` | Conversation list, search box, sidebar layout |
 

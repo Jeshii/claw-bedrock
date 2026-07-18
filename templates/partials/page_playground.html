@@ -1,7 +1,7 @@
 <div id="page-playground" class="page">
     <h1>Playground</h1>
     <p class="muted" style="font-size: 13px; margin-bottom: 12px;">
-        Stateless chat — select a model and send a message. Responses stream in real time.
+        Session-scoped chat — multi-turn with in-memory context. Responses stream in real time.
     </p>
     <div class="playground-layout">
         <div class="playground-toolbar">
@@ -18,7 +18,7 @@
                         class="btn-secondary"
                         id="sysprompt-toggle"
                         title="Add a system prompt">System</button>
-                <button type="button" onclick="clearChat()" class="btn-secondary">Clear</button>
+                <button type="button" onclick="resetConversation()" class="btn-secondary">New Chat</button>
             </div>
         </div>
         <div id="playground-system-section"
