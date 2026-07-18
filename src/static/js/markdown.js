@@ -1,4 +1,11 @@
 (() => {
+	if (!window.marked || !window.DOMPurify) {
+		console.error(
+			"MarkdownRenderer: missing dependencies (marked or DOMPurify)",
+		);
+		return;
+	}
+
 	const ALLOWED_TAGS = [
 		"p",
 		"br",
@@ -44,13 +51,22 @@
 		"align",
 	];
 
+	const hljsInstance = window.hljs;
+	const escapeHtml = (s) =>
+		s
+			.replaceAll("&", "&amp;")
+			.replaceAll("<", "&lt;")
+			.replaceAll(">", "&gt;")
+			.replaceAll('"', "&quot;")
+			.replaceAll("'", "&#39;");
+
 	const renderer = new marked.Renderer();
 	renderer.code = ({ text, lang }) => {
-		const validLang = lang && hljs.getLanguage(lang) ? lang : null;
-		const highlighted = validLang
-			? hljs.highlight(text, { language: validLang }).value
-			: hljs.highlightAuto(text).value;
-		return `<pre><code class="hljs${validLang ? ` language-${validLang}` : ""}">${highlighted}</code></pre>`;
+		const language = lang && hljsInstance?.getLanguage(lang) ? lang : null;
+		const code = language
+			? hljsInstance.highlight(text, { language }).value
+			: escapeHtml(text);
+		return `<pre><code class="hljs${language ? ` language-${language}` : ""}">${code}</code></pre>`;
 	};
 
 	marked.use({ breaks: true, gfm: true, renderer });

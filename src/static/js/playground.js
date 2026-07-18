@@ -272,9 +272,10 @@ async function sendPlaygroundMessage() {
 					reasoningDetailsEl.className = "reasoning-details";
 					const summary = document.createElement("summary");
 					summary.textContent = "Show reasoning";
-					const pre = document.createElement("pre");
-					pre.className = "reasoning-content";
-					reasoningDetailsEl.append(summary, pre);
+					const reasoningContentEl = document.createElement("div");
+					reasoningContentEl.className = "reasoning-content";
+					reasoningDetailsEl.append(summary, reasoningContentEl);
+					reasoningDetailsEl.open = true;
 					messageTextEl.parentNode.insertBefore(
 						reasoningDetailsEl,
 						messageTextEl,
@@ -295,11 +296,17 @@ async function sendPlaygroundMessage() {
 			MarkdownRenderer.finalizeStreamingMessage(messageTextEl, fullContent);
 		}
 
+		if (reasoningDetailsEl && reasoning && window.MarkdownRenderer) {
+			const rc = reasoningDetailsEl.querySelector(".reasoning-content");
+			MarkdownRenderer.finalizeStreamingMessage(rc, reasoning);
+		}
+
 		if (!fullContent && !reasoning) {
 			hideStreamingIndicator();
 			addMessageBubble("assistant", "(empty response)");
 		} else if (fullContent) {
 			commitAssistantMessage(fullContent);
+			// reasoning intentionally excluded from messages[] — streaming metadata only
 		}
 	} catch (e) {
 		if (e.name === "AbortError") {

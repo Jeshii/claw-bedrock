@@ -1513,7 +1513,9 @@ dialog::backdrop {
 .reasoning-content {
 	margin: 6px 0 0;
 	padding: 8px;
-	overflow-x: auto;
+	overflow-x: hidden;
+	overflow-y: auto;
+	max-height: 40vh;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	background: #f5f5f5;
