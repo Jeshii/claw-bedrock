@@ -80,7 +80,23 @@ class TestAggregation:
 
         resp = client.get("/api/model-groups")
         assert resp.status_code == 200
-        assert resp.json() == {"groups": [], "ungrouped_count": 0}
+        assert resp.json() == {
+            "groups": [],
+            "ungrouped_count": 0,
+            "ungrouped_models": [],
+        }
+
+    def test_ungrouped_models_are_listed_and_sorted(self, test_env):
+        """ungrouped_models backs the add-member dropdown, so names must be present."""
+        client, _tmpdir, _db = test_env
+
+        add_model(client, "zeta", model_path="bedrock/z")
+        add_model(client, "alpha", model_path="bedrock/a")
+        add_model(client, "mid", group="grouped", model_path="bedrock/m")
+
+        data = client.get("/api/model-groups").json()
+        assert data["ungrouped_count"] == 2
+        assert data["ungrouped_models"] == ["alpha", "zeta"]
 
     def test_grouped_and_ungrouped_split(self, test_env):
         """Grouped models bucket by name; the rest count as ungrouped."""
@@ -295,7 +311,18 @@ class TestRename:
         assert get_group(client.get("/api/model-groups").json(), "same") is not None
 
     @pytest.mark.parametrize(
-        "bad", ["", "   ", "has space", "has/slash", "x" * 65, None]
+        "bad",
+        [
+            "",
+            "   ",
+            "has space",
+            "has/slash",
+            "quo'te",
+            'dou"ble',
+            "tag<script>",
+            "x" * 65,
+            None,
+        ],
     )
     def test_rejects_unusable_target_names(self, test_env, bad):
         """A group name becomes a public model_name, so it is constrained."""
@@ -307,6 +334,16 @@ class TestRename:
         assert resp.status_code == 400
         # Source must survive a rejected rename.
         assert get_group(client.get("/api/model-groups").json(), "old") is not None
+
+    @pytest.mark.parametrize("ok", ["sonnet", "gpt-5.1", "a_b", "A1", "x" * 64])
+    def test_accepts_conservative_names(self, test_env, ok):
+        client, _tmpdir, _db = test_env
+
+        add_model(client, "a", group="old", model_path="bedrock/a")
+
+        resp = client.post("/api/model-groups/rename", json={"from": "old", "to": ok})
+        assert resp.status_code == 200, resp.text
+        assert get_group(client.get("/api/model-groups").json(), ok) is not None
 
     def test_rejects_empty_source(self, test_env):
         client, _tmpdir, _db = test_env

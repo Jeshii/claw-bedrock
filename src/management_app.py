@@ -10,6 +10,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 import yaml
 import os
+import re
 import sys
 import requests
 import time
@@ -554,13 +555,13 @@ async def list_model_groups():
     provider is dangling.
     """
     groups: dict[str, list[dict]] = {}
-    ungrouped_count = 0
+    ungrouped: list[dict] = []
 
     for raw in db.get_all_models():
         model = enrich_model_with_provider(dict(raw))
         group_name = model.get("model_group")
         if not group_name:
-            ungrouped_count += 1
+            ungrouped.append({"model_name": model.get("model_name", "")})
             continue
         model["status"] = _member_status(model)
         groups.setdefault(group_name, []).append(model)
@@ -579,7 +580,14 @@ async def list_model_groups():
             }
         )
 
-    return {"groups": result, "ungrouped_count": ungrouped_count}
+    return {
+        "groups": result,
+        "ungrouped_count": len(ungrouped),
+        "ungrouped_models": sorted(u["model_name"] for u in ungrouped),
+    }
+
+
+_GROUP_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def _validate_group_name(name) -> str:
@@ -587,19 +595,25 @@ def _validate_group_name(name) -> str:
 
     A group name becomes the public LiteLLM `model_name` that clients call
     (see db.get_models_for_litellm), optionally prefixed with `claw-bedrock/`,
-    so it has to be safe to embed in a model identifier. Nothing validated
-    this before, which meant a name containing whitespace produced a
-    model_name no client could request.
+    so it has to be safe to embed in a model identifier, a YAML key and a URL
+    path segment. Nothing validated this before, which meant a name containing
+    whitespace produced a model_name no client could request.
+
+    An allowlist rather than a denylist: the name round-trips through config,
+    URLs and rendered markup, so anything outside a conservative set is
+    rejected rather than reasoned about per sink.
     """
     cleaned = str(name or "").strip()
     if not cleaned:
         raise HTTPException(400, "Group name cannot be empty")
     if len(cleaned) > 64:
         raise HTTPException(400, "Group name must be 64 characters or fewer")
-    if any(c.isspace() for c in cleaned):
-        raise HTTPException(400, "Group name cannot contain whitespace")
-    if "/" in cleaned:
-        raise HTTPException(400, "Group name cannot contain '/'")
+    if not _GROUP_NAME_RE.match(cleaned):
+        raise HTTPException(
+            400,
+            "Group name may only contain letters, numbers, dots, dashes "
+            "and underscores",
+        )
     return cleaned
 
 

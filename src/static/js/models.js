@@ -83,6 +83,7 @@ function renderModelList(models, preserveExpanded) {
                     <label style="font-size:12px;display:flex;align-items:center;gap:4px;">
                         Group:
                         <input type="text" value="${m.model_group || ""}"
+                               list="known-model-groups"
                                onchange="updateModelGroup('${escName}', this.value)"
                                placeholder="none"
                                style="width:120px;font-size:12px;padding:2px 4px;margin:0;" />
@@ -317,29 +318,37 @@ async function updateReasoningEffort(modelName, selectElement) {
 	}
 }
 
-async function updateModelGroup(modelName, groupName) {
-	const toast = showToast("Updating group...", "info", 0, true);
+/**
+ * Assign a model to a group, or clear it when groupName is falsy.
+ * Returns {ok, detail} so callers can surface their own messaging.
+ */
+async function setModelGroup(modelName, groupName) {
 	try {
-		const encoded = base64urlEncode(modelName);
-		const res = await fetch(`/api/models/${encoded}`, {
+		const res = await fetch(`/api/models/${base64urlEncode(modelName)}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ model_group: groupName || null }),
 		});
-		if (res.ok) {
-			updateToast(toast, "Group updated — reload LiteLLM to apply", "success");
-			const reloadBtn = document.getElementById("reload-litellm-btn");
-			if (reloadBtn) reloadBtn.classList.add("needs-reload");
-		} else {
-			const error = await res.json();
-			updateToast(
-				toast,
-				`Error: ${error.detail || "Failed to update group"}`,
-				"error",
-			);
-		}
+		if (res.ok) return { ok: true, detail: "" };
+		const error = await res.json();
+		return { ok: false, detail: error.detail || "Failed to update group" };
 	} catch (e) {
-		updateToast(toast, `Error: ${e.message}`, "error");
+		return { ok: false, detail: e.message };
+	}
+}
+
+async function updateModelGroup(modelName, groupName) {
+	const toast = showToast("Updating group...", "info", 0, true);
+	const { ok, detail } = await setModelGroup(modelName, groupName);
+	if (ok) {
+		updateToast(toast, "Group updated — reload LiteLLM to apply", "success");
+		const reloadBtn = document.getElementById("reload-litellm-btn");
+		if (reloadBtn) reloadBtn.classList.add("needs-reload");
+		refreshGroupNameSuggestions();
+	} else {
+		updateToast(toast, `Error: ${detail}`, "error");
+		// Re-render so the input snaps back to the stored value.
+		loadModels(activeFilter);
 	}
 }
 

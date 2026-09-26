@@ -85,6 +85,13 @@
 	--row-tint: light-dark(rgba(0, 0, 0, 0.03), rgba(255, 255, 255, 0.04));
 	--border-alpha: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.4));
 	--swatch-border: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.2));
+	/* --neutral stays mid-tone in both schemes, unlike --danger/--success
+	   which lighten for dark mode. So text on a neutral fill stays light too;
+	   --text-inverse would be dark-on-dark here. */
+	--text-on-neutral: #ffffff;
+	/* --success is mid-green in light and pale green in dark, so it takes
+	   dark text either way. White on it is only 3.13:1 in light. */
+	--text-on-success: #1a1a1a;
 	--on-fill-border: light-dark(
 		rgba(255, 255, 255, 0.3),
 		rgba(255, 255, 255, 0.3)
@@ -462,7 +469,7 @@ pre {
 }
 .rename-btn {
 	background: var(--neutral);
-	color: var(--text-inverse);
+	color: var(--text-on-neutral);
 }
 .delete-btn {
 	background: var(--danger);
@@ -470,6 +477,7 @@ pre {
 }
 .rename-btn.confirming {
 	background: var(--success);
+	color: var(--text-on-success);
 }
 .model-item.deleting {
 	background: var(--danger-subtle);
@@ -763,12 +771,40 @@ pre {
 	align-items: center;
 	gap: 8px;
 	padding: 10px 14px;
-	cursor: pointer;
 	background: var(--bg-raised);
+}
+.group-card-header-main {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	min-width: 0;
+	cursor: pointer;
 	user-select: none;
 }
 .group-card-header:hover {
 	background: var(--bg-hover);
+}
+.group-card-actions {
+	display: flex;
+	gap: 6px;
+	flex-shrink: 0;
+}
+.group-rename-input {
+	flex: 1;
+	min-width: 0;
+	padding: 2px 6px;
+	font-size: 13px;
+	font-weight: 600;
+}
+.group-add-member {
+	padding: 6px 14px 2px;
+	border-top: 1px solid var(--border-subtle);
+}
+.group-add-member-select {
+	width: 100%;
+	margin-top: 6px;
+	font-size: 12px;
 }
 .group-card-name {
 	flex: 1;
