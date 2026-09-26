@@ -84,7 +84,7 @@
 	--code-chip: light-dark(rgba(255, 255, 255, 0.85), rgba(0, 0, 0, 0.6));
 	--row-tint: light-dark(rgba(0, 0, 0, 0.03), rgba(255, 255, 255, 0.04));
 	--border-alpha: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.4));
-	--swatch-border: light-dark(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.15));
+	--swatch-border: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.2));
 	--on-fill-border: light-dark(
 		rgba(255, 255, 255, 0.3),
 		rgba(255, 255, 255, 0.3)

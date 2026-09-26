@@ -257,7 +257,7 @@ function toggleAutoRefresh(type) {
 					? loadDebugLogs
 					: loadContainerLogs;
 		autoRefreshIntervals[type] = setInterval(loadFunc, interval);
-		toggleBtn.style.background = "#28a745";
+		toggleBtn.style.background = "var(--success)";
 		toggleBtn.style.color = "white";
 		localStorage.setItem(storageKey, "on");
 		localStorage.setItem(`${storageKey}_interval`, intervalSelect.value);
@@ -294,7 +294,7 @@ function restoreAutoRefresh() {
 						? loadDebugLogs
 						: loadContainerLogs;
 			autoRefreshIntervals[type] = setInterval(loadFunc, interval);
-			toggleBtn.style.background = "#28a745";
+			toggleBtn.style.background = "var(--success)";
 			toggleBtn.style.color = "white";
 		}
 	});

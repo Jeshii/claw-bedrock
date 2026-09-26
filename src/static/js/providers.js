@@ -100,7 +100,7 @@ function renderProviderDetail(provider, models) {
 			: '<span style="color:var(--text-faint);font-size:13px;">No models use this provider</span>';
 	detail.innerHTML = `
         <div class="provider-detail-header">
-            <span class="provider-color-swatch" id="prov-color-swatch-${provider.name}" data-color="${provider.color || "#888"}" style="background:${provider.color || "#888"};width:20px;height:20px;border-radius:4px;flex-shrink:0;cursor:pointer;border:1px solid rgba(0,0,0,0.15);" onclick="showProviderColorPalette('${escName}', this)"></span>
+            <span class="provider-color-swatch" id="prov-color-swatch-${provider.name}" data-color="${provider.color || "#888"}" style="background:${provider.color || "#888"};width:20px;height:20px;border-radius:4px;flex-shrink:0;cursor:pointer;border:1px solid var(--swatch-border);" onclick="showProviderColorPalette('${escName}', this)"></span>
             <input id="prov-display-name" value="${provider.display_name || provider.name}" placeholder="Display Name" />
         </div>
         <div class="provider-field-row"><label>Type</label>

@@ -477,10 +477,10 @@ async function pollGenericProviderModels(providerName) {
 		genericProviderModels = data.models || [];
 		renderGenericModelSelect(genericProviderModels);
 		status.textContent = `Found ${genericProviderModels.length} models`;
-		status.style.color = "#28a745";
+		status.style.color = "var(--success)";
 	} catch (e) {
 		status.textContent = `Error: ${e.message}`;
-		status.style.color = "#dc3545";
+		status.style.color = "var(--danger)";
 		showToast(`Failed to poll models: ${e.message}`, "error");
 	} finally {
 		btn.disabled = false;

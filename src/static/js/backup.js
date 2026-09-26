@@ -27,14 +27,14 @@ const fileInput = document.getElementById("import-file");
 dropZone.addEventListener("click", () => fileInput.click());
 dropZone.addEventListener("dragover", (e) => {
 	e.preventDefault();
-	dropZone.style.borderColor = "#007bff";
+	dropZone.style.borderColor = "var(--accent)";
 });
 dropZone.addEventListener("dragleave", () => {
-	dropZone.style.borderColor = "#ccc";
+	dropZone.style.borderColor = "var(--border)";
 });
 dropZone.addEventListener("drop", (e) => {
 	e.preventDefault();
-	dropZone.style.borderColor = "#ccc";
+	dropZone.style.borderColor = "var(--border)";
 	if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
 });
 fileInput.addEventListener("change", () => {

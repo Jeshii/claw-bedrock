@@ -28,12 +28,12 @@
                    id="drop-zone"
                    style="display:block;
                           padding:20px;
-                          border:2px dashed #ccc;
+                          border:2px dashed var(--border);
                           border-radius:8px;
                           text-align:center;
                           cursor:pointer;
                           margin-bottom:12px;
-                          color:#666;
+                          color:var(--text-muted);
                           transition:border-color 0.2s">
                 <span>Drop a backup JSON file here, or click to browse</span>
                 <input type="file"
@@ -45,7 +45,7 @@
                  class="hidden"
                  style="margin-bottom:12px;
                         padding:12px;
-                        border:1px solid #ddd;
+                        border:1px solid var(--border);
                         border-radius:6px"></div>
             <div id="import-mode-row" class="hidden" style="margin-bottom:12px;">
                 <label style="display:block;margin-bottom:6px;cursor:pointer;">
