@@ -43,7 +43,7 @@ function renderModelList(models, preserveExpanded) {
 	if (!preserveExpanded) expandedModel = null;
 	modelsDiv.innerHTML = sorted
 		.map((m) => {
-			const ctx = m.litellm_params.context_length;
+			const ctx = m.litellm_params?.context_length;
 			const ctxStr = formatContextLength(ctx);
 			const reasoning = m.reasoning_effort
 				? m.reasoning_effort.charAt(0).toUpperCase() +
@@ -78,7 +78,7 @@ function renderModelList(models, preserveExpanded) {
                 ${tagChips}
             </div>
             <div class="model-detail" id="detail-${escName}">
-                <div class="model-detail-path">${m.litellm_params.model}</div>
+                <div class="model-detail-path">${escapeHtml(m.litellm_params?.model || m.model_name || "")}</div>
                 <div class="model-detail-actions">
                     <label style="font-size:12px;display:flex;align-items:center;gap:4px;">
                         Group:

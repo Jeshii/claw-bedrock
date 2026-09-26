@@ -198,11 +198,22 @@ function simplifyErrorMessage(text) {
 	return simplified.join("\n");
 }
 
+function trimTrailingZeros(value) {
+	return value.includes(".")
+		? value.replace(/0+$/, "").replace(/\.$/, "")
+		: value;
+}
+
+// Model catalogs report context length in decimal units (128k, 200k, 1M),
+// not binary ones, so divide by 1000/1e6. Round rather than print raw
+// fractions, otherwise a 1M-context model renders as "976.5625k ctx".
 function formatContextLength(ctx) {
-	if (!ctx) return "";
-	if (ctx >= 1048576) return `${ctx / 1048576}M ctx`;
-	if (ctx >= 1024) return `${ctx / 1024}k ctx`;
-	return `${ctx} ctx`;
+	const n = Number(ctx);
+	if (!Number.isFinite(n) || n <= 0) return "";
+	if (n >= 1_000_000)
+		return `${trimTrailingZeros((n / 1_000_000).toFixed(2))}M ctx`;
+	if (n >= 1_000) return `${trimTrailingZeros((n / 1_000).toFixed(1))}k ctx`;
+	return `${Math.round(n)} ctx`;
 }
 
 function toggleAutoRefresh(type) {
