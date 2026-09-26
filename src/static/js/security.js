@@ -6,13 +6,13 @@ async function loadKeyStatus() {
 
 	if (data.enabled) {
 		statusEl.innerHTML =
-			'<span style="display:inline-block;padding:4px 10px;border-radius:4px;background:#d4edda;color:#155724;font-weight:600;margin-bottom:4px;">Active</span><br><code style="font-size:13px;word-break:break-all;">' +
+			'<span style="display:inline-block;padding:4px 10px;border-radius:4px;background:var(--success-subtle);color:var(--success-text);font-weight:600;margin-bottom:4px;">Active</span><br><code style="font-size:13px;word-break:break-all;">' +
 			data.masked_key +
 			"</code>";
 		revokeBtn.style.display = "";
 	} else {
 		statusEl.innerHTML =
-			'<span style="display:inline-block;padding:4px 10px;border-radius:4px;background:#e2e3e5;color:#383d41;font-weight:600;">Not configured</span>';
+			'<span style="display:inline-block;padding:4px 10px;border-radius:4px;background:var(--bg-code);color:var(--text);font-weight:600;">Not configured</span>';
 		revokeBtn.style.display = "none";
 	}
 }

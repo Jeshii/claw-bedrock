@@ -38,5 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Light/dark mode rebuilt on a design-token layer** — `management.css` had **zero** CSS custom properties; all 66 colours were hardcoded and 106 one-off `.dark X {}` rules patched individual selectors. 26 of those 66 colours existed *only* inside `.dark` rules, i.e. dark mode had a deliberately designed palette while light mode inherited browser defaults.
+  - 60 semantic tokens (surfaces, interactive states, borders, text, accent, status, alpha overlays, shadows) declared once in `:root` with `light-dark()` for their dark value, matching the pattern `login.html` already used
+  - `color-scheme: light` on `:root` / `color-scheme: dark` on `.dark` makes `light-dark()` resolve and themes native scrollbars and form controls, which the app never themed
+  - 105 `.dark` override rules deleted, folding into the token block. One survives — `.dark #reload-litellm-btn.needs-reload { animation }` — because an animation is not a token
+  - **Fixed: invisible hover states in light mode.** Nine hover rules used `#f8f9fa` on a white page — a contrast ratio of **1.05:1**, effectively invisible. Hover tokens are now 1.24:1 (light) and 1.38:1 (dark), matching dark's perceptual step
+  - **Fixed: `.section` had no light background** (transparent, relying on a white body) while dark got `#2a2a2a`; both now use `--bg-surface`
+  - **Fixed: `input`/`select` and bare `pre` were styled only in dark mode.** `.dark select` and `.dark pre` were the sole source of their background, so deleting those rules would have left white-on-white inputs and log viewers. Both now carry explicit token-backed base styles
+  - **Fixed: Playground surfaces had no dark styling at all.** `.playground-toolbar`, `.playground-input-area` and `.playground-messages` kept `#f8f9fa`/`#fefefe` with `#ddd` borders in dark mode — the Playground shipped after the dark-mode pass and was never covered. The token layer fixes this automatically
+  - Dark values are carried over verbatim from the previous stylesheet, so dark mode's appearance is unchanged
+  - 11 hardcoded inline colours across 6 JS/template files converted to `var(--token)`
+  - Verified with a headless-Chrome render harness: 27 assertions across both themes, including that the theme switch is reversible
+  - Requires `light-dark()` support (Chrome 123+, Safari 17.5+, Firefox 120+) — the repo already depended on it via `login.html`
 - **`navigation.js` page dispatch consolidated** — the page-activation and loader-dispatch block was duplicated between `showPage()` and `dismissReloadWarning()`; it is now a single `activatePage(pageId)` helper. The two copies had already drifted: the `dismissReloadWarning()` copy was missing the `loadModels()` branch. That turned out to be unreachable rather than a live bug (the `needsReload` gate excludes `"models"` from the modal path), but the duplication is exactly what let it drift.
 - **Nav highlighting no longer relies on the implicit global `event`** — `showPage()` used `event.target.classList.add("active")`, which is undefined outside Chrome for this access pattern and highlighted the wrong element when a click landed on the wrapping `<li>` or a child node. Now matches on each link's `onclick` attribute, the approach `dismissReloadWarning()` already used.

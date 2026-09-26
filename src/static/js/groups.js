@@ -18,7 +18,7 @@ async function loadGroups() {
 		const data = await res.json();
 		renderGroups(data);
 	} catch (e) {
-		list.innerHTML = `<p style="color: #dc3545; font-weight: 600;">Could not load groups: ${escapeHtml(e.message)}</p>`;
+		list.innerHTML = `<p style="color: var(--danger); font-weight: 600;">Could not load groups: ${escapeHtml(e.message)}</p>`;
 		if (ungrouped) ungrouped.classList.add("hidden");
 	}
 }

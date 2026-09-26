@@ -75,7 +75,7 @@ async function handleFile(file) {
 
 function showImportError(msg) {
 	const previewEl = document.getElementById("import-preview");
-	previewEl.innerHTML = `<p style="color:#dc3545;">✗ ${msg}</p>`;
+	previewEl.innerHTML = `<p style="color:var(--danger);">✗ ${msg}</p>`;
 	previewEl.style.display = "block";
 	document.getElementById("btn-import").style.display = "none";
 }

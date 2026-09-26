@@ -97,7 +97,7 @@ function renderProviderDetail(provider, models) {
     `,
 					)
 					.join("")
-			: '<span style="color:#888;font-size:13px;">No models use this provider</span>';
+			: '<span style="color:var(--text-faint);font-size:13px;">No models use this provider</span>';
 	detail.innerHTML = `
         <div class="provider-detail-header">
             <span class="provider-color-swatch" id="prov-color-swatch-${provider.name}" data-color="${provider.color || "#888"}" style="background:${provider.color || "#888"};width:20px;height:20px;border-radius:4px;flex-shrink:0;cursor:pointer;border:1px solid rgba(0,0,0,0.15);" onclick="showProviderColorPalette('${escName}', this)"></span>

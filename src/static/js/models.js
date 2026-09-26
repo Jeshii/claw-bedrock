@@ -72,7 +72,7 @@ function renderModelList(models, preserveExpanded) {
                 <span class="model-chevron" id="chevron-${escName}">${CHEVRON_RIGHT_SVG}</span>
                 <span class="model-row-name">${m.model_name}</span>
                  ${ctxStr ? `<span class="muted" style="font-size: 12px;">${ctxStr}</span>` : ""}
-                 ${reasoning ? `<span style="color: #007bff; font-size: 12px;">${reasoning}</span>` : ""}
+                 ${reasoning ? `<span style="color: var(--accent); font-size: 12px;">${reasoning}</span>` : ""}
                 ${providerBadge}
                 ${groupBadge}
                 ${tagChips}

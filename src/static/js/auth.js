@@ -34,7 +34,7 @@ function updateDashboardBanner(data) {
 	banner.style.display = "";
 	let html = "";
 	if (data.auth_error) {
-		html += `<div class="banner-error" style="color: #dc3545; font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
+		html += `<div class="banner-error" style="color: var(--danger); font-weight: 600;">Auth failed: ${data.auth_error}</div>`;
 		html +=
 			'<div style="margin-top:8px;"><button type="button" class="submit-code-btn" onclick="showPage2(\'auth\');retryLogin(true);">Retry Login</button></div>';
 	} else if (!data.auth_url) {
@@ -58,7 +58,7 @@ async function loadAuth() {
 		html +=
 			'<div class="auth-needed"><p><strong>&#9888; AWS Authentication</strong></p>';
 		if (data.auth_error) {
-			html += `<p style="color: #dc3545; margin-top: 8px;"><strong>Error:</strong> ${data.auth_error}</p>`;
+			html += `<p style="color: var(--danger); margin-top: 8px;"><strong>Error:</strong> ${data.auth_error}</p>`;
 		}
 		html += '<div class="auth-steps">';
 
