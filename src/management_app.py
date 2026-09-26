@@ -515,6 +515,73 @@ async def list_models(tag: Optional[str] = Query(None)):
     return {"models": [enrich_model_with_provider(dict(m)) for m in models]}
 
 
+def _member_status(model: dict) -> dict:
+    """Derive a config-only health signal for a group member.
+
+    No live probing: this reflects what will actually be written to
+    config.yaml, not whether the provider is reachable right now.
+
+    - error: provider missing or dangling. These models are dropped from the
+      generated config by db._merge_provider_defaults.
+    - warn:  litellm_params absent or missing the required `model` key.
+    - ok:    the model will be emitted to the LiteLLM config as-is.
+    """
+    provider_name = model.get("provider")
+    if not provider_name:
+        return {"level": "error", "detail": "No provider assigned"}
+
+    if not db._get_provider_raw(provider_name):
+        return {
+            "level": "error",
+            "detail": f"Provider '{provider_name}' no longer exists",
+        }
+
+    litellm_params = model.get("litellm_params")
+    if not litellm_params:
+        return {"level": "warn", "detail": "No litellm_params configured"}
+    if not litellm_params.get("model"):
+        return {"level": "warn", "detail": "litellm_params.model is not set"}
+
+    return {"level": "ok", "detail": ""}
+
+
+@app.get("/api/model-groups")
+async def list_model_groups():
+    """List models aggregated by model_group for the Groups dashboard.
+
+    `active_member_count` counts members that survive config generation; a group
+    can hold N models in TinyDB while shipping fewer to LiteLLM when a member's
+    provider is dangling.
+    """
+    groups: dict[str, list[dict]] = {}
+    ungrouped_count = 0
+
+    for raw in db.get_all_models():
+        model = enrich_model_with_provider(dict(raw))
+        group_name = model.get("model_group")
+        if not group_name:
+            ungrouped_count += 1
+            continue
+        model["status"] = _member_status(model)
+        groups.setdefault(group_name, []).append(model)
+
+    result = []
+    for name in sorted(groups):
+        members = groups[name]
+        result.append(
+            {
+                "name": name,
+                "member_count": len(members),
+                "active_member_count": sum(
+                    1 for m in members if m["status"]["level"] != "error"
+                ),
+                "members": members,
+            }
+        )
+
+    return {"groups": result, "ungrouped_count": ungrouped_count}
+
+
 @app.post("/api/models/reload")
 async def reload_models():
     """Manually trigger a LiteLLM restart to pick up new config."""

@@ -6,6 +6,7 @@ setTimeout(hideLoadingOverlay, 8000);
 setTimeout(loadDashboard, 5000);
 setInterval(loadAuth, 10000);
 loadPlayground();
+loadGroups();
 loadRouterSettings();
 
 const prefixToggle = document.getElementById("use-prefix-toggle");

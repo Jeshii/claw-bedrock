@@ -23,20 +23,32 @@ function showPage(pageId) {
 			return;
 		}
 	}
+	activatePage(pageId);
+}
+
+/**
+ * Show a page, highlight its nav link, and run that page's loader.
+ * Shared by showPage() and dismissReloadWarning() so the dispatch list
+ * only has to be maintained in one place.
+ */
+function activatePage(pageId) {
 	document.querySelectorAll(".page").forEach((p) => {
 		p.classList.remove("active");
 	});
 	document.getElementById(`page-${pageId}`).classList.add("active");
 	document.querySelectorAll(".nav a").forEach((a) => {
-		a.classList.remove("active");
+		a.classList.toggle(
+			"active",
+			a.getAttribute("onclick") === `showPage('${pageId}')`,
+		);
 	});
-	event.target.classList.add("active");
 	if (pageId === "dashboard") loadDashboard();
 	if (pageId === "security") loadKeyStatus();
 	if (pageId === "models") loadModels();
 	if (pageId === "backup") loadExportStats();
 	if (pageId === "providers") loadProvidersPage();
 	if (pageId === "playground") loadPlayground();
+	if (pageId === "groups") loadGroups();
 	if (pageId === "tags") loadTagsPage();
 	if (pageId === "logs") {
 		loadLogs();
@@ -59,29 +71,7 @@ function dismissReloadWarning(doReload) {
 	if (window._pendingPage) {
 		const pageId = window._pendingPage;
 		delete window._pendingPage;
-		document.querySelectorAll(".page").forEach((p) => {
-			p.classList.remove("active");
-		});
-		document.getElementById(`page-${pageId}`).classList.add("active");
-		document.querySelectorAll(".nav a").forEach((a) => {
-			a.classList.remove("active");
-			if (a.getAttribute("onclick") === `showPage('${pageId}')`) {
-				a.classList.add("active");
-			}
-		});
-		if (pageId === "dashboard") loadDashboard();
-		if (pageId === "security") loadKeyStatus();
-		if (pageId === "backup") loadExportStats();
-		if (pageId === "providers") loadProvidersPage();
-		if (pageId === "playground") loadPlayground();
-		if (pageId === "tags") loadTagsPage();
-		if (pageId === "logs") {
-			loadLogs();
-			loadDebugLogs();
-			loadContainerLogs();
-			restoreAutoRefresh();
-		}
-		if (pageId === "auth") loadAuth();
+		activatePage(pageId);
 	}
 }
 

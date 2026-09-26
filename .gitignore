@@ -8,3 +8,4 @@ biome.json
 clawbedrock.db.json
 auto-backup-*.json
 .ruff_cache/*
+.scratch/

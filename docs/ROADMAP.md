@@ -18,7 +18,9 @@ SQLite is ideal here: stdlib (no new deps), single file (`conversations.db` alon
 
 ---
 
-## Phase 1 — Core Model Grouping + Auto-Failover
+## Phase 1 — Core Model Grouping + Auto-Failover ✅
+
+**Status:** Complete. All files in the table below shipped.
 
 **Goal:** Add the `model_group` field to models. Transform config generation so grouped models share a `model_name` in LiteLLM (enabling native failover). Expose `router_settings` in the UI.
 
@@ -42,7 +44,9 @@ SQLite is ideal here: stdlib (no new deps), single file (`conversations.db` alon
 
 ---
 
-## Phase 2 — Playground V1 (Session-Scoped Multi-Turn Chat)
+## Phase 2 — Playground V1 (Session-Scoped Multi-Turn Chat) ✅
+
+**Status:** Complete. Markdown rendering and reasoning display were added beyond the original spec.
 
 **Goal:** An inline chatbox in the management UI. Select a model, type a message, and stream a response. Conversation context is retained in browser memory for the current Playground session only; no database persistence, conversation list, or reload recovery. This establishes the message-state contract reused by Phase 6.
 
@@ -82,7 +86,9 @@ async def chat_completion(body: dict):
 
 ---
 
-## Phase 3 — Groups Dashboard
+## Phase 3 — Groups Dashboard ✅
+
+**Status:** Complete. Implemented as specified, with two additions to the response shape — `active_member_count` per group and a config-derived `status` object per member.
 
 **Goal:** A dedicated page showing all model groups, their members, and per-member status.
 
@@ -111,16 +117,29 @@ GET /api/model-groups
     {
       "name": "sonnet",
       "member_count": 2,
+      "active_member_count": 1,
       "members": [
         { "model_name": "claude-3-5-sonnet-v2", "provider": "bedrock",
-          "litellm_params": { ... }, "context_length": 200000 },
-        { "model_name": "claude-3-5-sonnet-v1", "provider": "bedrock", ... }
+          "litellm_params": { ... }, "_provider": { ... },
+          "status": { "level": "ok", "detail": "" } },
+        { "model_name": "claude-3-5-sonnet-v1", "provider": "bedrock",
+          "status": { "level": "error",
+            "detail": "Provider 'bedrock-v1' no longer exists" } }
       ]
     }
   ],
   "ungrouped_count": 5
 }
 ```
+
+### Design notes
+
+- **Status is config-derived, not live.** There is no per-model health source in the codebase (only a LiteLLM-wide `/health` poller), so probing was deliberately deferred. Status answers "will this model be in the generated config?":
+  - `error` — no provider assigned, or the referenced provider no longer exists
+  - `warn` — `litellm_params` absent or missing the required `model` key
+  - `ok` — will be emitted to the config as-is
+- **`active_member_count` counts members that survive config generation.** `db._merge_provider_defaults` silently skips models whose provider is dangling, so a group can hold N models in TinyDB while shipping fewer to LiteLLM. The header chip surfaces this drift (`"1 of 2 in config"`). This is the highest-value signal on the page and cost nothing to add.
+- Live health probing and "all members down" notifications remain Phase 8 work alongside the watchdog.
 
 ---
 
@@ -310,10 +329,10 @@ mcp_settings:
 ## Navigation Structure Evolution
 
 ```
-Phase 0 (current):     Dashboard | Auth | Security | Providers | Models | Tags | Backup | Logs | Help
-Phase 2 (after):       ... Models | Playground | Tags ...
-Phase 3 (after):       ... Models | Playground | Groups | Tags ...
-Phase 5 (after):       ... Models | Playground | Groups | Skills | Tags ...
+Phase 0 (done):        Dashboard | Auth | Security | Providers | Models | Tags | Backup | Logs | Help
+Phase 2 (done):        ... Models | Playground | Tags ...
+Phase 3 (done, current): ... Models | Playground | Groups | Tags ...
+Phase 5 (planned):     ... Models | Playground | Groups | Skills | Tags ...
 ```
 
 Final nav order: `Dashboard | Auth | Security | Providers | Models | Playground | Groups | Skills | Tags | Backup | Logs | Help`
@@ -344,13 +363,13 @@ Phases 1, 2, 5 are the three foundation layers (routing, testing, extending).
 
 ### Files to create (by phase)
 
-| Phase | Files |
-|---|---|
-| 2 | `page_playground.html`, `playground.js` |
-| 3 | `page_groups.html`, `groups.js` |
-| 5 | `page_skills.html`, `skills.js` |
-| 6 | `conversations_db.py` |
-| 7 | `mcp_skills_server.py` |
+| Phase | Status | Files |
+|---|---|---|
+| 2 | done | `page_playground.html`, `playground.js` |
+| 3 | done | `page_groups.html`, `groups.js` |
+| 5 | planned | `page_skills.html`, `skills.js` |
+| 6 | planned | `conversations_db.py` |
+| 7 | planned | `mcp_skills_server.py` |
 
 ### Files to modify (cumulative, all phases)
 
@@ -360,24 +379,31 @@ Phases 1, 2, 5 are the three foundation layers (routing, testing, extending).
 | `src/management_app.py` | 1, 2, 3, 4, 5, 6 |
 | `src/static/js/models.js` | 1, 4 |
 | `src/static/js/playground.js` | 2, 6 |
+| `src/static/js/groups.js` | 3 |
 | `src/static/js/init.js` | 1, 2, 3, 5 |
+| `src/static/js/navigation.js` | 3 (and any phase adding a nav item) |
 | `src/static/management.css` | 1, 2, 3, 4, 5, 6, 7 |
 | `templates/management.html` | 2, 3, 5 |
 | `templates/partials/page_models.html` | 1 |
 | `templates/partials/page_playground.html` | 2, 6 |
 | `templates/partials/page_skills.html` | 7 (tool call rendering) |
 
+> **Note for future phases:** any phase that adds a nav item must touch three places —
+> the `<ul class="nav">` list and the `{% include %}` block in `templates/management.html`,
+> plus a single dispatch branch in `activatePage()` in `navigation.js`. Phase 3
+> consolidated the previously-duplicated dispatch so there is now only one place to edit.
+
 ---
 
 ## Estimated Implementation Time
 
-| Phase | Name | DB | New Frontend Files | Estimate |
-|---|---|---|---|---|
-| 1 | Core Grouping + Failover | TinyDB (model_group field) | — | 2-3 days |
-| 2 | Playground V1 (stateless) | — | 2 | 2-3 days |
-| 3 | Groups Dashboard | — | 2 | 1-2 days |
-| 4 | Cost Awareness | TinyDB (cost fields) | — | 1 day |
-| 5 | Skills Library V1 | TinyDB (skills table) | 2 | 2-3 days |
-| 6 | Playground V2 (persistent) | SQLite (conversations.db) | — | 3-4 days |
-| 7 | Skills Library V2 (MCP) | — | — | 3-4 days |
-| 8 | Polish | — | — | 2-3 days |
+| Phase | Name | DB | New Frontend Files | Estimate | Status |
+|---|---|---|---|---|---|
+| 1 | Core Grouping + Failover | TinyDB (model_group field) | — | 2-3 days | done |
+| 2 | Playground V1 (stateless) | — | 2 | 2-3 days | done |
+| 3 | Groups Dashboard | — | 2 | 1-2 days | done |
+| 4 | Cost Awareness | TinyDB (cost fields) | — | 1 day | next |
+| 5 | Skills Library V1 | TinyDB (skills table) | 2 | 2-3 days | planned |
+| 6 | Playground V2 (persistent) | SQLite (conversations.db) | — | 3-4 days | planned |
+| 7 | Skills Library V2 (MCP) | — | — | 3-4 days | planned |
+| 8 | Polish | — | — | 2-3 days | planned |

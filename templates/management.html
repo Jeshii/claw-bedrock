@@ -50,6 +50,7 @@
         <!-- markdown.js must load before playground.js (MarkdownRenderer dependency) -->
         <script defer src="/static/js/markdown.js"></script>
         <script defer src="/static/js/playground.js"></script>
+        <script defer src="/static/js/groups.js"></script>
         <script defer src="/static/js/init.js"></script>
     </head>
     <body>
@@ -80,6 +81,9 @@
                 </li>
                 <li>
                     <a onclick="showPage('playground')">Playground</a>
+                </li>
+                <li>
+                    <a onclick="showPage('groups')">Groups</a>
                 </li>
                 <li>
                     <a onclick="showPage('tags')">Tags</a>
@@ -131,6 +135,7 @@
             {% include 'partials/page_providers.html' %}
             {% include 'partials/page_models.html' %}
             {% include 'partials/page_playground.html' %}
+            {% include 'partials/page_groups.html' %}
             {% include 'partials/page_tags.html' %}
             {% include 'partials/page_backup.html' %}
             {% include 'partials/page_logs.html' %}

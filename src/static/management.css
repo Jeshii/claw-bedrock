@@ -815,6 +815,123 @@ select {
 	white-space: nowrap;
 }
 
+/* Groups page */
+.group-card {
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	margin-bottom: 10px;
+	overflow: hidden;
+}
+.dark .group-card {
+	border-color: #444;
+}
+.group-card-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	cursor: pointer;
+	background: #fafafa;
+	user-select: none;
+}
+.dark .group-card-header {
+	background: #2a2a2a;
+}
+.group-card-header:hover {
+	background: #f0f0f0;
+}
+.dark .group-card-header:hover {
+	background: #333;
+}
+.group-card-name {
+	flex: 1;
+	font-weight: 600;
+	word-break: break-all;
+}
+.group-members {
+	display: none;
+	padding: 4px 0 8px 0;
+}
+.group-members.open {
+	display: block;
+}
+.member-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 14px 6px 34px;
+	border-top: 1px solid #f0f0f0;
+	cursor: pointer;
+}
+.dark .member-row {
+	border-top-color: #3a3a3a;
+}
+.member-row:hover {
+	background: #f5f5f5;
+}
+.dark .member-row:hover {
+	background: #333;
+}
+.member-row-name {
+	flex: 1;
+	font-size: 13px;
+	word-break: break-all;
+}
+.groups-ungrouped {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid #eee;
+	font-size: 13px;
+}
+.dark .groups-ungrouped {
+	border-top-color: #444;
+}
+
+/* Status chips */
+.status-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+	border: 1px solid;
+}
+.status-chip.ok {
+	background: #e6f4ea;
+	color: #1e7b34;
+	border-color: #1e7b34;
+}
+.dark .status-chip.ok {
+	background: #14331f;
+	color: #6fdd8b;
+	border-color: #6fdd8b;
+}
+.status-chip.warn {
+	background: #fff4e5;
+	color: #995500;
+	border-color: #995500;
+}
+.dark .status-chip.warn {
+	background: #3a2a10;
+	color: #ffb84d;
+	border-color: #ffb84d;
+}
+.status-chip.error {
+	background: #fdecea;
+	color: #a1231a;
+	border-color: #a1231a;
+}
+.dark .status-chip.error {
+	background: #3a1512;
+	color: #ff8a80;
+	border-color: #ff8a80;
+}
+
 /* Provider page */
 .provider-item {
 	border-bottom: 1px solid #eee;

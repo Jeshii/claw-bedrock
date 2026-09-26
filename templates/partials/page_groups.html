@@ -1,0 +1,16 @@
+<div id="page-groups" class="page">
+    <h1>Groups</h1>
+    <p class="muted" style="font-size: 13px; margin-bottom: 12px;">
+        Models sharing a group name are served under a single LiteLLM model name, giving
+        automatic failover between members. Status reflects what is written to the generated
+        config, not live provider reachability.
+    </p>
+    <div class="section">
+        <div class="section-header-row">
+            <h2>Model Groups</h2>
+            <button type="button" onclick="loadGroups()" class="btn-secondary">↻ Refresh</button>
+        </div>
+        <div id="groups-list"></div>
+        <div id="groups-ungrouped" class="groups-ungrouped hidden"></div>
+    </div>
+</div>
