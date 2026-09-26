@@ -582,6 +582,84 @@ async def list_model_groups():
     return {"groups": result, "ungrouped_count": ungrouped_count}
 
 
+def _validate_group_name(name) -> str:
+    """Normalize and validate a `model_group` value.
+
+    A group name becomes the public LiteLLM `model_name` that clients call
+    (see db.get_models_for_litellm), optionally prefixed with `claw-bedrock/`,
+    so it has to be safe to embed in a model identifier. Nothing validated
+    this before, which meant a name containing whitespace produced a
+    model_name no client could request.
+    """
+    cleaned = str(name or "").strip()
+    if not cleaned:
+        raise HTTPException(400, "Group name cannot be empty")
+    if len(cleaned) > 64:
+        raise HTTPException(400, "Group name must be 64 characters or fewer")
+    if any(c.isspace() for c in cleaned):
+        raise HTTPException(400, "Group name cannot contain whitespace")
+    if "/" in cleaned:
+        raise HTTPException(400, "Group name cannot contain '/'")
+    return cleaned
+
+
+def _group_members(name: str) -> list:
+    return [m for m in db.get_all_models() if m.get("model_group") == name]
+
+
+@app.post("/api/model-groups/rename")
+async def rename_model_group(body: dict):
+    """Rename a model group, moving every member in one atomic update.
+
+    A group name is the model_name clients call, so this is a breaking
+    change for anything referencing the old name -- the UI confirms
+    explicitly. Applied as a single batch so a mid-way failure cannot
+    leave a group split across two names.
+    """
+    old = str(body.get("from") or "").strip()
+    new = _validate_group_name(body.get("to"))
+
+    if not old:
+        raise HTTPException(400, "Source group name cannot be empty")
+    if old == new:
+        return {"renamed": 0, "from": old, "to": new}
+
+    members = _group_members(old)
+    if not members:
+        raise HTTPException(404, f"No group named '{old}'")
+
+    if any(m.get("model_group") == new for m in db.get_all_models()):
+        raise HTTPException(409, f"Group '{new}' already exists")
+
+    for m in members:
+        db.update_model_field(m["model_name"], {"model_group": new})
+
+    merge_configs()
+    _reload_litellm_config()
+    return {"renamed": len(members), "from": old, "to": new}
+
+
+@app.post("/api/model-groups/unassign")
+async def unassign_model_group(body: dict):
+    """Clear a model group from all of its members, leaving them ungrouped.
+
+    The models themselves are untouched; only the shared name is removed, so
+    each member goes back to being served under its own model_name.
+    """
+    name = _validate_group_name(body.get("name"))
+
+    members = _group_members(name)
+    if not members:
+        raise HTTPException(404, f"No group named '{name}'")
+
+    for m in members:
+        db.update_model_field(m["model_name"], {"model_group": None})
+
+    merge_configs()
+    _reload_litellm_config()
+    return {"cleared": len(members), "name": name}
+
+
 @app.post("/api/models/reload")
 async def reload_models():
     """Manually trigger a LiteLLM restart to pick up new config."""

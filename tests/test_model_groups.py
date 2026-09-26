@@ -229,3 +229,195 @@ class TestMemberStatus:
         assert group["member_count"] == 2
         assert group["active_member_count"] == 0
         assert emitted == []
+
+
+class TestRename:
+    """POST /api/model-groups/rename."""
+
+    def test_renames_every_member(self, test_env):
+        """All members move to the new name in one call."""
+        client, _tmpdir, _db = test_env
+
+        add_model(client, "a", group="old", model_path="bedrock/a")
+        add_model(client, "b", group="old", model_path="bedrock/b")
+        add_model(client, "c", group="other", model_path="bedrock/c")
+
+        resp = client.post(
+            "/api/model-groups/rename", json={"from": "old", "to": "new"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["renamed"] == 2
+
+        data = client.get("/api/model-groups").json()
+        assert get_group(data, "old") is None
+        renamed = get_group(data, "new")
+        assert renamed["member_count"] == 2
+        assert get_member(renamed, "a") is not None
+        assert get_member(renamed, "b") is not None
+        # Untouched group stays put.
+        assert get_group(data, "other")["member_count"] == 1
+
+    def test_rename_is_atomic_on_collision(self, test_env):
+        """A target that already exists is rejected, leaving the source intact."""
+        client, _tmpdir, _db = test_env
+
+        add_model(client, "a", group="old", model_path="bedrock/a")
+        add_model(client, "b", group="new", model_path="bedrock/b")
+
+        resp = client.post(
+            "/api/model-groups/rename", json={"from": "old", "to": "new"}
+        )
+        assert resp.status_code == 409
+        assert "already exists" in resp.json()["detail"]
+
+        data = client.get("/api/model-groups").json()
+        assert get_group(data, "old")["member_count"] == 1
+        assert get_group(data, "new")["member_count"] == 1
+
+    def test_rename_unknown_group_is_404(self, test_env):
+        client, _tmpdir, _db = test_env
+
+        resp = client.post(
+            "/api/model-groups/rename", json={"from": "nope", "to": "new"}
+        )
+        assert resp.status_code == 404
+
+    def test_rename_to_same_name_is_a_noop(self, test_env):
+        client, _tmpdir, _db = test_env
+
+        add_model(client, "a", group="same", model_path="bedrock/a")
+
+        resp = client.post(
+            "/api/model-groups/rename", json={"from": "same", "to": "same"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["renamed"] == 0
+        assert get_group(client.get("/api/model-groups").json(), "same") is not None
+
+    @pytest.mark.parametrize(
+        "bad", ["", "   ", "has space", "has/slash", "x" * 65, None]
+    )
+    def test_rejects_unusable_target_names(self, test_env, bad):
+        """A group name becomes a public model_name, so it is constrained."""
+        client, _tmpdir, _db = test_env
+
+        add_model(client, "a", group="old", model_path="bedrock/a")
+
+        resp = client.post("/api/model-groups/rename", json={"from": "old", "to": bad})
+        assert resp.status_code == 400
+        # Source must survive a rejected rename.
+        assert get_group(client.get("/api/model-groups").json(), "old") is not None
+
+    def test_rejects_empty_source(self, test_env):
+        client, _tmpdir, _db = test_env
+
+        resp = client.post("/api/model-groups/rename", json={"from": "", "to": "new"})
+        assert resp.status_code == 400
+
+    def test_trims_surrounding_whitespace(self, test_env):
+        """A padded name is normalized rather than creating a near-duplicate."""
+        client, _tmpdir, _db = test_env
+
+        add_model(client, "a", group="old", model_path="bedrock/a")
+
+        resp = client.post(
+            "/api/model-groups/rename", json={"from": "old", "to": "  new  "}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["to"] == "new"
+        assert get_group(client.get("/api/model-groups").json(), "new") is not None
+
+
+class TestUnassign:
+    """POST /api/model-groups/unassign."""
+
+    def test_clears_group_from_members(self, test_env):
+        """Members survive as models, just without the shared name."""
+        client, _tmpdir, db = test_env
+
+        add_model(client, "a", group="doomed", model_path="bedrock/a")
+        add_model(client, "b", group="doomed", model_path="bedrock/b")
+        add_model(client, "c", group="keep", model_path="bedrock/c")
+
+        resp = client.post("/api/model-groups/unassign", json={"name": "doomed"})
+        assert resp.status_code == 200
+        assert resp.json()["cleared"] == 2
+
+        data = client.get("/api/model-groups").json()
+        assert get_group(data, "doomed") is None
+        assert data["ungrouped_count"] == 2
+        assert get_group(data, "keep")["member_count"] == 1
+
+        # The models themselves are still there. a and b fall back to their
+        # own model_name now that they no longer share one; c is still
+        # grouped, so it stays served under the prefixed group name.
+        names = {m["model_name"] for m in db.get_models_for_litellm()["model_list"]}
+        assert names == {"a", "b", "claw-bedrock/keep"}
+
+    def test_unassign_unknown_group_is_404(self, test_env):
+        client, _tmpdir, _db = test_env
+
+        resp = client.post("/api/model-groups/unassign", json={"name": "nope"})
+        assert resp.status_code == 404
+
+    def test_unassign_rejects_bad_name(self, test_env):
+        client, _tmpdir, _db = test_env
+
+        resp = client.post("/api/model-groups/unassign", json={"name": "has space"})
+        assert resp.status_code == 400
+
+    def test_rename_then_unassign_round_trip(self, test_env):
+        """The two endpoints compose without leaving stray groups behind."""
+        client, _tmpdir, db = test_env
+
+        add_model(client, "a", group="one", model_path="bedrock/a")
+        add_model(client, "b", group="two", model_path="bedrock/b")
+
+        resp = client.post(
+            "/api/model-groups/rename", json={"from": "two", "to": "renamed"}
+        )
+        assert resp.status_code == 200
+        data = client.get("/api/model-groups").json()
+        assert [g["name"] for g in data["groups"]] == ["one", "renamed"]
+        assert get_group(data, "renamed")["member_count"] == 1
+
+        client.post("/api/model-groups/unassign", json={"name": "renamed"})
+        data = client.get("/api/model-groups").json()
+        assert [g["name"] for g in data["groups"]] == ["one"]
+        assert data["ungrouped_count"] == 1
+
+        client.post("/api/model-groups/unassign", json={"name": "one"})
+        data = client.get("/api/model-groups").json()
+        assert data["groups"] == []
+        assert data["ungrouped_count"] == 2
+        # Both models fall back to their own model_name once ungrouped.
+        assert len(db.get_models_for_litellm()["model_list"]) == 2
+
+    def test_rename_will_not_merge_existing_groups(self, test_env):
+        """Renaming onto an existing group is refused, not treated as a merge.
+
+        Merging would silently repoint clients of the losing name, so the
+        caller has to unassign the target group first.
+        """
+        client, _tmpdir, db = test_env
+
+        add_model(client, "a", group="keep", model_path="bedrock/a")
+        add_model(client, "b", group="drop", model_path="bedrock/b")
+
+        assert (
+            client.post(
+                "/api/model-groups/rename", json={"from": "drop", "to": "keep"}
+            ).status_code
+            == 409
+        )
+
+        client.post("/api/model-groups/unassign", json={"name": "keep"})
+        resp = client.post(
+            "/api/model-groups/rename", json={"from": "drop", "to": "keep"}
+        )
+        assert resp.status_code == 200
+
+        data = client.get("/api/model-groups").json()
+        assert [g["name"] for g in data["groups"]] == ["keep"]
+        assert get_group(data, "keep")["member_count"] == 1
+        assert {m["model_name"] for m in db.get_all_models()} == {"a", "b"}
