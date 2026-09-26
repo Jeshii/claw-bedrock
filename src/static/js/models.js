@@ -939,47 +939,6 @@ async function reloadLiteLLM() {
 	}
 }
 
-async function loadRouterSettings() {
-	try {
-		const res = await fetch("/api/settings/router");
-		const s = await res.json();
-		const strategyEl = document.getElementById("routing-strategy");
-		const failsEl = document.getElementById("allowed-fails");
-		const retriesEl = document.getElementById("num-retries");
-		if (strategyEl && s.routing_strategy) strategyEl.value = s.routing_strategy;
-		if (failsEl && s.allowed_fails != null) failsEl.value = s.allowed_fails;
-		if (retriesEl && s.num_retries != null) retriesEl.value = s.num_retries;
-	} catch (_e) {
-		// Router settings UI may not be rendered yet; that's fine
-	}
-}
-
-async function saveRouterSetting() {
-	const body = {
-		routing_strategy: document.getElementById("routing-strategy").value,
-		allowed_fails: parseInt(document.getElementById("allowed-fails").value),
-		num_retries: parseInt(document.getElementById("num-retries").value),
-	};
-	try {
-		const res = await fetch("/api/settings/router", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(body),
-		});
-		if (res.ok) {
-			showToast("Router settings saved");
-		} else {
-			const error = await res.json();
-			showToast(
-				`Error: ${error.detail || "Failed to save router settings"}`,
-				"error",
-			);
-		}
-	} catch (e) {
-		showToast(`Error: ${e.message}`, "error");
-	}
-}
-
 function sortModels(models, sortKey) {
 	const sorted = [...models];
 	switch (sortKey) {
