@@ -42,7 +42,12 @@
 	/* Accent */
 	--accent: light-dark(#007bff, #66b3ff);
 	--accent-text: light-dark(#1967d2, #66b3ff);
-	--accent-fill: light-dark(#007bff, #0056b3);
+	--accent-fill: light-dark(#0069d9, #0056b3);
+	/* --accent-fill is a mid/dark blue in BOTH schemes, so it always takes
+	   light text. --text-inverse is dark in dark mode, which gave 2.47:1.
+	   The light value is also darkened from #007bff because white on #007bff
+	   is only 3.80:1. */
+	--text-on-accent: #ffffff;
 	--accent-subtle: light-dark(#e8f0fe, #1a3a5c);
 	--accent-ring: light-dark(rgba(0, 123, 255, 0.3), rgba(102, 179, 255, 0.3));
 	--accent-ring-strong: light-dark(
@@ -61,7 +66,7 @@
 	--warn: light-dark(#ffc107, #ffc107);
 	--warn-strong: light-dark(#e0a800, #ffb84d);
 	--warn-text: light-dark(#995500, #ffb84d);
-	--warn-on-warn: light-dark(#333333, #ffe082);
+	--warn-on-warn: #333333;
 	--warn-subtle: light-dark(#fff3cd, #3d3000);
 	--warn-subtle-2: light-dark(#fff8e1, #2a2000);
 	--warn-subtle-3: light-dark(#fff4e5, #3a2a10);
@@ -184,7 +189,7 @@ body {
 }
 .nav a.active {
 	background: var(--accent-fill);
-	color: var(--text-inverse);
+	color: var(--text-on-accent);
 }
 .main a {
 	color: var(--text-muted);
@@ -277,6 +282,7 @@ h3 {
 	border: 1px solid var(--border);
 	padding: 20px;
 	border-radius: 8px;
+	background: var(--bg-surface);
 }
 .auth-needed {
 	background: var(--warn-subtle);
@@ -1237,6 +1243,7 @@ pre {
 }
 .dark #reload-litellm-btn.needs-reload {
 	animation: reloadPulseDark 1.2s ease-in-out infinite;
+	background: var(--accent-subtle);
 }
 @keyframes reloadPulseDark {
 	0%,
@@ -1253,7 +1260,7 @@ pre {
 /* Utility classes */
 .btn-primary {
 	background: var(--accent-fill);
-	color: var(--text-inverse);
+	color: var(--text-on-accent);
 	border: 1px solid var(--accent);
 	padding: 8px 16px;
 	border-radius: 4px;
@@ -1346,7 +1353,7 @@ dialog {
 	left: 50%;
 	transform: translate(-50%, -50%);
 	margin: 0;
-	background: var(--text-inverse);
+	background: var(--bg-surface);
 	color: var(--text);
 	box-shadow: var(--shadow-lg);
 }
@@ -1392,7 +1399,7 @@ dialog::backdrop {
 }
 #sysprompt-toggle.active {
 	background: var(--accent-fill);
-	color: var(--text-inverse);
+	color: var(--text-on-accent);
 	border-color: var(--accent-fill);
 }
 .playground-system-section {
@@ -1438,7 +1445,7 @@ dialog::backdrop {
 .message-user {
 	align-self: flex-end;
 	background: var(--accent-fill);
-	color: var(--text-inverse);
+	color: var(--text-on-accent);
 	border-bottom-right-radius: 4px;
 }
 .message-assistant {
@@ -1700,7 +1707,7 @@ dialog::backdrop {
 		visibility: hidden;
 		position: fixed;
 		inset: 0;
-		background: var(--bg-raised);
+		background: var(--bg-scrim);
 		z-index: 999;
 		transition:
 			opacity 0.2s ease,

@@ -88,7 +88,7 @@ async def chat_completion(body: dict):
 
 ## Phase 3 — Groups Dashboard ✅
 
-**Status:** Complete. Implemented as specified, with two additions to the response shape — `active_member_count` per group and a config-derived `status` object per member.
+**Status:** Complete. Implemented as specified, with two additions to the response shape — `active_member_count` per group and a config-derived `status` object per member. Follow-up pass added group management, group-name validation, the Router Settings relocation, and a full light/dark rebuild.
 
 **Goal:** A dedicated page showing all model groups, their members, and per-member status.
 
@@ -96,17 +96,18 @@ async def chat_completion(body: dict):
 
 | File | Purpose |
 |---|---|
-| `templates/partials/page_groups.html` | Table/card view of groups — name, member count, member list with provider badges |
-| `src/static/js/groups.js` | Load groups from API, render, expand members |
+| `templates/partials/page_groups.html` | Card view of groups — name, member count, member list with provider badges, rename/unassign/add-member controls, Router Settings |
+| `src/static/js/groups.js` | Load groups from API, render, expand members, group management actions, Router Settings |
 
 ### Files modified
 
 | File | Change |
 |---|---|
-| `src/management_app.py` | `GET /api/model-groups` — aggregates models by `model_group`, returns grouped structure with member details |
+| `src/management_app.py` | `GET /api/model-groups` — aggregates models by `model_group`, returns grouped structure with member details. `POST /api/model-groups/rename` and `POST /api/model-groups/unassign` — bulk group operations with name validation |
 | `templates/management.html` | Add "Groups" nav item (between "Playground" and "Tags") |
 | `src/static/js/init.js` | Add `loadGroups()` |
-| `src/static/management.css` | Groups page styles |
+| `src/static/js/models.js` | Group input becomes a datalist of existing groups; `setModelGroup()` shared with the Groups page |
+| `src/static/management.css` | Groups page styles; design-token layer and `light-dark()` rebuild |
 
 ### API response shape
 
@@ -128,8 +129,18 @@ GET /api/model-groups
       ]
     }
   ],
-  "ungrouped_count": 5
+  "ungrouped_count": 5,
+  "ungrouped_models": ["claude-haiku-3-5", "gemini-2-0-flash"]
 }
+
+POST /api/model-groups/rename    { "from": "sonnet", "to": "sonnet-v2" }
+  -> 200 { "renamed": 2, "from": "sonnet", "to": "sonnet-v2" }
+  -> 400 invalid name (allowlist: letters, numbers, dot, dash, underscore)
+  -> 404 no such group
+  -> 409 target group already exists (rename never merges)
+
+POST /api/model-groups/unassign  { "name": "sonnet-v2" }
+  -> 200 { "cleared": 2, "name": "sonnet-v2" }
 ```
 
 ### Design notes
@@ -139,6 +150,9 @@ GET /api/model-groups
   - `warn` — `litellm_params` absent or missing the required `model` key
   - `ok` — will be emitted to the config as-is
 - **`active_member_count` counts members that survive config generation.** `db._merge_provider_defaults` silently skips models whose provider is dangling, so a group can hold N models in TinyDB while shipping fewer to LiteLLM. The header chip surfaces this drift (`"1 of 2 in config"`). This is the highest-value signal on the page and cost nothing to add.
+- **A group name is a public API surface.** `db.get_models_for_litellm` makes it the `model_name` clients call, prefixed `claw-bedrock/` when `use_prefix` is on. Two consequences drove the design: names are validated against an allowlist (nothing checked them before, so whitespace produced an uncallable model name), and **rename is a breaking change** — the UI confirms with the old and new model ids spelled out. Rename also refuses to merge onto an existing group, because that would silently repoint every client of the losing name.
+- **The typo problem is fixed at the source, not just in cleanup.** The Groups page was originally read-only, so a typo could only be cleared by editing every member by hand. The Models page Group input is now a `datalist` of existing names, so near-duplicates cannot be created in the first place.
+- **Router Settings moved here.** `routing_strategy`, `allowed_fails` and `num_retries` are per-group failover behavior but lived on the Models page, the one place you cannot see a group.
 - Live health probing and "all members down" notifications remain Phase 8 work alongside the watchdog.
 
 ---
