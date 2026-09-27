@@ -1,6 +1,7 @@
-import os
 import base64
+import os
 import secrets
+
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -37,7 +38,7 @@ def _get_encryption_key() -> bytes:
             # Validate it's a proper Fernet key
             Fernet(key)
             return key
-        except Exception:
+        except Exception:  # noqa: BLE001 - re-raised below as ValueError with a fix hint
             raise ValueError(
                 "ENCRYPTION_KEY is set but is not a valid Fernet key. "
                 'Generate one with: python -c "from cryptography.fernet import Fernet; '
@@ -51,7 +52,8 @@ def _get_encryption_key() -> bytes:
             os.environ.get("CONFIG_DIR", "/app"), ".encryption_salt"
         )
         if os.path.exists(salt_path):
-            salt = open(salt_path, "rb").read()
+            with open(salt_path, "rb") as f:
+                salt = f.read()
         else:
             salt = secrets.token_bytes(16)
             os.makedirs(os.path.dirname(salt_path), exist_ok=True)
@@ -85,7 +87,7 @@ def decrypt_data(token: str) -> str:
     try:
         f = Fernet(_get_encryption_key())
         return f.decrypt(token.encode("utf-8")).decode("utf-8")
-    except (InvalidToken, Exception):
+    except (InvalidToken, Exception):  # noqa: BLE001 - backward compat: returns plaintext unchanged
         return token
 
 

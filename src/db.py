@@ -1,11 +1,13 @@
-import logging
-from tinydb import TinyDB, where, Query
-import os
-import secrets
-import yaml
 import datetime
 import json
+import logging
+import os
+import secrets
 import sys
+
+import yaml
+from tinydb import Query, TinyDB, where
+
 import encryption_utils
 
 logger = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ def _migrate_yaml_to_db():
                 {"key": "use_prefix", "value": config["use_prefix"]},
                 where("key") == "use_prefix",
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - startup migration must not block app boot
         print(f"[DB] Migration error: {e}")
 
 
@@ -374,7 +376,7 @@ def _merge_provider_defaults(
             if raw_key and _is_sensitive_field("api_key"):
                 try:
                     lp["api_key"] = encryption_utils.decrypt_data(raw_key)
-                except Exception:
+                except Exception:  # noqa: BLE001 - one undecryptable provider must not break the whole config
                     print(
                         f"[DB] Failed to decrypt api_key for provider '{provider_name}'",
                         file=sys.stderr,
@@ -599,7 +601,9 @@ def export_backup() -> dict:
     """Dump all tables into a portable backup dict with decrypted provider fields."""
     return {
         "schema_version": BACKUP_SCHEMA_VERSION,
-        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "created_at": datetime.datetime.now(datetime.UTC)
+        .isoformat()
+        .replace("+00:00", "Z"),
         "data": {
             "models": [dict(m) for m in models_table.all()],
             "tags": [dict(t) for t in tags_table.all()],
@@ -670,9 +674,14 @@ def import_backup(backup: dict, mode: str = "replace") -> dict:
 
 
 def _validate_backup(backup: dict):
-    """Raise ValueError if the backup structure is invalid."""
+    """Raise ValueError if the backup structure is invalid.
+
+    Every failure raises ValueError, including type mismatches: callers
+    (see management_app.preview_backup) catch ValueError to return HTTP 400, so
+    raising TypeError for a bad field type would surface as a 500 instead.
+    """
     if not isinstance(backup, dict):
-        raise ValueError("Backup must be a JSON object")
+        raise ValueError("Backup must be a JSON object")  # noqa: TRY004
     if "data" not in backup:
         raise ValueError("Missing 'data' key in backup")
     schema = backup.get("schema_version", 0)
@@ -683,26 +692,26 @@ def _validate_backup(backup: dict):
         )
     data = backup["data"]
     if not isinstance(data.get("models", []), list):
-        raise ValueError("'data.models' must be a list")
+        raise ValueError("'data.models' must be a list")  # noqa: TRY004
     if not isinstance(data.get("tags", []), list):
-        raise ValueError("'data.tags' must be a list")
+        raise ValueError("'data.tags' must be a list")  # noqa: TRY004
     if not isinstance(data.get("settings", {}), dict):
-        raise ValueError("'data.settings' must be an object")
+        raise ValueError("'data.settings' must be an object")  # noqa: TRY004
     if not isinstance(data.get("providers", []), list):
-        raise ValueError("'data.providers' must be a list")
+        raise ValueError("'data.providers' must be a list")  # noqa: TRY004
 
 
 def _auto_backup_before_replace():
     """Write a timestamped JSON snapshot to CONFIG_DIR before a destructive import."""
     try:
         snapshot = export_backup()
-        ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d-%H%M%S")
         path = os.path.join(CONFIG_DIR, f"auto-backup-{ts}.json")
         with open(path, "w") as f:
             json.dump(snapshot, f, indent=2)
         os.chmod(path, 0o600)
         print(f"[Backup] Auto-backup written to {path}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - backup failure must not block the import
         print(f"[Backup] Auto-backup failed: {e}")
 
 

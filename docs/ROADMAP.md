@@ -177,7 +177,7 @@ POST /api/model-groups/unassign  { "name": "sonnet-v2" }
 
 ### Per-model cost fields
 
-```python
+```json
 {
   "model_name": "claude-3-5-sonnet-v2",
   "model_group": "sonnet",
@@ -239,7 +239,7 @@ OpenRouter's model catalog already returned a `pricing` block (`prompt` / `compl
 
 ### Skill schema
 
-```python
+```json
 {
     "name": "deploy-to-ecs",              # unique
     "description": "Deploy a container to ECS with Fargate",

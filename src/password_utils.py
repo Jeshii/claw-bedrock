@@ -1,4 +1,5 @@
 import os
+
 import bcrypt
 
 # Cost factor for bcrypt - higher is more secure but slower
@@ -35,7 +36,7 @@ def verify_password(password: str, hashed: str) -> bool:
     """
     try:
         return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
-    except Exception:
+    except Exception:  # noqa: BLE001 - fail closed on any verification error
         # If there's any error in verification, return False
         return False
 
@@ -51,8 +52,4 @@ def is_hash_valid(hash_str: str) -> bool:
         True if it appears to be a valid bcrypt hash format
     """
     # Bcrypt hashes start with $2b$, $2a$, or $2y$ followed by cost, salt, and hash
-    return (
-        hash_str.startswith("$2b$")
-        or hash_str.startswith("$2a$")
-        or hash_str.startswith("$2y$")
-    )
+    return hash_str.startswith(("$2b$", "$2a$", "$2y$"))

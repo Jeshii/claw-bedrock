@@ -1,9 +1,10 @@
 import os
 import subprocess
 import sys
-import time
 import threading
+import time
 import traceback
+
 import boto3
 from aws_bedrock_token_generator import BedrockTokenGenerator
 from litellm.integrations.custom_logger import CustomLogger
@@ -20,7 +21,9 @@ def _debug(msg):
     try:
         with open(_DEBUG_LOG, "a") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
+        # Debug logging is best-effort and is itself called from error handlers;
+        # raising here would mask the original failure. Never log from the handler.
         pass
 
 
@@ -58,7 +61,7 @@ def _write_auth_tmp(url: str):
         _secure_write(_TMP_AUTH_URL, url)
         _secure_write(_TMP_AUTH_NEEDED, "1")
         _debug(f"Wrote {_TMP_AUTH_URL} and {_TMP_AUTH_NEEDED}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - auth tmp files are best-effort
         _debug(f"WARNING: Could not write auth tmp files: {e}")
         print(
             f"[TokenRefresher] WARNING: Could not write auth tmp files: {e}",
@@ -73,7 +76,7 @@ def _clear_auth_tmp():
             os.remove(path)
         except FileNotFoundError:
             pass
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - auth tmp cleanup is best-effort
             print(
                 f"[TokenRefresher] WARNING: Could not remove {path}: {e}",
                 file=sys.stderr,
@@ -151,7 +154,7 @@ class BedrockTokenRefresher(CustomLogger):
                         buffer = ""
                         line_count += 1
                         print(
-                            f"[TokenRefresher] DEBUG: stdout line #{line_count}: {repr(line)}",
+                            f"[TokenRefresher] DEBUG: stdout line #{line_count}: {line!r}",
                             flush=True,
                         )
 
@@ -171,12 +174,11 @@ class BedrockTokenRefresher(CustomLogger):
                             "authorization code" in buffer_lower
                             and "browser" in buffer_lower
                         )
-                    ):
-                        if not self._awaiting_code:
-                            self._awaiting_code = True
-                            _debug(
-                                f"CLI is awaiting authorization code on stdin (buffer={repr(buffer)})"
-                            )
+                    ) and not self._awaiting_code:
+                        self._awaiting_code = True
+                        _debug(
+                            f"CLI is awaiting authorization code on stdin (buffer={buffer!r})"
+                        )
 
                 print(
                     f"[TokenRefresher] DEBUG: stdout loop exhausted after {line_count} lines.",
@@ -197,7 +199,7 @@ class BedrockTokenRefresher(CustomLogger):
                     _clear_auth_tmp()
                     try:
                         self._refresh()
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - refresh failure is logged and retried
                         print(
                             f"[TokenRefresher] WARNING: Token refresh after login failed: {e}",
                             file=sys.stderr,
@@ -218,7 +220,7 @@ class BedrockTokenRefresher(CustomLogger):
                     except FileNotFoundError:
                         pass
                     self._login_process = None
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - login output read failure is logged
                 print(
                     f"[TokenRefresher] Error reading aws login output: {e}",
                     file=sys.stderr,
@@ -270,7 +272,7 @@ class BedrockTokenRefresher(CustomLogger):
             with open(_TMP_AUTH_NEEDED, "w") as f:
                 f.write("1")
             _debug(f"Wrote {_TMP_AUTH_NEEDED} file")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - auth_needed flag is best-effort
             _debug(f"WARNING: Could not write auth_needed file: {e}")
 
         try:
@@ -291,7 +293,7 @@ class BedrockTokenRefresher(CustomLogger):
             _debug("ERROR: 'aws' CLI not found")
             self._auth_error = "'aws' CLI not found. Is it installed and on PATH?"
             print(f"[TokenRefresher] ERROR: {self._auth_error}", file=sys.stderr)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - launch failure surfaces via _auth_error
             _debug(f"ERROR: failed to launch aws login: {e}")
             self._auth_error = f"Failed to launch aws login: {e}"
             print(f"[TokenRefresher] ERROR: {self._auth_error}", file=sys.stderr)
@@ -306,7 +308,9 @@ class BedrockTokenRefresher(CustomLogger):
         if self._login_process is not None:
             try:
                 self._login_process.kill()
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
+                # The process may already have exited; killing it is best-effort
+                # and must not block a retry.
                 pass
             self._login_process = None
         self._ensure_login()
@@ -322,7 +326,7 @@ class BedrockTokenRefresher(CustomLogger):
                 profile_name=self._profile, region_name=self._region
             )
             credentials = session.get_credentials()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - no usable session; caller triggers login
             _debug(f"Session creation failed: {e}")
             self._needs_login = True
             self._write_auth_needed_flag()
@@ -340,7 +344,7 @@ class BedrockTokenRefresher(CustomLogger):
             if not os.path.exists(_TMP_AUTH_NEEDED):
                 with open(_TMP_AUTH_NEEDED, "w") as f:
                     f.write("1")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - auth_needed flag is best-effort
             _debug(f"Failed to write auth_needed: {e}")
 
     def _refresh(self):
@@ -368,9 +372,9 @@ class BedrockTokenRefresher(CustomLogger):
                     os.remove(_TMP_AUTH_NEEDED)
                 _clear_auth_tmp()
                 _debug("Cleared auth_needed flag - token refresh successful")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - cleanup failure must not mask the error
                 _debug(f"Error clearing auth tmp files: {e}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - token failure is reported to the user
             _debug(f"Token generation failed: {e}")
             print(f"[TokenRefresher] Token generation failed: {e}", file=sys.stderr)
             if not self._is_interactive():
@@ -395,7 +399,7 @@ class BedrockTokenRefresher(CustomLogger):
         # If the user pasted a full URL, extract the code= parameter
         extracted = code
         if "code=" in code:
-            from urllib.parse import urlparse, parse_qs
+            from urllib.parse import parse_qs, urlparse
 
             parsed = urlparse(code) if "://" in code else None
             if parsed:
@@ -415,16 +419,16 @@ class BedrockTokenRefresher(CustomLogger):
                 return {"success": True}
             else:
                 return {"error": "Login process stdin is not available."}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - returned to the web UI as an error
             print(f"[TokenRefresher] Error submitting code: {e}", file=sys.stderr)
             return {"error": str(e)}
 
     def _register_auth_endpoint(self):
         """Register /auth/status and /auth/submit-code endpoints on LiteLLM's FastAPI app."""
         try:
-            from litellm.proxy.proxy_server import app
-            from fastapi.responses import JSONResponse
             from fastapi import Body
+            from fastapi.responses import JSONResponse
+            from litellm.proxy.proxy_server import app
 
             _debug(
                 "_register_auth_endpoint(): Registering /auth/status and /auth/submit-code endpoints"
@@ -469,7 +473,7 @@ class BedrockTokenRefresher(CustomLogger):
                             {"error": "Login process stdin is not available."},
                             status_code=500,
                         )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - returned to the web UI as an error
                     print(
                         f"[TokenRefresher] Error submitting code: {e}", file=sys.stderr
                     )
@@ -478,7 +482,7 @@ class BedrockTokenRefresher(CustomLogger):
             print(
                 "[TokenRefresher] Registered /auth/status and /auth/submit-code endpoints on LiteLLM proxy."
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - hook registration is best-effort
             print(
                 f"[TokenRefresher] WARNING: Could not register auth endpoints: {e}",
                 file=sys.stderr,
@@ -503,7 +507,7 @@ class BedrockTokenRefresher(CustomLogger):
             print("[TokenRefresher] Refreshing token before call...")
             try:
                 self._refresh()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - hook must not break the request
                 print(
                     f"[TokenRefresher] Token refresh failed in pre_call_hook: {e}",
                     file=sys.stderr,
@@ -522,7 +526,7 @@ class BedrockTokenRefresher(CustomLogger):
             self._force_refresh = True
             try:
                 self._refresh()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - hook must not break the request
                 print(
                     f"[TokenRefresher] Token refresh failed in failure_event hook: {e}",
                     file=sys.stderr,

@@ -1,33 +1,34 @@
+import base64
+import datetime
+import hmac
+import math
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
 from collections import defaultdict
+
+import psutil
+import requests
+import yaml
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.templating import Jinja2Templates
 from fastapi.responses import (
     HTMLResponse,
-    RedirectResponse,
     JSONResponse,
+    RedirectResponse,
     StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
-import yaml
-import os
-import re
-import sys
-import requests
-import time
-import subprocess
-import psutil
-import base64
-import math
-import threading
-import datetime
-import shutil
-from typing import Optional, Dict
+from fastapi.templating import Jinja2Templates
 from tinydb import where
+
 import db
-import token_refresher
-import password_utils
 import encryption_utils
-import hmac
+import password_utils
+import token_refresher
 
 
 def base64url_decode(s: str) -> str:
@@ -70,7 +71,7 @@ def _reload_litellm_config() -> bool:
                 file=sys.stderr,
             )
         return success
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - caller checks the False return
         print(f"[reload] Config reload failed: {e}", file=sys.stderr)
         return False
 
@@ -112,7 +113,7 @@ def verify_auth(request: Request) -> bool:
 
 
 @app.post("/api/login")
-async def login(request: Request, body: Dict):
+def login(request: Request, body: dict):
     """Login with password. Returns success or error."""
     if not is_auth_required():
         return {"success": True, "message": "Auth not required"}
@@ -140,7 +141,7 @@ async def login(request: Request, body: Dict):
 
 
 @app.post("/api/logout")
-async def logout():
+def logout():
     """Logout by clearing the auth cookie."""
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie(key=AUTH_COOKIE, path="/")
@@ -179,7 +180,7 @@ async def security_headers_middleware(request: Request, call_next):
 
 
 @app.get("/login")
-async def login_page(request: Request):
+def login_page(request: Request):
     """Serve the login page."""
     if not is_auth_required():
         return RedirectResponse(url="/", status_code=302)
@@ -188,7 +189,7 @@ async def login_page(request: Request):
 
 
 @app.on_event("startup")
-async def startup_event():
+def startup_event():
     db._migrate_yaml_to_db()
     db.seed_default_providers()
     merge_configs()
@@ -205,22 +206,23 @@ def litellm_watchdog():
     while True:
         try:
             if os.path.exists(pid_file):
-                pid = int(open(pid_file).read().strip())
+                with open(pid_file) as f:
+                    pid = int(f.read().strip())
                 if not psutil.pid_exists(pid):
                     print(f"[Watchdog] LiteLLM (PID {pid}) crashed, restarting...")
                     reload_litellm()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - watchdog thread must never exit
             print(f"[Watchdog] Error: {e}", file=sys.stderr)
         time.sleep(10)
 
 
 @app.on_event("shutdown")
-async def shutdown_event():
+def shutdown_event():
     db.close_db()
     print("[Shutdown] Database closed")
 
 
-def load_config() -> Dict:
+def load_config() -> dict:
     """Load merged config for LiteLLM (reads from generated config.yaml)."""
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, "r") as f:
@@ -228,12 +230,11 @@ def load_config() -> Dict:
     return {"model_list": []}
 
 
-def save_local_config(config: Dict):
+def save_local_config(config: dict):
     """Legacy function - no longer writes YAML, settings saved via db module."""
-    pass
 
 
-def load_local_config() -> Dict:
+def load_local_config() -> dict:
     """Load local config from TinyDB, creating with defaults if needed."""
     config = db.get_settings()
     # Set defaults
@@ -244,7 +245,7 @@ def load_local_config() -> Dict:
 
 
 @app.get("/api/settings")
-async def get_settings():
+def get_settings():
     """Get current settings."""
     config = load_local_config()
     return {
@@ -253,7 +254,7 @@ async def get_settings():
 
 
 @app.post("/api/settings")
-async def update_settings(
+def update_settings(
     use_prefix: bool = Query(...),
 ):
     """Update settings."""
@@ -269,13 +270,13 @@ async def update_settings(
 
 
 @app.get("/api/settings/router")
-async def get_router_settings_route():
+def get_router_settings_route():
     """Get current router settings for model groups."""
     return db.get_router_settings()
 
 
 @app.post("/api/settings/router")
-async def set_router_settings_route(body: Dict):
+def set_router_settings_route(body: dict):
     """Update router settings for model groups."""
     allowed = {"routing_strategy", "allowed_fails", "num_retries"}
     filtered = {k: v for k, v in body.items() if k in allowed}
@@ -302,7 +303,7 @@ async def set_router_settings_route(body: Dict):
 
 
 @app.get("/api/auth/status")
-async def auth_status():
+def auth_status():
     """Check if AWS auth is needed and get auth URL."""
     auth_needed = os.path.exists("/tmp/auth_needed")
     auth_url = None
@@ -323,7 +324,7 @@ async def auth_status():
 
 
 @app.post("/api/auth/submit-code")
-async def submit_auth_code(body: dict):
+def submit_auth_code(body: dict):
     """Submit an authorization code to the running aws login process."""
     code = body.get("code", "")
     if not code:
@@ -335,21 +336,21 @@ async def submit_auth_code(body: dict):
 
 
 @app.post("/api/auth/retry")
-async def retry_auth():
+def retry_auth():
     """Reset failure state and start a new aws login --remote process."""
     token_refresher.token_refresher.retry_login()
     return {"success": True}
 
 
 @app.get("/api/security/encryption-status")
-async def encryption_status():
+def encryption_status():
     """Return encryption configuration status."""
     configured, mode = encryption_utils.get_encryption_mode()
     return {"configured": configured, "using": mode}
 
 
 @app.get("/api/security/key")
-async def get_key_status():
+def get_key_status():
     """Get current master key status (masked)."""
     key = db.get_master_key()
     if key:
@@ -359,7 +360,7 @@ async def get_key_status():
 
 
 @app.post("/api/security/key/generate")
-async def generate_key():
+def generate_key():
     """Generate a new master key and reload LiteLLM config."""
     key = db.generate_master_key()
     _reload_litellm_config()
@@ -367,7 +368,7 @@ async def generate_key():
 
 
 @app.delete("/api/security/key")
-async def revoke_key():
+def revoke_key():
     """Revoke the master key (disables auth on next reload)."""
     db.clear_master_key()
     _reload_litellm_config()
@@ -375,13 +376,13 @@ async def revoke_key():
 
 
 @app.get("/api/version")
-async def version_endpoint():
+def version_endpoint():
     """Return the current version of claw-bedrock."""
     return {"version": get_version()}
 
 
 @app.get("/api/chat/models")
-async def chat_models():
+def chat_models():
     """Return available model names for the playground selector.
 
     Uses TinyDB directly (same naming logic as get_models_for_litellm)
@@ -406,7 +407,7 @@ async def chat_models():
 
 
 @app.post("/api/chat/completions")
-async def chat_completion(body: Dict):
+def chat_completion(body: dict):
     """Proxy to LiteLLM /v1/chat/completions with SSE streaming."""
     body["stream"] = True
     key = db.get_master_key()
@@ -432,7 +433,7 @@ async def chat_completion(body: Dict):
         detail = "Unknown error"
         try:
             detail = e.response.json().get("error", {}).get("message", str(e))
-        except Exception:
+        except Exception:  # noqa: BLE001 - re-raised below as HTTPException
             detail = str(e)
         raise HTTPException(e.response.status_code, detail)
     except requests.exceptions.ConnectionError:
@@ -442,7 +443,7 @@ async def chat_completion(body: Dict):
 
 
 @app.get("/api/dashboard")
-async def get_dashboard():
+def get_dashboard():
     """Return dashboard statistics."""
     models = db.get_all_models()
     model_count = len(models)
@@ -458,7 +459,7 @@ async def get_dashboard():
 
 
 @app.get("/api/logs")
-async def get_logs(lines: int = 50):
+def get_logs(lines: int = 50):
     """Return the last N lines of the LiteLLM log."""
     if not os.path.exists(LOG_PATH):
         return {"logs": "No logs available yet."}
@@ -468,14 +469,15 @@ async def get_logs(lines: int = 50):
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         return {"logs": result.stdout or "Log is empty."}
-    except Exception as e:
-        return {"logs": f"Error reading logs: {str(e)}"}
+    except Exception as e:  # noqa: BLE001 - log tail is best-effort
+        return {"logs": f"Error reading logs: {e!s}"}
 
 
 @app.get("/api/logs/debug")
-async def get_debug_logs(lines: int = 50):
+def get_debug_logs(lines: int = 50):
     """Return the last N lines of the TokenRefresher debug log."""
     debug_log = "/tmp/token_refresher_debug.log"
     if not os.path.exists(debug_log):
@@ -486,14 +488,15 @@ async def get_debug_logs(lines: int = 50):
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         return {"logs": result.stdout or "Log is empty."}
-    except Exception as e:
-        return {"logs": f"Error reading debug logs: {str(e)}"}
+    except Exception as e:  # noqa: BLE001 - log tail is best-effort
+        return {"logs": f"Error reading debug logs: {e!s}"}
 
 
 @app.get("/api/logs/container")
-async def get_container_logs(lines: int = 50):
+def get_container_logs(lines: int = 50):
     """Return the last N lines of the container stdout/stderr log."""
     container_log = os.path.join(CONFIG_DIR, "container.log")
     if not os.path.exists(container_log):
@@ -504,14 +507,15 @@ async def get_container_logs(lines: int = 50):
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         return {"logs": result.stdout or "Log is empty."}
-    except Exception as e:
-        return {"logs": f"Error reading container logs: {str(e)}"}
+    except Exception as e:  # noqa: BLE001 - log tail is best-effort
+        return {"logs": f"Error reading container logs: {e!s}"}
 
 
 @app.get("/api/debug/token-refresher")
-async def get_token_refresher_state():
+def get_token_refresher_state():
     """Read and return the TokenRefresher debug log to check internal state."""
     debug_log = "/tmp/token_refresher_debug.log"
     try:
@@ -520,12 +524,12 @@ async def get_token_refresher_state():
                 content = f.read()
             return {"debug_log": content, "exists": True}
         return {"debug_log": None, "exists": False, "message": "Debug log not found"}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - state probe is best-effort
         return {"error": str(e)}
 
 
 @app.get("/api/models")
-async def list_models(tag: Optional[str] = Query(None)):
+def list_models(tag: str | None = Query(None)):
     """List all configured models, optionally filtered by tag."""
     if tag:
         models = db.get_models_by_tag(tag)
@@ -565,7 +569,7 @@ def _member_status(model: dict) -> dict:
 
 
 @app.get("/api/model-groups")
-async def list_model_groups():
+def list_model_groups():
     """List models aggregated by model_group for the Groups dashboard.
 
     `active_member_count` counts members that survive config generation; a group
@@ -643,7 +647,7 @@ def _group_members(name: str) -> list:
 
 
 @app.post("/api/model-groups/rename")
-async def rename_model_group(body: dict):
+def rename_model_group(body: dict):
     """Rename a model group, moving every member in one atomic update.
 
     A group name is the model_name clients call, so this is a breaking
@@ -675,7 +679,7 @@ async def rename_model_group(body: dict):
 
 
 @app.post("/api/model-groups/unassign")
-async def unassign_model_group(body: dict):
+def unassign_model_group(body: dict):
     """Clear a model group from all of its members, leaving them ungrouped.
 
     The models themselves are untouched; only the shared name is removed, so
@@ -696,7 +700,7 @@ async def unassign_model_group(body: dict):
 
 
 @app.post("/api/models/reload")
-async def reload_models():
+def reload_models():
     """Manually trigger a LiteLLM restart to pick up new config."""
     result = reload_litellm()
     if result.get("success"):
@@ -713,10 +717,10 @@ async def reload_models():
 
 
 @app.get("/api/providers/openrouter/models")
-async def fetch_openrouter_models(
-    include_free: Optional[str] = None,
-    search: Optional[str] = None,
-    api_key: Optional[str] = None,
+def fetch_openrouter_models(
+    include_free: str | None = None,
+    search: str | None = None,
+    api_key: str | None = None,
 ):
     """Fetch available models from OpenRouter with optional filtering.
 
@@ -789,12 +793,12 @@ async def fetch_openrouter_models(
                 }
             )
         return {"models": enriched}
-    except Exception as e:
-        raise HTTPException(500, f"Failed to fetch OpenRouter models: {str(e)}")
+    except Exception as e:  # noqa: BLE001 - re-raised below as HTTPException
+        raise HTTPException(500, f"Failed to fetch OpenRouter models: {e!s}")
 
 
 @app.get("/api/providers/{name}/models")
-async def fetch_provider_models(name: str):
+def fetch_provider_models(name: str):
     """Fetch available models from any OpenAI-compatible provider."""
     provider = db.get_provider(name)
     if not provider:
@@ -858,17 +862,15 @@ async def fetch_provider_models(name: str):
             f"Error from {api_base}: {e.response.status_code} {e.response.reason}",
         ) from e
     except Exception as e:
-        raise HTTPException(
-            500, f"Failed to fetch models from '{name}': {str(e)}"
-        ) from e
+        raise HTTPException(500, f"Failed to fetch models from '{name}': {e!s}") from e
 
 
 @app.delete("/api/models/{encoded_model_name:path}")
-async def delete_model(encoded_model_name: str):
+def delete_model(encoded_model_name: str):
     """Delete a model from TinyDB."""
     try:
         model_name = base64url_decode(encoded_model_name)
-    except Exception:
+    except Exception:  # noqa: BLE001 - base64 decode may raise; surface as 400
         raise HTTPException(400, "Invalid model name encoding")
     if not db.model_name_exists(model_name):
         raise HTTPException(404, f"Model {model_name} not found")
@@ -884,7 +886,7 @@ async def delete_model(encoded_model_name: str):
 
 
 @app.post("/api/models")
-async def add_model(model: Dict):
+def add_model(model: dict):
     """Add a new model to TinyDB."""
     db.add_model(model)
     merge_configs()
@@ -897,11 +899,11 @@ async def add_model(model: Dict):
 
 
 @app.put("/api/models/{encoded_old_name:path}")
-async def rename_model(encoded_old_name: str, update: Dict):
+def rename_model(encoded_old_name: str, update: dict):
     """Rename a model in TinyDB."""
     try:
         old_model_name = base64url_decode(encoded_old_name)
-    except Exception:
+    except Exception:  # noqa: BLE001 - base64 decode may raise; surface as 400
         raise HTTPException(400, "Invalid model name encoding")
 
     new_model_name = update.get("model_name")
@@ -923,11 +925,11 @@ async def rename_model(encoded_old_name: str, update: Dict):
 
 
 @app.patch("/api/models/{encoded_name:path}")
-async def update_model(encoded_name: str, update: Dict):
+def update_model(encoded_name: str, update: dict):
     """Update fields on a model (e.g., reasoning_effort, litellm_params.thinking)."""
     try:
         model_name = base64url_decode(encoded_name)
-    except Exception:
+    except Exception:  # noqa: BLE001 - base64 decode may raise; surface as 400
         raise HTTPException(400, "Invalid model name encoding")
 
     allowed_fields = {
@@ -1011,13 +1013,13 @@ TAG_PALETTE = [
 
 
 @app.get("/api/tags")
-async def list_tags():
+def list_tags():
     """List all tag definitions."""
     return {"tags": db.get_all_tags()}
 
 
 @app.post("/api/tags")
-async def create_tag(body: Dict):
+def create_tag(body: dict):
     """Create a new tag. Color auto-assigned from palette if not provided."""
     name = (body.get("name") or "").strip()
     if not name:
@@ -1032,7 +1034,7 @@ async def create_tag(body: Dict):
 
 
 @app.put("/api/tags/{tag_name:path}")
-async def rename_tag(tag_name: str, body: Dict):
+def rename_tag(tag_name: str, body: dict):
     """Rename a tag."""
     new_name = (body.get("name") or "").strip()
     if not new_name:
@@ -1044,14 +1046,14 @@ async def rename_tag(tag_name: str, body: Dict):
 
 
 @app.delete("/api/tags/{tag_name:path}")
-async def delete_tag(tag_name: str):
+def delete_tag(tag_name: str):
     """Delete a tag and remove it from all models."""
     db.delete_tag(tag_name)
     return {"deleted": tag_name}
 
 
 @app.patch("/api/tags/{tag_name:path}")
-async def update_tag_color(tag_name: str, body: Dict):
+def update_tag_color(tag_name: str, body: dict):
     """Update a tag's color."""
     color = body.get("color")
     if not color:
@@ -1064,11 +1066,11 @@ async def update_tag_color(tag_name: str, body: Dict):
 
 
 @app.post("/api/models/{encoded_name:path}/tags")
-async def add_model_tag(encoded_name: str, body: Dict):
+def add_model_tag(encoded_name: str, body: dict):
     """Add a tag to a model. Creates the tag if it doesn't exist."""
     try:
         model_name = base64url_decode(encoded_name)
-    except Exception:
+    except Exception:  # noqa: BLE001 - base64 decode may raise; surface as 400
         raise HTTPException(400, "Invalid model name encoding")
     tag_name = (body.get("tag_name") or "").strip()
     if not tag_name:
@@ -1084,11 +1086,11 @@ async def add_model_tag(encoded_name: str, body: Dict):
 
 
 @app.delete("/api/models/{encoded_name:path}/tags/{tag_name:path}")
-async def remove_model_tag(encoded_name: str, tag_name: str):
+def remove_model_tag(encoded_name: str, tag_name: str):
     """Remove a tag from a model."""
     try:
         model_name = base64url_decode(encoded_name)
-    except Exception:
+    except Exception:  # noqa: BLE001 - base64 decode may raise; surface as 400
         raise HTTPException(400, "Invalid model name encoding")
     ok = db.remove_tag_from_model(model_name, tag_name)
     if not ok:
@@ -1100,14 +1102,14 @@ async def remove_model_tag(encoded_name: str, tag_name: str):
 
 
 @app.get("/api/providers")
-async def list_providers():
+def list_providers():
     """List all provider definitions (sanitized)."""
     providers = db.get_all_providers()
     return {"providers": [db.sanitize_provider_for_response(p) for p in providers]}
 
 
 @app.post("/api/providers")
-async def create_provider(body: Dict):
+def create_provider(body: dict):
     """Create a new provider."""
     if not body.get("name"):
         raise HTTPException(400, "name is required")
@@ -1123,7 +1125,7 @@ async def create_provider(body: Dict):
 
 
 @app.get("/api/providers/{name}")
-async def get_provider_detail(name: str):
+def get_provider_detail(name: str):
     """Get a single provider (sanitized) and its models."""
     provider = db.get_provider(name)
     if not provider:
@@ -1152,7 +1154,7 @@ VALID_PROVIDER_TYPES = frozenset({"bedrock", "openai-compatible", "custom"})
 
 
 @app.put("/api/providers/{name}")
-async def update_provider(name: str, body: Dict):
+def update_provider(name: str, body: dict):
     """Update a provider with explicit field semantics.
 
     Flow:
@@ -1270,14 +1272,14 @@ async def update_provider(name: str, body: Dict):
 
 
 @app.delete("/api/providers/{name}")
-async def delete_provider_route(name: str):
+def delete_provider_route(name: str):
     """Delete a provider definition."""
     db.delete_provider(name)
     return {"success": True}
 
 
 @app.post("/api/providers/{old_name}/rename")
-async def rename_provider_route(old_name: str, body: Dict):
+def rename_provider_route(old_name: str, body: dict):
     """Rename a provider and update all model references."""
     new_name = body.get("new_name")
     if not new_name:
@@ -1287,11 +1289,11 @@ async def rename_provider_route(old_name: str, body: Dict):
 
 
 @app.get("/api/backup/export")
-async def export_backup():
+def export_backup():
     """Download current config as a JSON backup file."""
     data = db.export_backup()
     data["claw_version"] = get_version()
-    filename = f"claw-bedrock-backup-{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.json"
+    filename = f"claw-bedrock-backup-{datetime.datetime.now(datetime.UTC).strftime('%Y%m%d-%H%M%S')}.json"
     response = JSONResponse(content=data)
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
@@ -1308,7 +1310,7 @@ async def import_backup(request: Request):
         raise HTTPException(400, "mode must be 'replace' or 'merge'")
     try:
         backup = await request.json()
-    except Exception:
+    except Exception:  # noqa: BLE001 - malformed JSON body; surface as 400
         raise HTTPException(400, "Invalid JSON body")
     try:
         summary = db.import_backup(backup, mode=mode)
@@ -1332,7 +1334,7 @@ async def preview_backup(request: Request):
     """
     try:
         backup = await request.json()
-    except Exception:
+    except Exception:  # noqa: BLE001 - malformed JSON body; surface as 400
         raise HTTPException(400, "Invalid JSON body")
     try:
         db._validate_backup(backup)
@@ -1394,7 +1396,7 @@ def merge_configs():
         print(
             f"[Merge] Config merged and verified. Total models: {len(verify.get('model_list', []))}"
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - config write failure is logged and reported
         print(f"[Merge] Error writing merged config: {e}", file=sys.stderr)
 
 
@@ -1427,7 +1429,7 @@ def merge_configs_atomic() -> tuple[bool, str]:
             os.remove(tmp_path)
         print(f"[Merge] Config write FAILED: {e}", file=sys.stderr)
         return False, f"Config file write failed: {e}"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - merge failure is returned to the caller
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
         print(f"[Merge] Config merge FAILED: {e}", file=sys.stderr)
@@ -1440,7 +1442,7 @@ def validate_config() -> tuple[bool, str]:
         with open(CONFIG_PATH, "r") as f:
             yaml.safe_load(f)
         return True, ""
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - validation failure is returned to the caller
         return False, str(e)
 
 
@@ -1461,7 +1463,7 @@ def reload_litellm() -> dict:
         try:
             with open(pid_file, "r") as f:
                 pid = int(f.read().strip())
-        except (ValueError, IOError) as e:
+        except (OSError, ValueError) as e:
             print(f"[Reload] Error reading PID file: {e}", file=sys.stderr)
             pid = None
 
@@ -1480,7 +1482,7 @@ def reload_litellm() -> dict:
                     pid = proc.info["pid"]
                     print(f"[Reload] Found LiteLLM process: PID {pid}")
                     break
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - process lookup failure is logged
             print(f"[Reload] Error searching for LiteLLM process: {e}", file=sys.stderr)
 
     # Step 2: Stop the existing process
@@ -1562,7 +1564,7 @@ def reload_litellm() -> dict:
                         "pid": new_pid,
                         "message": f"LiteLLM restarted (PID {new_pid})",
                     }
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - health probe retries; failure is expected
                 if i == 5:  # Print error once for debugging
                     print(f"[Reload] Health check attempt {i}: {e}")
             time.sleep(1)
@@ -1572,23 +1574,23 @@ def reload_litellm() -> dict:
             "pid": new_pid,
             "warning": "LiteLLM started but health check timed out",
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - start failure is returned to the caller
         print(f"[Reload] Error starting LiteLLM: {e}", file=sys.stderr)
         return {"success": False, "error": str(e)}
 
 
 @app.get("/api/health/litellm")
-async def health_litellm():
+def health_litellm():
     """Proxy health check to LiteLLM."""
     try:
         resp = requests.get("http://localhost:4000/health", timeout=5)
         return {"status": "ok", "litellm_status": resp.status_code}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - health probe failure is returned as status
         return {"status": "error", "detail": str(e)}
 
 
 @app.get("/")
-async def dashboard(request: Request):
+def dashboard(request: Request):
     """Serve the management dashboard."""
     version = get_version()
     config = load_local_config()

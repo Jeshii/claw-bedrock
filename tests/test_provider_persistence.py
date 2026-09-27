@@ -7,6 +7,7 @@ Run from project root:
 import os
 import sys
 import tempfile
+from typing import ClassVar
 
 import pytest
 
@@ -32,10 +33,10 @@ def test_env():
 
         _clean_import_modules()
 
-        from management_app import app
         from fastapi.testclient import TestClient
 
         import db as db_mod
+        from management_app import app
 
         with TestClient(app) as client:
             yield client, tmpdir, db_mod
@@ -74,7 +75,7 @@ class TestMetadataEdits:
 
     def test_display_name_update(self, test_env):
         """Editing display_name persists and does not trigger reload."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         existing = get_provider_by_name(db_mod, "bedrock")
         assert existing is not None
@@ -94,7 +95,7 @@ class TestMetadataEdits:
 
     def test_color_update_isolation(self, test_env):
         """Changing only color leaves other display fields intact."""
-        client, tmpdir, db_mod = test_env
+        client, *_ = test_env
 
         resp = client.put(
             "/api/providers/bedrock",
@@ -108,7 +109,7 @@ class TestMetadataEdits:
 
     def test_notes_update(self, test_env):
         """Editing notes does not change other fields."""
-        client, tmpdir, db_mod = test_env
+        client, *_ = test_env
 
         resp = client.put(
             "/api/providers/bedrock",
@@ -124,7 +125,7 @@ class TestApiKeySemantics:
 
     def test_api_key_omitted_retains(self, test_env):
         """When api_key is absent from body, the existing encrypted blob is kept."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         raw_before = get_provider_by_name(db_mod, "bedrock")
         api_key_before = raw_before.get("api_key", None)
@@ -140,7 +141,7 @@ class TestApiKeySemantics:
 
     def test_api_key_set(self, test_env, monkeypatch):
         """Setting a new api_key encrypts it and never returns it in API responses."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         import management_app as mgmt
 
@@ -165,7 +166,7 @@ class TestApiKeySemantics:
 
     def test_api_key_clear(self, test_env, monkeypatch):
         """clear_api_key: true removes the key value; response shows api_key=None."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         import management_app as mgmt
 
@@ -190,7 +191,7 @@ class TestApiKeySemantics:
 
     def test_api_key_empty_body_not_cleared(self, test_env):
         """An empty string api_key is treated as no-change, not a clear."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         client.put(
             "/api/providers/bedrock",
@@ -214,7 +215,7 @@ class TestRuntimeFieldEdits:
 
     def test_edit_api_base_success(self, test_env, monkeypatch):
         """Editing api_base triggers config merge and reload; values persist."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         # Create an openai-compatible provider first
         client.post(
@@ -253,7 +254,7 @@ class TestRuntimeFieldEdits:
 
     def test_reload_failure_returns_error_no_rollback(self, test_env):
         """When LiteLLM reload fails, 503 returned with structured detail; DB is NOT rolled back."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         client.post(
             "/api/providers",
@@ -279,7 +280,7 @@ class TestRuntimeFieldEdits:
 
     def test_edit_aws_region(self, test_env, monkeypatch):
         """Editing a Bedrock provider's region is persisted."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         import requests as req_mod
 
@@ -310,7 +311,7 @@ class TestConfigMerge:
 
     def test_provider_defaults_in_config(self, test_env):
         """Provider api_base should be injected into model litellm_params."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         client.post(
             "/api/providers",
@@ -347,7 +348,7 @@ class TestConfigMerge:
 
     def test_model_explicit_overrides_provider(self, test_env):
         """Model-level litellm_params take precedence over provider defaults."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         client.post(
             "/api/providers",
@@ -388,7 +389,7 @@ class TestConfigMerge:
         """A model referencing a nonexistent provider should be skipped, not crash."""
         import logging
 
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         # Add a valid model that should appear
         client.post(
@@ -422,25 +423,29 @@ class TestConfigMerge:
 class TestSanitization:
     """API responses must never leak secret values."""
 
-    SENSITIVE_PATTERNS = ["api_key", "secret_key", "aws_secret_key_env"]
+    SENSITIVE_PATTERNS: ClassVar[list[str]] = [
+        "api_key",
+        "secret_key",
+        "aws_secret_key_env",
+    ]
 
     def _check_no_secrets(self, obj, path=""):
         if isinstance(obj, dict):
             for k, v in obj.items():
-                if any(p in k.lower() for p in self.SENSITIVE_PATTERNS):
-                    if isinstance(v, str) and len(v) > 0:
-                        if k == "has_api_key":
-                            continue
-                        if k == "aws_secret_key_env":
-                            continue
-                        pytest.fail(f"Secret leaked at {path}.{k}={v!r}")
+                if (
+                    any(p in k.lower() for p in self.SENSITIVE_PATTERNS)
+                    and isinstance(v, str)
+                    and len(v) > 0
+                    and k not in ("has_api_key", "aws_secret_key_env")
+                ):
+                    pytest.fail(f"Secret leaked at {path}.{k}={v!r}")
                 self._check_no_secrets(v, f"{path}.{k}")
         elif isinstance(obj, list):
             for i, item in enumerate(obj):
                 self._check_no_secrets(item, f"{path}[{i}]")
 
     def test_list_providers_no_secrets(self, test_env):
-        client, tmpdir, db_mod = test_env
+        client, *_ = test_env
         resp = client.get("/api/providers")
         assert resp.status_code == 200
         body = resp.json()
@@ -448,7 +453,7 @@ class TestSanitization:
             assert p.get("api_key") is None
 
     def test_get_provider_no_secrets(self, test_env):
-        client, tmpdir, db_mod = test_env
+        client, *_ = test_env
         resp = client.get("/api/providers/bedrock")
         assert resp.status_code == 200
         body = resp.json()
@@ -461,7 +466,7 @@ class TestValidation:
 
     def test_rename_rejected_via_put(self, test_env):
         """PUT with a different name in body should be rejected."""
-        client, tmpdir, db_mod = test_env
+        client, *_ = test_env
         resp = client.put(
             "/api/providers/bedrock",
             json={"name": "new-name"},
@@ -470,7 +475,7 @@ class TestValidation:
         assert "not supported" in resp.json()["detail"].lower()
 
     def test_unknown_provider_404(self, test_env):
-        client, tmpdir, db_mod = test_env
+        client, *_ = test_env
         resp = client.put(
             "/api/providers/nonexistent",
             json={"display_name": "Ghost"},
@@ -478,7 +483,7 @@ class TestValidation:
         assert resp.status_code == 404
 
     def test_duplicate_provider_409(self, test_env):
-        client, tmpdir, db_mod = test_env
+        client, *_ = test_env
         resp = client.post(
             "/api/providers", json={"name": "bedrock", "type": "bedrock"}
         )
@@ -502,7 +507,7 @@ class TestPutFlow:
 
     def test_edit_api_base_and_key_persists(self, test_env, monkeypatch):
         """PUT new api_base and api_key, GET back confirming both stick."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         import management_app as mgmt
 
@@ -545,7 +550,7 @@ class TestPutFlow:
 
     def test_updated_provider_in_generated_config(self, test_env):
         """After PUT, the generated LiteLLM config reflects the updated values."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
         client.post(
             "/api/providers",
             json={
@@ -585,7 +590,7 @@ class TestPutFlow:
 
     def test_values_survive_reload(self, test_env, monkeypatch):
         """After a successful reload, GET still shows the updated values."""
-        client, tmpdir, db_mod = test_env
+        client, *_ = test_env
         client.post(
             "/api/providers",
             json={
@@ -610,7 +615,7 @@ class TestPutFlow:
 
     def test_config_merge_failure_returns_error(self, test_env, monkeypatch):
         """When config generation fails, API returns 503 with structured detail and no rollback."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
         client.post(
             "/api/providers",
             json={
@@ -641,7 +646,7 @@ class TestPutFlow:
 
     def test_reload_failure_returns_error(self, test_env, monkeypatch):
         """When LiteLLM reload fails, API returns 503 with structured detail and no rollback."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
         client.post(
             "/api/providers",
             json={
@@ -670,7 +675,7 @@ class TestPutFlow:
 
     def test_no_runtime_change_skips_regenerate_and_reload(self, test_env, monkeypatch):
         """A display-only PUT must not call merge_configs_atomic or _reload_litellm_config."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
         client.post(
             "/api/providers",
             json={
@@ -713,7 +718,7 @@ class TestPutFlow:
 
     def test_unknown_field_rejected_without_write(self, test_env):
         """PUT with an unrecognised field must return 400 and leave the provider unchanged."""
-        client, tmpdir, db_mod = test_env
+        client, _, db_mod = test_env
 
         original = get_provider_by_name(db_mod, "bedrock")
 
