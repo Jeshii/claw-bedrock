@@ -278,6 +278,23 @@ async def set_router_settings_route(body: Dict):
     """Update router settings for model groups."""
     allowed = {"routing_strategy", "allowed_fails", "num_retries"}
     filtered = {k: v for k, v in body.items() if k in allowed}
+
+    # LiteLLM ignores a routing_strategy it does not recognize, so an invalid
+    # one would look saved while routing silently stayed on the default.
+    if "routing_strategy" in filtered:
+        raw = filtered["routing_strategy"]
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            filtered.pop("routing_strategy")
+        else:
+            strategy = db.normalize_routing_strategy(raw)
+            if not strategy:
+                raise HTTPException(
+                    400,
+                    f"Unknown routing strategy {raw!r}. Expected one of: "
+                    f"{', '.join(db.ROUTING_STRATEGIES)}",
+                )
+            filtered["routing_strategy"] = strategy
+
     db.set_router_settings(filtered)
     merge_configs()
     return {"success": True}

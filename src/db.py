@@ -103,11 +103,51 @@ def get_settings():
     return {r["key"]: r["value"] for r in records}
 
 
+# LiteLLM's Router takes a fixed set of routing_strategy literals; anything
+# else is ignored at proxy startup. The UI only ever offers these.
+ROUTING_STRATEGIES = (
+    "simple-shuffle",
+    "least-busy",
+    "usage-based-routing",
+    "usage-based-routing-v2",
+    "latency-based-routing",
+    "cost-based-routing",
+)
+
+# Earlier versions of the Groups page wrote the short forms below. LiteLLM
+# never recognized them, so a saved "cost-based" silently left routing on the
+# default strategy. Map them forward so existing installs heal in place rather
+# than needing a migration.
+_LEGACY_ROUTING_STRATEGIES = {
+    "shuffle": "simple-shuffle",
+    "latency-based": "latency-based-routing",
+    "usage-based": "usage-based-routing",
+    "cost-based": "cost-based-routing",
+}
+
+
+def normalize_routing_strategy(value):
+    """Return the canonical LiteLLM literal for a routing_strategy value.
+
+    Returns None when the value is empty or is not a strategy LiteLLM accepts,
+    so callers can reject it instead of storing a value that does nothing.
+    """
+    if not isinstance(value, str):
+        return None
+    cleaned = _LEGACY_ROUTING_STRATEGIES.get(value.strip().lower(), value.strip())
+    return cleaned if cleaned in ROUTING_STRATEGIES else None
+
+
 def get_router_settings():
-    """Get router_settings from DB or return defaults."""
+    """Get router_settings from DB, normalized to values LiteLLM accepts."""
     settings = get_setting("router_settings", {})
     # Remove always_include_stream_usage as it's now in litellm_settings
     settings.pop("always_include_stream_usage", None)
+    strategy = normalize_routing_strategy(settings.get("routing_strategy"))
+    if strategy:
+        settings["routing_strategy"] = strategy
+    else:
+        settings.pop("routing_strategy", None)
     return settings
 
 
