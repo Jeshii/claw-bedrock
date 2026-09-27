@@ -9,12 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Router Settings saved strategy values LiteLLM does not accept** — the Groups page dropdown wrote `latency-based`, `usage-based` and `cost-based`, but LiteLLM's Router takes `latency-based-routing`, `usage-based-routing` and `cost-based-routing`. Unrecognized strategies are ignored at proxy startup, so a saved setting looked applied while routing silently stayed on the default. New `db.ROUTING_STRATEGIES` / `db.normalize_routing_strategy()` are the single source of truth; `get_router_settings()` maps the old short forms forward so existing installs heal with no migration, and `POST /api/settings/router` now rejects an unknown strategy with a 400 listing the valid values instead of storing a value that does nothing.
+- **UI bookkeeping leaked into the generated LiteLLM config** — `get_models_for_litellm()` copied every stored model field into each `model_list` entry, so `provider`, `tags` and `reasoning_effort` were written to `config.yaml`. Now dropped via `db.UI_ONLY_MODEL_FIELDS`. A denylist rather than an allowlist, because records migrated from an older `config.local.yaml` can carry genuine top-level LiteLLM keys (`rpm`, `tpm`) that an allowlist would silently discard.
 - **Models from custom providers now include `api_base`/`api_key` in `litellm_params`** — `addGenericModel()` in `models.js` looks up the provider from `window._allProviders` and propagates its endpoint and credentials into the model config. Also switched the model prefix from `providerName/modelId` to `openai/modelId` (the correct prefix for OpenAI-compatible endpoints).
 - **Config pushed to running LiteLLM after model CRUD** — `_reload_litellm_config()` is now called after `merge_configs()` in `add_model()`, `delete_model()`, `rename_model()`, and `update_model()` in `management_app.py`. Previously the config file was written but the running process was never notified.
 - **Playground dropdown refreshes when reload modal blocks navigation** — `loadPlayground()` called immediately in `navigation.js` before the `needsReload` guard returns early, so the model list is populated from TinyDB even while the reload decision is pending.
 - **Playground model dropdown retries and manual refresh** — added retry buttons to all error/empty states in `loadPlayground()` (`playground.js`), and a refresh `↻` button next to the model select (`page_playground.html`). Navigation now calls `loadPlayground()` on every Playground tab activation (`navigation.js`).
 
 ### Added
+
+- **Cost awareness (Phase 4)**
+  - Models can record `input_cost` / `output_cost`, entered and stored as **dollars per 1M tokens** — the unit Bedrock and OpenRouter quote — with editable inputs in the model detail section (`models.js`)
+  - `db._apply_model_costs()` converts to per-token and writes `litellm_params.input_cost_per_token` / `output_cost_per_token`, which is what LiteLLM's `cost-based-routing` actually reads, and mirrors the values into `model_info` for spend reporting without clobbering existing keys such as `supports_tool_calling`
+  - The roadmap spec only called for `model_info`, which the router never consults. Its fallback cost-map lookup is a direct dict lookup that misses provider-prefixed names such as `bedrock_mantle/…` and `openai/…`, defaulting to $5/$5 ([BerriAI/litellm#35787](https://github.com/BerriAI/litellm/issues/35787)) — so an unpriced model reads as one of the most expensive in its group and is never picked, rather than as "unknown"
+  - Groups page shows a per-member price chip, a "cheapest" chip on the group header, and a **no cost** warning on unpriced members while cost-based routing is active
+  - `PATCH /api/models` accepts both fields; blank clears the key (via the new `db.unset_model_field()`, since TinyDB's `update()` merges and cannot delete), and non-numeric, negative, NaN/Inf and boolean values are rejected 400 before anything is written. `0.0` stays a real price rather than reading as blank
+  - **OpenRouter prices are auto-filled** when a model is picked in the add form — the catalog response already carried a `pricing` block, so this was pulled forward from Phase 8
+  - `GET /api/model-groups` reports the active `routing_strategy` so the dashboard knows when costs matter
+  - `tests/test_model_costs.py` — 31 tests covering per-token conversion, free models, `model_info` merging, config cleanliness, PATCH validation and clearing, and the groups payload
+  - `tests/test_router_settings.py` — 17 tests covering strategy normalization, round-tripping every literal, rejection, and clearing
 
 - **Groups dashboard (Phase 3)**
   - New `GET /api/model-groups` endpoint aggregating models by `model_group`, with provider display info attached to each member

@@ -1,11 +1,39 @@
 let expandedGroup = null;
-let groupData = { groups: [], ungrouped_count: 0, ungrouped_models: [] };
+let groupData = {
+	groups: [],
+	ungrouped_count: 0,
+	ungrouped_models: [],
+	routing_strategy: null,
+};
 
 const STATUS_LABELS = {
 	ok: "Ready",
 	warn: "Check config",
 	error: "Not in config",
 };
+
+/** Cost-based routing prices a deployment from the cost fields; without them
+ * LiteLLM falls back to $5/$5, so the model is priced as one of the most
+ * expensive and stops being picked. Flag it where the setting is made. */
+function costsRequired() {
+	return groupData.routing_strategy === "cost-based-routing";
+}
+
+/** Cheapest member by total in+out price. Only members with both prices
+ * recorded are comparable; a half-priced or unpriced member is not a
+ * ranking, and treating its missing side as $0 would crown it the winner. */
+function cheapestMember(group) {
+	const priced = (group.members || []).filter(
+		(m) => hasCost(m.input_cost) && hasCost(m.output_cost),
+	);
+	if (priced.length < 2) return null;
+	return priced.reduce((best, m) =>
+		Number(m.input_cost) + Number(m.output_cost) <
+		Number(best.input_cost) + Number(best.output_cost)
+			? m
+			: best,
+	);
+}
 
 async function loadGroups() {
 	const list = document.getElementById("groups-list");
@@ -90,6 +118,12 @@ function renderGroupCard(group) {
 		? `${group.active_member_count} of ${group.member_count} in config`
 		: `${group.member_count} member${group.member_count === 1 ? "" : "s"}`;
 
+	const cheapest = cheapestMember(group);
+	const cheapestChip =
+		cheapest && costsRequired()
+			? `<span class="status-chip ok" title="Cheapest priced member — the one cost-based routing prefers">cheapest: ${escapeHtml(cheapest.model_name)} (${escapeHtml(formatCost(cheapest.input_cost))} in / ${escapeHtml(formatCost(cheapest.output_cost))} out)</span>`
+			: "";
+
 	const ungrouped = groupData.ungrouped_models || [];
 	const addMember = ungrouped.length
 		? `
@@ -116,6 +150,7 @@ function renderGroupCard(group) {
                 <span class="model-chevron" data-chevron>${CHEVRON_RIGHT_SVG}</span>
                 <span class="group-card-name">${escapeHtml(group.name)}</span>
                 <span class="status-chip ${degraded ? "warn" : "ok"}">${escapeHtml(readiness)}</span>
+                ${cheapestChip}
             </div>
             <div class="group-card-actions">
                 <button type="button" class="rename-btn" data-action="rename-group">Rename</button>
@@ -137,6 +172,7 @@ function renderMemberRow(member) {
 		: "";
 	const ctx = formatContextLength(member.litellm_params?.context_length);
 	const status = member.status || { level: "ok", detail: "" };
+	const costChip = renderCostChip(member);
 	const title = status.detail ? ` title="${escapeAttr(status.detail)}"` : "";
 
 	return `
@@ -144,8 +180,22 @@ function renderMemberRow(member) {
             <span class="member-row-name">${escapeHtml(member.model_name)}</span>
             ${providerBadge}
             ${ctx ? `<span class="muted" style="font-size: 12px;">${escapeHtml(ctx)}</span>` : ""}
+            ${costChip}
             <span class="status-chip ${status.level}"${title}>${escapeHtml(STATUS_LABELS[status.level] || status.level)}</span>
         </div>`;
+}
+
+/** Per-1M price for a member, or a warning that cost-based routing will
+ * price it at LiteLLM's $5/$5 fallback instead of using a real number. */
+function renderCostChip(member) {
+	const input = formatCost(member.input_cost);
+	const output = formatCost(member.output_cost);
+	if (!input && !output) {
+		return costsRequired()
+			? '<span class="status-chip warn" title="No cost recorded. Cost-based routing falls back to $5 per 1M in and out, so this member will usually not be picked.">no cost</span>'
+			: '<span class="muted cost-unset">no cost</span>';
+	}
+	return `<span class="cost-chip" title="Price per 1M tokens">${escapeHtml(input || "—")} in / ${escapeHtml(output || "—")} out</span>`;
 }
 
 function toggleGroup(name) {
@@ -395,6 +445,9 @@ async function saveRouterSetting() {
 		});
 		if (res.ok) {
 			showToast("Router settings saved");
+			// The strategy decides whether unpriced members get a warning, so
+			// the cards are now showing stale information.
+			loadGroups();
 		} else {
 			const error = await res.json();
 			showToast(

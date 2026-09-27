@@ -157,18 +157,23 @@ POST /api/model-groups/unassign  { "name": "sonnet-v2" }
 
 ---
 
-## Phase 4 — Cost Awareness
+## Phase 4 — Cost Awareness ✅
 
-**Goal:** Let users set `input_cost` / `output_cost` on models. Enable `routing_strategy: "cost-based"` to automatically prefer the cheapest healthy member in a group.
+**Status:** Complete. The original spec emitted costs only to `model_info`; that was wrong and is corrected below.
+
+**Goal:** Let users set `input_cost` / `output_cost` on models. Enable `routing_strategy: "cost-based-routing"` to automatically prefer the cheapest healthy member in a group.
 
 ### Files modified
 
 | File | Change |
 |---|---|
-| `src/db.py` | `get_models_for_litellm()` — emit `model_info: { input_cost, output_cost }` when present |
-| `src/management_app.py` | PATCH allowed_fields add `"input_cost"`, `"output_cost"`; `GET /api/models` includes cost fields |
-| `src/static/js/models.js` | Cost fields in model detail section (editable inputs); cost column in groups dashboard |
-| `src/static/management.css` | `.cost-input` style |
+| `src/db.py` | `_apply_model_costs()` converts stored $/1M to per-token and writes `litellm_params` + `model_info`; `_strip_ui_only_fields()` drops UI bookkeeping from the config |
+| `src/management_app.py` | PATCH `allowed_fields` add `"input_cost"`, `"output_cost"` with validation and clearing; `GET /api/model-groups` reports the active `routing_strategy` |
+| `src/static/js/models.js` | Cost inputs in the model detail section; `updateModelCost()`; OpenRouter catalog pricing auto-filled on add |
+| `src/static/js/groups.js` | Per-member price chip, cheapest-member chip, "no cost" warning under cost-based routing |
+| `src/static/js/utils.js` | `formatCost()` / `hasCost()` |
+| `src/static/management.css` | `.cost-input`, `.cost-chip`, `.model-detail-costs` |
+| `templates/partials/page_groups.html` | Routing strategy literals corrected (see below) |
 
 ### Per-model cost fields
 
@@ -176,15 +181,38 @@ POST /api/model-groups/unassign  { "name": "sonnet-v2" }
 {
   "model_name": "claude-3-5-sonnet-v2",
   "model_group": "sonnet",
-  "input_cost": 0.003,     # dollars per 1K input tokens
-  "output_cost": 0.015,    # dollars per 1K output tokens
+  "input_cost": 3.0,      # dollars per 1M input tokens
+  "output_cost": 15.0,    # dollars per 1M output tokens
   "litellm_params": { ... }
 }
 ```
 
-When set, the LiteLLM config entry includes `model_info: { input_cost, output_cost }`.
+### What the generated config actually needs
 
-Costs are manually entered in Phase 4. Auto-population from provider APIs is deferred to Phase 8.
+The spec originally said to emit `model_info: { input_cost, output_cost }`. **LiteLLM's router never reads that.** `router_strategy/lowest_cost.py` prices a deployment from, in order:
+
+1. `litellm_params.input_cost_per_token` / `output_cost_per_token`
+2. `litellm.model_cost[litellm_params.model]`
+
+`model_info` feeds spend reporting, not routing. So both values are written to `litellm_params` (per token) and mirrored into `model_info`.
+
+The fallback in (2) is the trap: it is a direct dict lookup, so a provider-prefixed name like `bedrock_mantle/…` or `openai/…` misses and defaults to **$5/$5** ([BerriAI/litellm#35787](https://github.com/BerriAI/litellm/issues/35787)). An unpriced model does not read as "unknown" to the router — it reads as one of the most expensive things in the group and is never picked. That is why the Groups page flags a member with no cost while cost-based routing is active, and why OpenRouter prices are auto-filled rather than left to manual entry.
+
+### Units
+
+Stored and entered as **dollars per 1M tokens**, which is how Bedrock and OpenRouter quote. The `/1000/1000` conversion happens in exactly one place (`_apply_model_costs`). A cost of `0` is a real price (free) and is kept, distinct from unset.
+
+### Config cleanliness
+
+`get_models_for_litellm()` used to copy every stored field into each `model_list` entry, so `provider`, `tags` and `reasoning_effort` all shipped to LiteLLM. They are now dropped via `UI_ONLY_MODEL_FIELDS`. This is a **denylist**, not an allowlist, on purpose: records migrated from an older `config.local.yaml` can carry genuine top-level LiteLLM keys (`rpm`, `tpm`) that an allowlist would silently discard.
+
+### Routing strategy literals
+
+Phase 3 shipped a dropdown writing `latency-based`, `usage-based` and `cost-based`. LiteLLM takes `latency-based-routing`, `usage-based-routing` and `cost-based-routing`; the short forms are ignored at proxy startup, so the setting looked applied while routing stayed on the default. Corrected in the same phase, since selecting "Cost-based" is the entire point of Phase 4. `db.normalize_routing_strategy()` maps the old values forward so existing installs heal without a migration, and `POST /api/settings/router` rejects anything unrecognized instead of storing a value that does nothing.
+
+### Auto-populated pricing
+
+OpenRouter's model catalog already returned a `pricing` block (`prompt` / `completion`, per token as strings), so choosing a model in the add form fills in both cost fields. This was Phase 8 work; it was cheap enough to do here because the data was already on the wire.
 
 ---
 
@@ -329,7 +357,7 @@ mcp_settings:
 | Group filter in model list (composable with tag filter) | Small | Phase 1 |
 | Drag-to-reorder within groups (`group_position` field) | Medium | Phase 1 |
 | Notifications when all group members down | Medium | Phase 1 + watchdog |
-| Auto-populate costs from OpenRouter/Bedrock APIs | Small | Phase 4 |
+| Auto-populate costs from Bedrock APIs (OpenRouter done in Phase 4) | Small | Phase 4 |
 | In-browser code editor (Monaco/CodeMirror) for skills | Medium | Phase 5 |
 | Conversation auto-title from LLM (first message → title) | Small | Phase 6 |
 | Conversation export (JSON / Markdown) | Small | Phase 6 |
@@ -345,7 +373,8 @@ mcp_settings:
 ```
 Phase 0 (done):        Dashboard | Auth | Security | Providers | Models | Tags | Backup | Logs | Help
 Phase 2 (done):        ... Models | Playground | Tags ...
-Phase 3 (done, current): ... Models | Playground | Groups | Tags ...
+Phase 3 (done):        ... Models | Playground | Groups | Tags ...
+Phase 4 (done, current): ... Models | Playground | Groups | Tags ...   (no nav change)
 Phase 5 (planned):     ... Models | Playground | Groups | Skills | Tags ...
 ```
 
@@ -393,13 +422,15 @@ Phases 1, 2, 5 are the three foundation layers (routing, testing, extending).
 | `src/management_app.py` | 1, 2, 3, 4, 5, 6 |
 | `src/static/js/models.js` | 1, 4 |
 | `src/static/js/playground.js` | 2, 6 |
-| `src/static/js/groups.js` | 3 |
+| `src/static/js/groups.js` | 3, 4 |
 | `src/static/js/init.js` | 1, 2, 3, 5 |
 | `src/static/js/navigation.js` | 3 (and any phase adding a nav item) |
+| `src/static/js/utils.js` | 3, 4 (shared formatting helpers) |
 | `src/static/management.css` | 1, 2, 3, 4, 5, 6, 7 |
 | `templates/management.html` | 2, 3, 5 |
 | `templates/partials/page_models.html` | 1 |
 | `templates/partials/page_playground.html` | 2, 6 |
+| `templates/partials/page_groups.html` | 4 (router strategy literals) |
 | `templates/partials/page_skills.html` | 7 (tool call rendering) |
 
 > **Note for future phases:** any phase that adds a nav item must touch three places —
@@ -416,8 +447,8 @@ Phases 1, 2, 5 are the three foundation layers (routing, testing, extending).
 | 1 | Core Grouping + Failover | TinyDB (model_group field) | — | 2-3 days | done |
 | 2 | Playground V1 (stateless) | — | 2 | 2-3 days | done |
 | 3 | Groups Dashboard | — | 2 | 1-2 days | done |
-| 4 | Cost Awareness | TinyDB (cost fields) | — | 1 day | next |
-| 5 | Skills Library V1 | TinyDB (skills table) | 2 | 2-3 days | planned |
+| 4 | Cost Awareness | TinyDB (cost fields) | — | 1 day | done |
+| 5 | Skills Library V1 | TinyDB (skills table) | 2 | 2-3 days | next |
 | 6 | Playground V2 (persistent) | SQLite (conversations.db) | — | 3-4 days | planned |
 | 7 | Skills Library V2 (MCP) | — | — | 3-4 days | planned |
 | 8 | Polish | — | — | 2-3 days | planned |

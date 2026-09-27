@@ -79,6 +79,23 @@ function renderModelList(models, preserveExpanded) {
             </div>
             <div class="model-detail" id="detail-${escName}">
                 <div class="model-detail-path">${escapeHtml(m.litellm_params?.model || m.model_name || "")}</div>
+                <div class="model-detail-costs">
+                    <label class="cost-field">
+                        <span>In $/1M</span>
+                        <input class="cost-input" type="number" step="any" min="0" inputmode="decimal"
+                               value="${costValue(m.input_cost)}"
+                               placeholder="—"
+                               onchange="updateModelCost('${escName}', 'input_cost', this.value)" />
+                    </label>
+                    <label class="cost-field">
+                        <span>Out $/1M</span>
+                        <input class="cost-input" type="number" step="any" min="0" inputmode="decimal"
+                               value="${costValue(m.output_cost)}"
+                               placeholder="—"
+                               onchange="updateModelCost('${escName}', 'output_cost', this.value)" />
+                    </label>
+                    <span class="muted cost-hint">Needed for cost-based routing; a model without a cost is skipped</span>
+                </div>
                 <div class="model-detail-actions">
                     <label style="font-size:12px;display:flex;align-items:center;gap:4px;">
                         Group:
@@ -334,6 +351,66 @@ async function setModelGroup(modelName, groupName) {
 		return { ok: false, detail: error.detail || "Failed to update group" };
 	} catch (e) {
 		return { ok: false, detail: e.message };
+	}
+}
+
+/**
+ * Render a stored cost for a number input. Unset costs leave the field empty
+ * (showing the placeholder) rather than rendering 0, which would read as a
+ * free model and quietly take the cheapest slot under cost-based routing.
+ */
+function costValue(cost) {
+	if (!hasCost(cost)) return "";
+	return String(Number(cost));
+}
+
+/**
+ * Persist a per-1M-token cost, or clear it when the field is emptied.
+ * Returns {ok, detail} so callers can surface their own messaging.
+ */
+async function setModelCost(modelName, field, value) {
+	const trimmed = String(value ?? "").trim();
+	const body = { [field]: trimmed === "" ? null : trimmed };
+	try {
+		const res = await fetch(`/api/models/${base64urlEncode(modelName)}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		if (res.ok) return { ok: true, detail: "" };
+		const error = await res.json();
+		return { ok: false, detail: error.detail || "Failed to update cost" };
+	} catch (e) {
+		return { ok: false, detail: e.message };
+	}
+}
+
+/** Keep both the master list and the rendered slice in step, as reasoning does. */
+function storeModelCost(modelName, field, value) {
+	for (const list of [window._allModels, window._renderedModels]) {
+		const model = (list || []).find((x) => x.model_name === modelName);
+		if (!model) continue;
+		if (value === null) delete model[field];
+		else model[field] = value;
+	}
+}
+
+async function updateModelCost(modelName, field, value) {
+	const trimmed = String(value ?? "").trim();
+	const toast = showToast("Updating cost...", "info", 0, true);
+	const { ok, detail } = await setModelCost(modelName, field, value);
+	if (ok) {
+		const parsed = trimmed === "" ? null : Number(trimmed);
+		storeModelCost(modelName, field, parsed);
+		updateToast(toast, "Cost updated — reload LiteLLM to apply", "success");
+		const reloadBtn = document.getElementById("reload-litellm-btn");
+		if (reloadBtn) reloadBtn.classList.add("needs-reload");
+		// The Groups page shows the same prices, so refresh it if it is loaded.
+		if (document.getElementById("groups-list")?.children.length) loadGroups();
+	} else {
+		updateToast(toast, `Error: ${detail}`, "error");
+		// Re-render so the input snaps back to the stored value.
+		loadModels(activeFilter);
 	}
 }
 
@@ -622,6 +699,12 @@ async function addOpenRouterModel() {
 	};
 	if (contextLength)
 		modelConfig.litellm_params.context_length = parseInt(contextLength, 10);
+	// Priced from the catalog, so cost-based routing can use this model
+	// without anyone looking up its rates.
+	const inputCost = document.getElementById("or-input-cost").value;
+	const outputCost = document.getElementById("or-output-cost").value;
+	if (inputCost) modelConfig.input_cost = parseFloat(inputCost);
+	if (outputCost) modelConfig.output_cost = parseFloat(outputCost);
 	await addModelCommon(modelConfig, "openrouter");
 }
 
@@ -723,9 +806,17 @@ function renderOpenRouterSelect(models) {
 			const ctx = m.context_length
 				? ` (${formatContextLength(m.context_length)})`
 				: "";
-			return `<option value="${m.id}" data-context-length="${m.context_length || ""}">${m.id}${ctx}</option>`;
+			// OpenRouter quotes per-token strings; carry them so the chosen
+			// model can be priced without a second lookup.
+			return `<option value="${m.id}" data-context-length="${m.context_length || ""}" data-cost-in="${perMillion(m.pricing?.prompt)}" data-cost-out="${perMillion(m.pricing?.completion)}">${m.id}${ctx}</option>`;
 		})
 		.join("");
+}
+
+/** OpenRouter pricing is a per-token dollar string; models store $/1M. */
+function perMillion(perToken) {
+	if (!hasCost(perToken)) return "";
+	return String(Number(perToken) * 1_000_000);
 }
 
 function filterOpenRouterModels() {
@@ -753,6 +844,15 @@ function onOpenRouterSelect() {
 		document.getElementById("or-context-length-input").value = "";
 		document.getElementById("or-context-length").textContent = "";
 	}
+
+	const costIn = selectedOption.dataset.costIn;
+	const costOut = selectedOption.dataset.costOut;
+	document.getElementById("or-input-cost").value = costIn;
+	document.getElementById("or-output-cost").value = costOut;
+	document.getElementById("or-cost").textContent =
+		costIn || costOut
+			? `Price: ${formatCost(costIn) || "—"} in / ${formatCost(costOut) || "—"} out per 1M tokens`
+			: "";
 }
 
 async function fetchOllamaContextLength() {
@@ -855,6 +955,17 @@ function loadProviderUI(type) {
             <div id="or-context-length" class="muted" style="font-size: 12px; margin-bottom: 8px;"></div>
             <input id="or-name" placeholder="Or type model ID manually" style="width: 400px;" />
             <input id="or-context-length-input" type="number" placeholder="Context Length (auto-filled from selection)" style="width: 400px;" />
+            <div id="or-cost" class="muted" style="font-size: 12px; margin: 8px 0;"></div>
+            <div class="inline-row" style="gap: 8px; margin-bottom: 8px;">
+                <label class="cost-field">
+                    <span>In $/1M</span>
+                    <input id="or-input-cost" class="cost-input" type="number" step="any" min="0" inputmode="decimal" placeholder="auto" />
+                </label>
+                <label class="cost-field">
+                    <span>Out $/1M</span>
+                    <input id="or-output-cost" class="cost-input" type="number" step="any" min="0" inputmode="decimal" placeholder="auto" />
+                </label>
+            </div>
             <button type="button" onclick="addOpenRouterModel()">Add Model</button>
             <p class="muted" style="font-size: 12px; margin-top: 5px;">See <a href="https://openrouter.ai/models" target="_blank">OpenRouter models</a>.</p>
         `;

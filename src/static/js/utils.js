@@ -216,6 +216,28 @@ function formatContextLength(ctx) {
 	return `${Math.round(n)} ctx`;
 }
 
+// A cost is only usable when it is a real number. Number(null), Number("")
+// and Number(false) are all 0 and Number(true) is 1, so without these guards
+// an unpriced model renders as "free" -- the cheapest possible price -- and
+// would look like the winner under cost-based routing.
+function hasCost(cost) {
+	if (cost === null || cost === undefined || cost === "") return false;
+	if (typeof cost === "boolean") return false;
+	const n = Number(cost);
+	return Number.isFinite(n) && n >= 0;
+}
+
+// Costs are stored per 1M tokens, matching how provider pricing pages quote
+// them. Returns "" for an unset cost so callers can skip the element, and
+// "free" for a genuine zero -- a free model and an unpriced one are not the
+// same thing, and only one of them should win a cost-based route.
+function formatCost(cost) {
+	if (!hasCost(cost)) return "";
+	const n = Number(cost);
+	if (n === 0) return "free";
+	return `$${trimTrailingZeros(n.toFixed(2))}`;
+}
+
 function toggleAutoRefresh(type) {
 	const toggleId =
 		type === "logs"
