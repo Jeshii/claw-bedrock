@@ -150,22 +150,6 @@ function addMessageBubble(role, content) {
 	return text;
 }
 
-function showStreamingIndicator() {
-	const container = document.getElementById("playground-messages");
-	if (!container) return;
-	const placeholder = container.querySelector(".playground-placeholder");
-	if (placeholder) placeholder.remove();
-
-	let indicator = container.querySelector(".streaming-indicator");
-	if (!indicator) {
-		indicator = document.createElement("div");
-		indicator.className = "streaming-indicator";
-		indicator.innerHTML = "<span></span><span></span><span></span>";
-		container.appendChild(indicator);
-		container.scrollTop = container.scrollHeight;
-	}
-}
-
 function hideStreamingIndicator() {
 	const el = document.querySelector(".streaming-indicator");
 	if (el) el.remove();

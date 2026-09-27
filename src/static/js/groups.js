@@ -434,8 +434,8 @@ async function loadRouterSettings() {
 async function saveRouterSetting() {
 	const body = {
 		routing_strategy: document.getElementById("routing-strategy").value,
-		allowed_fails: parseInt(document.getElementById("allowed-fails").value),
-		num_retries: parseInt(document.getElementById("num-retries").value),
+		allowed_fails: parseInt(document.getElementById("allowed-fails").value, 10),
+		num_retries: parseInt(document.getElementById("num-retries").value, 10),
 	};
 	try {
 		const res = await fetch("/api/settings/router", {

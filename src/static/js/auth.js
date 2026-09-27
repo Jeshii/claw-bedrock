@@ -128,17 +128,6 @@ async function loadAuth() {
 	}
 }
 
-function copyAuthCode(code) {
-	navigator.clipboard
-		.writeText(code)
-		.then(() => {
-			showToast("Code copied to clipboard");
-		})
-		.catch(() => {
-			showToast("Failed to copy code", "error");
-		});
-}
-
 async function submitAWSCode() {
 	const input = document.getElementById("aws-code-input");
 	const code = input.value.trim();
