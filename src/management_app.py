@@ -17,6 +17,7 @@ import time
 import subprocess
 import psutil
 import base64
+import math
 import threading
 import datetime
 import shutil
@@ -601,6 +602,9 @@ async def list_model_groups():
         "groups": result,
         "ungrouped_count": len(ungrouped),
         "ungrouped_models": sorted(u["model_name"] for u in ungrouped),
+        # The dashboard needs to know the active strategy to warn that a
+        # member with no cost will not be picked under cost-based routing.
+        "routing_strategy": db.get_router_settings().get("routing_strategy"),
     }
 
 
@@ -926,7 +930,14 @@ async def update_model(encoded_name: str, update: Dict):
     except Exception:
         raise HTTPException(400, "Invalid model name encoding")
 
-    allowed_fields = {"reasoning_effort", "tags", "model_group", "litellm_params"}
+    allowed_fields = {
+        "reasoning_effort",
+        "tags",
+        "model_group",
+        "litellm_params",
+        "input_cost",
+        "output_cost",
+    }
     updates = {k: v for k, v in update.items() if k in allowed_fields}
     if not updates:
         raise HTTPException(400, "No valid fields to update")
@@ -944,13 +955,43 @@ async def update_model(encoded_name: str, update: Dict):
                     existing_lp[key] = value
             updates["litellm_params"] = existing_lp
 
-    updated = db.update_model_field(model_name, updates)
-    if not updated:
+    # A cost is a price, so it is validated rather than coerced: "3" from a
+    # text input, -1 from a stray keystroke, and NaN from a bad parse all
+    # reach the router as a real number if they are stored as-is.
+    cleared = []
+    for field in ("input_cost", "output_cost"):
+        if field not in updates:
+            continue
+        raw = updates.pop(field)
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            cleared.append(field)
+            continue
+        if isinstance(raw, bool):
+            raise HTTPException(400, f"{field} must be a number")
+        try:
+            cost = float(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"{field} must be a number, got {raw!r}")
+        if not math.isfinite(cost) or cost < 0:
+            raise HTTPException(400, f"{field} must be a finite, non-negative number")
+        updates[field] = cost
+
+    if not db.get_model_by_name(model_name):
         raise HTTPException(404, f"Model {model_name} not found")
+
+    # Clearing is checked after normalization, not before: a PATCH carrying
+    # only a blank cost leaves nothing to write, but is still a valid edit.
+    if not updates and not cleared:
+        raise HTTPException(400, "No valid fields to update")
+
+    if updates:
+        db.update_model_field(model_name, updates)
+    for field in cleared:
+        db.unset_model_field(model_name, field)
 
     merge_configs()
     _reload_litellm_config()
-    return {"status": "success", "updated": updates}
+    return {"status": "success", "updated": updates, "cleared": cleared}
 
 
 TAG_PALETTE = [

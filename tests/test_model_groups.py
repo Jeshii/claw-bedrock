@@ -84,6 +84,8 @@ class TestAggregation:
             "groups": [],
             "ungrouped_count": 0,
             "ungrouped_models": [],
+            # No router settings saved, so no strategy is in effect.
+            "routing_strategy": None,
         }
 
     def test_ungrouped_models_are_listed_and_sorted(self, test_env):

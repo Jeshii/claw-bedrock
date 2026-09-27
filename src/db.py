@@ -81,6 +81,26 @@ def update_model_field(model_name, updates: dict):
     return len(result) > 0
 
 
+def unset_model_field(model_name, field: str) -> bool:
+    """Remove a single key from a model record.
+
+    Distinct from writing None: absence is what "this model has no cost
+    recorded" means, and a stored null would have to be special-cased by
+    every reader. TinyDB's update() merges the given fields into the
+    document, so a removed key has to be dropped through the callable form,
+    which hands us the live document to mutate.
+    """
+    model = models_table.get(where("model_name") == model_name)
+    if not model or field not in model:
+        return False
+
+    def _drop(doc):
+        doc.pop(field, None)
+
+    models_table.update(_drop, doc_ids=[model.doc_id])
+    return True
+
+
 def get_model_by_name(model_name):
     """Get a specific model by name."""
     return models_table.get(where("model_name") == model_name)
@@ -196,6 +216,69 @@ def model_name_exists(model_name):
     return models_table.contains(where("model_name") == model_name)
 
 
+# Keys on a model record that exist for the management UI only. They are
+# dropped from the generated config so config.yaml holds just what LiteLLM
+# consumes. A denylist rather than an allowlist: records migrated from an
+# older config.local.yaml (see _migrate_yaml_to_db) can carry legitimate
+# LiteLLM keys such as rpm/tpm at the top level, and an allowlist would
+# silently discard them.
+UI_ONLY_MODEL_FIELDS = frozenset(
+    {
+        "provider",
+        "tags",
+        "reasoning_effort",
+        "input_cost",
+        "output_cost",
+        "created_at",
+        "updated_at",
+        "notes",
+    }
+)
+
+# Costs are stored per 1M tokens, which is how provider pricing pages quote
+# them. LiteLLM wants per token, so the conversion happens on the way out.
+COST_SCALE = 1_000_000
+
+_COST_FIELDS = {
+    "input_cost": "input_cost_per_token",
+    "output_cost": "output_cost_per_token",
+}
+
+
+def _is_valid_cost(value) -> bool:
+    """A cost is usable when it is a non-negative number. 0.0 is a real price."""
+    return (
+        isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
+    )
+
+
+def _apply_model_costs(entry: dict) -> None:
+    """Publish a model's stored prices where LiteLLM's router will read them.
+
+    A `cost-based-routing` deployment is priced from
+    `litellm_params.input_cost_per_token` / `output_cost_per_token` when set,
+    otherwise from LiteLLM's own cost map -- and that lookup misses
+    provider-prefixed names such as `bedrock_mantle/...` and `openai/...`, so
+    an unset cost does not read as "unknown" to the router: it falls back to
+    $5/$5 and the model effectively stops being picked. The same values are
+    mirrored into `model_info` for spend reporting, merged rather than
+    assigned so existing keys (e.g. supports_tool_calling) survive.
+    """
+    for field, per_token_field in _COST_FIELDS.items():
+        cost = entry.get(field)
+        if not _is_valid_cost(cost):
+            continue
+        per_token = cost / COST_SCALE
+        entry["litellm_params"][per_token_field] = per_token
+        info = entry.setdefault("model_info", {})
+        info[field] = per_token
+
+
+def _strip_ui_only_fields(entry: dict) -> dict:
+    """Drop management-UI bookkeeping so config.yaml holds only what LiteLLM uses."""
+    return {k: v for k, v in entry.items() if k not in UI_ONLY_MODEL_FIELDS}
+
+
 def get_models_for_litellm():
     """Get full config for LiteLLM including models, router_settings, and litellm_settings.
 
@@ -230,7 +313,10 @@ def get_models_for_litellm():
             continue
 
         entry["litellm_params"] = resolved_params
-        config["model_list"].append(entry)
+        # Costs are published before the UI-only keys are stripped, since
+        # input_cost/output_cost are both the source and a stripped field.
+        _apply_model_costs(entry)
+        config["model_list"].append(_strip_ui_only_fields(entry))
 
     if skipped:
         logger.warning("Skipped %d model(s) with missing or unset providers", skipped)
