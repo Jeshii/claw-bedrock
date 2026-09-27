@@ -205,7 +205,11 @@ def clear_master_key():
 def get_litellm_settings():
     """Get litellm_settings with token_refresher and optional master_key."""
     settings = {
-        "callbacks": ["token_refresher.BedrockTokenRefresher"],
+        # Must resolve to an instance, not the class: litellm >= 1.102 raises
+        # ValueError at proxy startup if a callbacks entry is a class, and the
+        # proxy never comes up. token_refresher.py creates this instance at
+        # import time.
+        "callbacks": ["token_refresher.token_refresher"],
     }
     key = get_master_key()
     if key:
