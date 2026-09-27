@@ -6,17 +6,46 @@
     - `ruff check --fix` to auto-fix linting issues
     - `ruff format` to enforce formatting
     - `python -m py_compile <file>` to syntax-check any modified Python file\
- - for html/javascript
+  - for html/javascript
     - use `biome check --write .` for static HTML/JS files
     - for Jinja2/HTML templates (e.g. `templates/`), use `djlint` instead — biome cannot parse `{{ }}` template expressions
     - run `djlint templates/ --reformat` to auto-format, then `djlint templates/` to check
-    - note: djlint H030/H031 (meta description/keywords) are SEO suggestions — ignore for internal tools
+    - note: djlint H030/H031 (meta description/keywords) are SEO suggestions — see `.djlintrc`
 - Never commit if linting or syntax checks fail
 - Ask before pushing since develop branch will build on push
+
+## Lint Configuration
+All three linters are configured in-repo so results are reproducible. Do not rely on
+machine-level defaults.
+- `ruff.toml` — pins `target-version = "py312"` and the explicit rule set. Regenerate the
+  rule list with `ruff check --show-settings | sed -n '/linter.rules.enabled/,/^]/p'`
+- `biome.json` — excludes `templates/` and `tests/**/*.html` (Jinja `{{ }}` is unparseable by
+  biome), and disables `noUnusedVariables` for `src/static/js/**`
+- `.djlintrc` — ignores `H021` (inline styles are needed for `display:none` toggles) and
+  `H030`
+- `noUnusedVariables` is off for `src/static/js/` on purpose: those files are classic
+  non-module scripts (no `import`/`export`) that share globals across files and are called from
+  inline `onclick` in Jinja templates. **Never run `biome check --write` with that rule enabled
+  here — the autofix renames globals to `_foo` and breaks the UI.**
+- Accepted remaining warnings: 5× `noDescendingSpecificity` in `src/static/management.css`
+  (reordering a 1600-line stylesheet risks cascade regressions for no functional gain), and
+  a11y findings in `templates/management.html`
 
 ## Python Style
 - Python 3.12+ — use `match`, `type X = ...`, and modern union syntax (`X | Y`)
 - Prefer `except FileNotFoundError` over bare `except Exception` where specific errors are expected
+- Broad `except Exception` is allowed at module boundaries (startup, watchdog, config merge,
+  token refresher I/O) but must carry `# noqa: BLE001 - <reason>` naming what degrades and why
+- Handlers that do blocking I/O (subprocess, `open`, `requests`) must be sync `def`, not
+  `async def` — FastAPI runs sync handlers in a threadpool. Reserve `async` for genuine `await`
+- Prefer `datetime.now(UTC)` over the deprecated `datetime.utcnow()`; when emitting an ISO
+  timestamp string use `.isoformat().replace("+00:00", "Z")` to keep the existing format
+
+## Testing
+- Run from project root: `PYTHONPATH=src CONFIG_DIR=/tmp ENCRYPTION_KEY=<fernet-key> python3 -m pytest tests/ -q`
+- `PYTHONPATH=src` is required (no `conftest.py`); 118 tests should pass
+- `@app.on_event` in `src/management_app.py` emits FastAPI deprecation warnings — pre-existing,
+  not yet migrated to lifespan handlers
 
 ## Git Workflow
 - Never push directly to `main`, just push to `develop` first, PRs unnecessary for now
@@ -32,6 +61,7 @@
 - `src/management_app.py` — Management UI (uvicorn on port 8282)
 - `src/token_refresher.py` — AWS SSO token refresh logic, imported at startup
 - `templates/management.html` - HTML template for the management UI
+- `src/static/js/*.js` — classic non-module scripts sharing globals (see Lint Configuration)
 - Container starts LiteLLM on port 4000
 - Container start Management UI on port 8282
 - See docs/FILE_STRUCTURE.md for locations of other files
