@@ -742,19 +742,27 @@ def fetch_openrouter_models(
         if include_free == "true":
 
             def _is_free(m):
+                # fmt: off
+                # PEP 758 paren removal; see encryption_utils.decrypt_data
                 try:
                     return float(m.get("pricing", {}).get("prompt", "1")) == 0
                 except (ValueError, TypeError):
                     return False
 
+                # fmt: on
+
             models = [m for m in models if _is_free(m)]
         elif include_free == "false":
 
             def _is_not_free(m):
+                # fmt: off
+                # PEP 758 paren removal; see encryption_utils.decrypt_data
                 try:
                     return float(m.get("pricing", {}).get("prompt", "1")) != 0
                 except (ValueError, TypeError):
                     return True
+
+                # fmt: on
 
             models = [m for m in models if _is_not_free(m)]
 
@@ -768,10 +776,14 @@ def fetch_openrouter_models(
             ]
 
         def sort_key(m):
+            # fmt: off
+            # PEP 758 paren removal; see encryption_utils.decrypt_data
             try:
                 cost = float(m.get("pricing", {}).get("prompt", "inf"))
             except (ValueError, TypeError):
                 cost = float("inf")
+
+            # fmt: on
             return (cost, m.get("name", "").lower())
 
         models.sort(key=sort_key)
@@ -970,10 +982,14 @@ def update_model(encoded_name: str, update: dict):
             continue
         if isinstance(raw, bool):
             raise HTTPException(400, f"{field} must be a number")
+        # fmt: off
+        # PEP 758 paren removal; see encryption_utils.decrypt_data
         try:
             cost = float(raw)
         except (TypeError, ValueError):
             raise HTTPException(400, f"{field} must be a number, got {raw!r}")
+
+        # fmt: on
         if not math.isfinite(cost) or cost < 0:
             raise HTTPException(400, f"{field} must be a finite, non-negative number")
         updates[field] = cost

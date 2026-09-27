@@ -7,10 +7,10 @@
 # To re-derive the list after adding rules, run:
 #   ruff check --show-settings | sed -n '/linter.rules.enabled/,/^]/p'
 #
-# target-version is pinned to py312 per AGENTS.md ("Python 3.12+"). It matches the
-# previously-inferred 3.10 target with zero difference in reported errors.
+# target-version is pinned to py314, matching the python:3.14-slim base image in
+# .github/Containerfile. Bumping it surfaced no new lint findings.
 
-target-version = "py312"
+target-version = "py314"
 
 [lint]
 select = [

@@ -84,11 +84,16 @@ def decrypt_data(token: str) -> str:
     """Decrypt a Fernet-encrypted string. Returns original on failure for backward compat."""
     if not token:
         return token
+    # fmt: off
+    # PEP 758 lets 3.14 drop these parens, but `except A, B:` reads as Python 2
+    # and stops parsing on 3.13 and older. Keep them.
     try:
         f = Fernet(_get_encryption_key())
         return f.decrypt(token.encode("utf-8")).decode("utf-8")
     except (InvalidToken, Exception):  # noqa: BLE001 - backward compat: returns plaintext unchanged
         return token
+
+    # fmt: on
 
 
 def get_encryption_mode() -> tuple[bool, str]:

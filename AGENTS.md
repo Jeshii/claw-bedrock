@@ -32,7 +32,7 @@ machine-level defaults.
   a11y findings in `templates/management.html`
 
 ## Python Style
-- Python 3.12+ — use `match`, `type X = ...`, and modern union syntax (`X | Y`)
+- Python 3.14+ — use `match`, `type X = ...`, and modern union syntax (`X | Y`)
 - Prefer `except FileNotFoundError` over bare `except Exception` where specific errors are expected
 - Broad `except Exception` is allowed at module boundaries (startup, watchdog, config merge,
   token refresher I/O) but must carry `# noqa: BLE001 - <reason>` naming what degrades and why
@@ -43,7 +43,13 @@ machine-level defaults.
 
 ## Testing
 - Run from project root: `PYTHONPATH=src CONFIG_DIR=/tmp ENCRYPTION_KEY=<fernet-key> python3 -m pytest tests/ -q`
+- Use the 3.14 venv: `.venv/bin/python -m pytest tests/ -q` with the same env vars
 - `PYTHONPATH=src` is required (no `conftest.py`); 118 tests should pass
+- Do not test against a system Python's ambient packages. `httpx >= 0.28` encodes
+  `json=` with `allow_nan=False`, so a `float("nan")` body raises client-side;
+  `patch_model_literal` in `tests/test_model_costs.py` sends it as a raw body
+  instead. Local package sets can differ from `requirements.lock` in ways that
+  hide or invent failures
 - `@app.on_event` in `src/management_app.py` emits FastAPI deprecation warnings — pre-existing,
   not yet migrated to lifespan handlers
 

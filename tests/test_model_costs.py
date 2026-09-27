@@ -8,6 +8,7 @@ Run from project root:
 """
 
 import base64
+import math
 import os
 import sys
 import tempfile
@@ -65,6 +66,21 @@ def add_model(client, name, **extra):
 
 def patch_model(client, name, body):
     return client.patch(f"/api/models/{encode(name)}", json=body)
+
+
+def patch_model_literal(client, name, field, literal):
+    """PATCH with a hand-written JSON body, bypassing httpx's JSON encoder.
+
+    httpx >= 0.28 encodes json= with allow_nan=False, so float("nan") and
+    float("inf") can no longer be sent that way. Writing the bare token into a
+    raw body still delivers a non-finite float to the app, which is what this
+    needs to exercise (see management_app's math.isfinite guard).
+    """
+    return client.patch(
+        f"/api/models/{encode(name)}",
+        content=f'{{"{field}": {literal}}}',
+        headers={"content-type": "application/json"},
+    )
 
 
 def emitted(db, model_name):
@@ -283,7 +299,13 @@ class TestPatchModelCost:
         client, _tmpdir, db = test_env
 
         add_model(client, "sonnet", input_cost=3.0)
-        resp = patch_model(client, "sonnet", {"input_cost": bad})
+        if isinstance(bad, float) and not math.isfinite(bad):
+            literal = (
+                "NaN" if math.isnan(bad) else ("Infinity" if bad > 0 else "-Infinity")
+            )
+            resp = patch_model_literal(client, "sonnet", "input_cost", literal)
+        else:
+            resp = patch_model(client, "sonnet", {"input_cost": bad})
 
         assert resp.status_code == 400, resp.text
         assert db.get_model_by_name("sonnet")["input_cost"] == 3.0

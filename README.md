@@ -13,7 +13,7 @@ A [LiteLLM](https://docs.litellm.ai/docs/) proxy server that started as a way to
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.14+
 - [pipenv](https://pipenv.pypa.io/)
 - [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (`aws` on your PATH)
 - An AWS profile configured in `~/.aws/config` with Bedrock Mantle access
