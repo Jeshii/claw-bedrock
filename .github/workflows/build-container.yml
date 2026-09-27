@@ -10,7 +10,13 @@ permissions:
   packages: write
 
 jobs:
+  # Gates the build on ruff/biome/djlint and the test suite. Both jobs live
+  # inside the called workflow, so this one dependency covers them.
+  quality:
+    uses: ./.github/workflows/lint.yml
+
   build:
+    needs: quality
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

@@ -43,6 +43,8 @@ claw-bedrock/
 │   ├── claw-bedrock.container.example
 │   ├── docker-compose.yml
 │   └── start_container.sh
+├── scripts/
+│   └── lint.sh
 ├── skills/
 │   ├── aws-login-remote/
 │   │   └── SKILL.md
@@ -103,6 +105,11 @@ Deployment and container-related files:
 - `docker-compose.yml` — Docker Compose setup
 - `start_container.sh` — Container startup script
 
+### `scripts/`
+Developer tooling:
+- `lint.sh` — Single source of truth for the lint checks; run before committing, and run
+  by CI in `.github/workflows/lint.yml`
+
 ### `.opencode/`
 Opencode-specific configuration and dependencies:
 - `node_modules/` — Node.js dependencies for opencode
@@ -113,7 +120,8 @@ Opencode-specific configuration and dependencies:
 GitHub-specific workflows and configurations:
 - `Containerfile` — Container definition for GitHub Actions
 - `workflows/` — GitHub Actions workflows
-  - `build-container.yml` — Container build workflow
+  - `build-container.yml` — Container build workflow, gated on the `quality` job
+  - `lint.yml` — Lint and test workflow (also called by `build-container.yml`)
 
 ### `.ruff_cache/`
 Cache directory for the Ruff Python linter/formatter

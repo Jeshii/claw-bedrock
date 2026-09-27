@@ -1,0 +1,71 @@
+name: Lint and test
+
+on:
+  push:
+    branches: ["develop"]
+  pull_request:
+    branches: ["develop"]
+  # Lets build-container.yml gate the image build on these checks.
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      # ruff and djlint. biome is installed by the step below, since it cannot
+      # be pip-installed; its version comes from biome.json's $schema.
+      - name: Install lint tooling
+        run: pip install -r requirements-dev.txt
+
+      - name: Set up Biome
+        uses: biomejs/setup-biome@v2
+
+      - name: Lint
+        run: ./scripts/lint.sh
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # Must match the python:3.14-slim base in .github/Containerfile.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py314-${{ hashFiles('requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-py314-
+
+      # The app's own dependencies come from the lock, as the image does.
+      - name: Install dependencies
+        run: pip install -r requirements.lock -r requirements-dev.txt
+
+      - name: Test
+        env:
+          CONFIG_DIR: /tmp
+          # Test-only key, already hardcoded in the test fixtures.
+          ENCRYPTION_KEY: XCy9PjoLjivjmp3anXK_4qTM8k6PfIzbW2rfnnbHmkA=
+        run: PYTHONPATH=src python -m pytest tests/ -q
