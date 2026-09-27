@@ -1,0 +1,12 @@
+# Development and CI tooling. Not installed into the runtime image.
+#
+# These pins are what CI installs, so `pip install -r requirements-dev.txt`
+# reproduces the checked environment. The app's own dependencies come from
+# requirements.lock; see skills/build-deps/SKILL.md.
+#
+# biome cannot be pip-installed. Its version is pinned by the $schema field in
+# biome.json, which CI reads via biomejs/setup-biome.
+
+ruff==0.16.9
+djlint==1.46.2
+pytest==9.1.1
