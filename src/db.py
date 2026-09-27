@@ -1,9 +1,11 @@
 import datetime
+import functools
 import json
 import logging
 import os
 import secrets
 import sys
+import threading
 
 import yaml
 from tinydb import Query, TinyDB, where
@@ -16,7 +18,9 @@ CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app")
 DB_PATH = os.path.join(CONFIG_DIR, "clawbedrock.db.json")
 LOCAL_CONFIG_PATH = os.path.join(CONFIG_DIR, "config.local.yaml")
 
-# Initialize TinyDB with caching for better performance
+# Initialize TinyDB. Caching is deliberately not enabled: every read re-parses
+# the file, which is what makes the lock below necessary rather than merely
+# advisable.
 db = TinyDB(DB_PATH, indent=2, sort_keys=True)
 # Set secure file permissions for the database
 os.chmod(DB_PATH, 0o600)
@@ -24,7 +28,31 @@ models_table = db.table("models")
 settings_table = db.table("settings")
 tags_table = db.table("tags")
 
+_DB_LOCK = threading.RLock()
 
+
+def _serialized(fn):
+    """Run fn with the TinyDB lock held.
+
+    TinyDB's default JSONStorage re-opens and re-parses the whole file on every
+    access and takes no lock of its own, so a read that overlaps a write sees a
+    truncated file and raises JSONDecodeError. Management UI handlers run in
+    FastAPI's threadpool, so every accessor has to serialize on this lock.
+
+    This is an RLock rather than a Lock because several functions call other
+    locked functions -- import_backup calls set_setting, model_name_exists,
+    upsert_tag and upsert_provider -- and a plain Lock would deadlock them.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _DB_LOCK:
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
+@_serialized
 def _migrate_yaml_to_db():
     """Migrate existing YAML config to TinyDB if db is empty and YAML exists."""
     if models_table.all():
@@ -53,22 +81,26 @@ def _migrate_yaml_to_db():
         print(f"[DB] Migration error: {e}")
 
 
+@_serialized
 def get_all_models():
     """Get all configured models."""
     return models_table.all()
 
 
+@_serialized
 def add_model(model):
     """Add a new model. Returns the inserted id."""
     return models_table.insert(model)
 
 
+@_serialized
 def delete_model(model_name):
     """Delete a model by model_name. Returns True if deleted."""
     result = models_table.remove(where("model_name") == model_name)
     return len(result) > 0
 
 
+@_serialized
 def rename_model(old_name, new_name):
     """Rename a model. Returns True if renamed."""
     result = models_table.update(
@@ -77,12 +109,14 @@ def rename_model(old_name, new_name):
     return len(result) > 0
 
 
+@_serialized
 def update_model_field(model_name, updates: dict):
     """Update fields on a model. Returns True if updated."""
     result = models_table.update(updates, where("model_name") == model_name)
     return len(result) > 0
 
 
+@_serialized
 def unset_model_field(model_name, field: str) -> bool:
     """Remove a single key from a model record.
 
@@ -103,22 +137,26 @@ def unset_model_field(model_name, field: str) -> bool:
     return True
 
 
+@_serialized
 def get_model_by_name(model_name):
     """Get a specific model by name."""
     return models_table.get(where("model_name") == model_name)
 
 
+@_serialized
 def get_setting(key, default=None):
     """Get a setting value by key."""
     record = settings_table.get(where("key") == key)
     return record["value"] if record else default
 
 
+@_serialized
 def set_setting(key, value):
     """Set a setting value."""
     settings_table.upsert({"key": key, "value": value}, where("key") == key)
 
 
+@_serialized
 def get_settings():
     """Get all settings as a dict."""
     records = settings_table.all()
@@ -173,6 +211,7 @@ def get_router_settings():
     return settings
 
 
+@_serialized
 def set_router_settings(router_settings):
     """Save router_settings to DB."""
     settings_table.upsert(
@@ -197,6 +236,7 @@ def generate_master_key():
     return key
 
 
+@_serialized
 def clear_master_key():
     """Remove the master key (disables auth on next reload)."""
     settings_table.remove(where("key") == "litellm_master_key")
@@ -217,6 +257,7 @@ def get_litellm_settings():
     return settings
 
 
+@_serialized
 def model_name_exists(model_name):
     """Check if a model name already exists."""
     return models_table.contains(where("model_name") == model_name)
@@ -285,6 +326,7 @@ def _strip_ui_only_fields(entry: dict) -> dict:
     return {k: v for k, v in entry.items() if k not in UI_ONLY_MODEL_FIELDS}
 
 
+@_serialized
 def get_models_for_litellm():
     """Get full config for LiteLLM including models, router_settings, and litellm_settings.
 
@@ -336,6 +378,7 @@ def get_models_for_litellm():
     return config
 
 
+@_serialized
 def _merge_provider_defaults(
     model: dict,
     cache: dict[str, dict | None],
@@ -392,21 +435,25 @@ def _merge_provider_defaults(
     return lp
 
 
+@_serialized
 def get_all_tags():
     """Get all tag definitions."""
     return tags_table.all()
 
 
+@_serialized
 def get_tag(name):
     """Get a single tag definition by name."""
     return tags_table.get(where("name") == name)
 
 
+@_serialized
 def upsert_tag(name, color):
     """Create or update a tag definition."""
     tags_table.upsert({"name": name, "color": color}, where("name") == name)
 
 
+@_serialized
 def delete_tag(name):
     """Delete a tag definition and remove it from all models."""
     tags_table.remove(where("name") == name)
@@ -416,6 +463,7 @@ def delete_tag(name):
         models_table.update({"tags": tags}, doc_ids=[m.doc_id])
 
 
+@_serialized
 def add_tag_to_model(model_name, tag_name):
     """Add a tag to a model's tag list. Returns True if updated."""
     m = models_table.get(where("model_name") == model_name)
@@ -428,6 +476,7 @@ def add_tag_to_model(model_name, tag_name):
     return True
 
 
+@_serialized
 def remove_tag_from_model(model_name, tag_name):
     """Remove a tag from a model's tag list. Returns True if updated."""
     m = models_table.get(where("model_name") == model_name)
@@ -438,6 +487,7 @@ def remove_tag_from_model(model_name, tag_name):
     return True
 
 
+@_serialized
 def rename_tag(old_name, new_name):
     """Rename a tag definition and update all models using it."""
     tag = tags_table.get(where("name") == old_name)
@@ -452,6 +502,7 @@ def rename_tag(old_name, new_name):
     return True
 
 
+@_serialized
 def get_models_by_tag(tag_name):
     """Get all models that have a specific tag."""
     q = Query()
@@ -461,6 +512,7 @@ def get_models_by_tag(tag_name):
 providers_table = db.table("providers")
 
 
+@_serialized
 def seed_default_providers():
     if providers_table.all():
         return
@@ -503,18 +555,30 @@ def _decrypt_sensitive_fields(provider: dict) -> dict:
     return decrypted
 
 
+@_serialized
 def get_all_providers():
     """Get all provider definitions."""
     providers = providers_table.all()
     return [_decrypt_sensitive_fields(p) for p in providers]
 
 
+@_serialized
 def get_provider(name):
     """Get a single provider by name."""
     provider = providers_table.get(where("name") == name)
     if provider:
         return _decrypt_sensitive_fields(provider)
     return None
+
+
+@_serialized
+def provider_exists(name):
+    """Whether a provider with this name is already stored.
+
+    Exists so callers can check without holding a reference to the raw table
+    handle, which would be an unlocked read.
+    """
+    return providers_table.contains(where("name") == name)
 
 
 def sanitize_provider_for_response(provider: dict) -> dict:
@@ -531,12 +595,14 @@ def sanitize_provider_for_response(provider: dict) -> dict:
     return sanitized
 
 
+@_serialized
 def _get_provider_raw(name: str) -> dict | None:
     """Get a provider record from TinyDB without decrypting sensitive fields."""
     record = providers_table.get(where("name") == name)
     return dict(record) if record else None
 
 
+@_serialized
 def _upsert_provider_raw(provider: dict):
     """Write a provider record directly without re-encrypting sensitive fields.
     The caller is responsible for encrypting any new sensitive field values.
@@ -544,6 +610,7 @@ def _upsert_provider_raw(provider: dict):
     providers_table.upsert(provider, where("name") == provider["name"])
 
 
+@_serialized
 def upsert_provider(provider: dict):
     """Create or update a provider. `provider` must include a `name` key.
     Raises RuntimeError on TinyDB failure. Sensitive fields are auto-encrypted.
@@ -561,6 +628,7 @@ def upsert_provider(provider: dict):
     print(f"[DB] upsert_provider name={name} fields={changed_fields}")
 
 
+@_serialized
 def delete_provider(name):
     """Delete a provider definition.
 
@@ -570,6 +638,7 @@ def delete_provider(name):
     providers_table.remove(where("name") == name)
 
 
+@_serialized
 def rename_provider(old_name, new_name):
     """Rename a provider and update all model references."""
     provider = providers_table.get(where("name") == old_name)
@@ -585,11 +654,13 @@ def rename_provider(old_name, new_name):
     return True
 
 
+@_serialized
 def get_models_by_provider(provider_name):
     """Get all models assigned to a specific provider."""
     return models_table.search(where("provider") == provider_name)
 
 
+@_serialized
 def set_model_provider(model_name, provider_name):
     """Assign a provider to a model."""
     return models_table.update(
@@ -601,6 +672,7 @@ def set_model_provider(model_name, provider_name):
 BACKUP_SCHEMA_VERSION = 1
 
 
+@_serialized
 def export_backup() -> dict:
     """Dump all tables into a portable backup dict with decrypted provider fields."""
     return {
@@ -619,6 +691,7 @@ def export_backup() -> dict:
     }
 
 
+@_serialized
 def import_backup(backup: dict, mode: str = "replace") -> dict:
     """
     Restore from a backup dict.
@@ -719,6 +792,7 @@ def _auto_backup_before_replace():
         print(f"[Backup] Auto-backup failed: {e}")
 
 
+@_serialized
 def close_db():
     """Close the database connection."""
     db.close()

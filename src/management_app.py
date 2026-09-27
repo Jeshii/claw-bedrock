@@ -23,7 +23,6 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from tinydb import where
 
 import db
 import encryption_utils
@@ -1129,7 +1128,7 @@ def create_provider(body: dict):
     """Create a new provider."""
     if not body.get("name"):
         raise HTTPException(400, "name is required")
-    if db.providers_table.contains(where("name") == body["name"]):
+    if db.provider_exists(body["name"]):
         raise HTTPException(409, f"Provider '{body['name']}' already exists")
     try:
         db.upsert_provider(body)
