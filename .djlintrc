@@ -1,0 +1,6 @@
+{
+  "ignore": "H021,H030",
+  "indent": 2,
+  "max_line_length": 120,
+  "blank_line_after_tag": "load"
+}

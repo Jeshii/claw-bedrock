@@ -3,7 +3,6 @@ config.local.yaml
 config.yaml
 .sandbox*
 __pycache__*
-biome.json
 .opencode/*
 clawbedrock.db.json
 auto-backup-*.json
