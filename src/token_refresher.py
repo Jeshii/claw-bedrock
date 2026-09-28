@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 import sys
@@ -86,6 +87,38 @@ def _clear_auth_tmp():
 class BedrockTokenRefresher(CustomLogger):
     TOKEN_TTL = 2700  # 45 min — refresh before AWS tokens expire
     LOGIN_RETRY_COOLDOWN = 60  # seconds between login retries after failure
+    # Coalescing window. Without it, N concurrent auth failures each run a
+    # refresh: with no lock that meant six token fetches in fifteen seconds.
+    # One refresh satisfies the whole burst, and this bounds how soon the next
+    # one may start.
+    REFRESH_COALESCE_SECONDS = 5
+
+    # Auth-specific error shapes, matched outright. Deliberately not just the
+    # word "expired": see _is_expired_error.
+    AUTH_ERROR_PATTERNS = (
+        "api key expired",
+        "expiredtoken",
+        "expired token",
+        "token has expired",
+        "token is expired",
+        "the security token",
+        "invalid_api_key",
+        "invalid api key",
+        "unrecognizedclientexception",
+        "invalidtoken",
+        "request expired",
+    )
+    # Words that make "expired" meaningful — a credential, as opposed to any
+    # old thing that can expire.
+    AUTH_CONTEXT_WORDS = (
+        "token",
+        "api key",
+        "apikey",
+        "credential",
+        "signature",
+        "session",
+    )
+    EXPIRY_WORDS = ("expired", "expiry")
 
     def __init__(self):
         _debug(
@@ -93,6 +126,11 @@ class BedrockTokenRefresher(CustomLogger):
         )
         self._fetched_at = 0
         self._force_refresh = False
+        # Serializes refreshes and coalesces concurrent callers. Both are needed:
+        # the lock stops interleaved writes to os.environ, the coalescing window
+        # stops N waiters each doing redundant work.
+        self._refresh_lock = threading.Lock()
+        self._last_refresh_attempt = 0.0
         self._needs_login = (
             False  # set True when login required in non-interactive mode
         )
@@ -198,7 +236,9 @@ class BedrockTokenRefresher(CustomLogger):
                     self._login_process = None
                     _clear_auth_tmp()
                     try:
-                        self._refresh()
+                        # Credentials just changed, so this must not be
+                        # coalesced away by a recent failed attempt.
+                        self._refresh(force=True, coalesce=False)
                     except Exception as e:  # noqa: BLE001 - refresh failure is logged and retried
                         print(
                             f"[TokenRefresher] WARNING: Token refresh after login failed: {e}",
@@ -347,14 +387,47 @@ class BedrockTokenRefresher(CustomLogger):
         except Exception as e:  # noqa: BLE001 - auth_needed flag is best-effort
             _debug(f"Failed to write auth_needed: {e}")
 
-    def _refresh(self):
-        _debug(f"_refresh() called. _needs_login={self._needs_login}")
+    def _refresh(self, force: bool = False, coalesce: bool = True) -> bool:
+        """Refresh BEDROCK_MANTLE_API_KEY. Returns True if a token was fetched.
+
+        `force` skips the TTL check, for callers that have just seen a real auth
+        failure. `coalesce` makes a refresh that started within
+        REFRESH_COALESCE_SECONDS satisfy the caller instead of redoing the work,
+        so a burst of failures costs one token fetch rather than one per failure.
+        Callers that must refresh regardless pass coalesce=False — notably the
+        refresh after a completed login, where a recent failed attempt would
+        otherwise be coalesced away and leave a stale token in place.
+        """
+        _debug(
+            f"_refresh(force={force}, coalesce={coalesce}) called. "
+            f"_needs_login={self._needs_login}"
+        )
+        with self._refresh_lock:
+            # Re-checked under the lock: a concurrent caller may have refreshed
+            # while this one waited, which is the common case during a burst.
+            if coalesce and self._recently_attempted():
+                _debug("_refresh(): coalesced with a recent refresh, skipping")
+                return False
+            if not force and time.time() - self._fetched_at <= self.TOKEN_TTL:
+                _debug("_refresh(): token still within TTL, skipping")
+                return False
+            # Stamped before the work so callers arriving mid-flight coalesce
+            # too. Set even if the attempt then fails, which also throttles
+            # retries against a broken auth path.
+            self._last_refresh_attempt = time.time()
+            return self._refresh_locked()
+
+    def _recently_attempted(self) -> bool:
+        return time.time() - self._last_refresh_attempt < self.REFRESH_COALESCE_SECONDS
+
+    def _refresh_locked(self) -> bool:
+        """Do the actual token fetch. Caller must hold _refresh_lock."""
         session = self._get_valid_session()
         _debug(
             f"_refresh(): _get_valid_session returned {type(session).__name__ if session else None}"
         )
         if session is None:
-            return  # login required — server stays up, /auth/status will surface the URL
+            return False  # login required — server stays up, /auth/status will surface the URL
         try:
             credentials = session.get_credentials()
             _debug(
@@ -374,12 +447,14 @@ class BedrockTokenRefresher(CustomLogger):
                 _debug("Cleared auth_needed flag - token refresh successful")
             except Exception as e:  # noqa: BLE001 - cleanup failure must not mask the error
                 _debug(f"Error clearing auth tmp files: {e}")
+            return True
         except Exception as e:  # noqa: BLE001 - token failure is reported to the user
             _debug(f"Token generation failed: {e}")
             print(f"[TokenRefresher] Token generation failed: {e}", file=sys.stderr)
             if not self._is_interactive():
                 self._needs_login = True
                 self._write_auth_needed_flag()
+            return False
         # Don't re-raise — server stays up, will retry on next request
 
     def get_auth_error(self) -> str | None:
@@ -489,12 +564,20 @@ class BedrockTokenRefresher(CustomLogger):
             )
 
     def _is_expired_error(self, exception) -> bool:
+        """True when an error plausibly means our bearer token is stale.
+
+        Matching the bare word "expired" is too broad — it also fires on
+        "the model 'x' has expired" and on unrelated non-auth errors, so the
+        refresher burns token fetches on failures a new token cannot fix. Match
+        the known auth shapes outright, otherwise require expiry *and* some
+        credential context.
+        """
         error_str = str(exception).lower()
-        return (
-            "expired" in error_str
-            or "invalid_api_key" in error_str
-            or "security token" in error_str
-        )
+        if any(p in error_str for p in self.AUTH_ERROR_PATTERNS):
+            return True
+        has_expiry = any(w in error_str for w in self.EXPIRY_WORDS)
+        has_auth = any(w in error_str for w in self.AUTH_CONTEXT_WORDS)
+        return has_expiry and has_auth
 
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         if self._needs_login:
@@ -506,7 +589,9 @@ class BedrockTokenRefresher(CustomLogger):
         if self._force_refresh or time.time() - self._fetched_at > self.TOKEN_TTL:
             print("[TokenRefresher] Refreshing token before call...")
             try:
-                self._refresh()
+                # Off the event loop: credential resolution can be slow enough
+                # to stall every concurrent request.
+                await asyncio.to_thread(self._refresh, self._force_refresh)
             except Exception as e:  # noqa: BLE001 - hook must not break the request
                 print(
                     f"[TokenRefresher] Token refresh failed in pre_call_hook: {e}",
@@ -516,21 +601,19 @@ class BedrockTokenRefresher(CustomLogger):
         return data
 
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
-        """Fires on all LiteLLM failures, including auth errors mapped to APIConnectionError."""
+        """Fires on all LiteLLM failures, including auth errors mapped to APIConnectionError.
+
+        Only raises a flag — the refresh happens in the next pre-call hook.
+        Refreshing here blocked the event loop, and having both hooks refresh
+        for a single failure is what turned one expiry into a stampede.
+        """
         exception = kwargs.get("exception")
         if exception and self._is_expired_error(exception):
             print(
-                f"[TokenRefresher] Detected expired/invalid token via failure log — forcing refresh...\n"
+                f"[TokenRefresher] Detected expired/invalid token via failure log — will refresh before next call...\n"
                 f"  Error: {exception}"
             )
             self._force_refresh = True
-            try:
-                self._refresh()
-            except Exception as e:  # noqa: BLE001 - hook must not break the request
-                print(
-                    f"[TokenRefresher] Token refresh failed in failure_event hook: {e}",
-                    file=sys.stderr,
-                )
 
 
 token_refresher = BedrockTokenRefresher()
