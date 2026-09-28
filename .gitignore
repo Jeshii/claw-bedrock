@@ -9,3 +9,14 @@ clawbedrock.db.json
 auto-backup-*.json
 .ruff_cache/*
 .scratch/
+
+# Credentials and key material. The Containerfile sets HOME=/app, so AWS config
+# lands at /app/.aws; a repo-root run picks up ./.aws.
+.aws/
+.env
+!.env.example
+.encryption_salt
+*.pem
+*.key
+*.p12
+*.pfx
