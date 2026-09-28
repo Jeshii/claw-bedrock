@@ -18,6 +18,13 @@ Environment=AWS_PROFILE=your-profile
 Environment=AWS_REGION=your-region
 Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 Environment=CONFIG_DIR=/config
+# Encrypts provider API keys at rest. STRONGLY recommended: without it the app
+# falls back to a deterministic dev key derived from a hardcoded password
+# (src/encryption_utils.py), which is public in this source tree. Generate one:
+#   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Setting this later does NOT decrypt existing data — re-enter provider API keys.
+# Environment=ENCRYPTION_KEY=  # preferred
+# Secret=encryption_key,type=env,target=ENCRYPTION_KEY # the better way to set
 # Environment=OPENROUTER_API_KEY=your-key  # optional
 # Secret=openrouter_api_key,type=env,target=OPENROUTER_API_KEY # another way to set
 # Environment=MANAGEMENT_PASSWORD=changeme # optional, no login screen if missing
