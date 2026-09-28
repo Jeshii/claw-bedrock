@@ -345,6 +345,9 @@ class BedrockTokenRefresher(CustomLogger):
         self._login_error = None
         self._auth_url = None
         self._awaiting_code = False
+        # The previous attempt's error is about that attempt. Clearing it here
+        # keeps peek_auth_error() safe to poll — see the note on that method.
+        self._auth_error = None
         if self._login_process is not None:
             try:
                 self._login_process.kill()
@@ -440,6 +443,9 @@ class BedrockTokenRefresher(CustomLogger):
             # Clear auth_needed flag on successful token refresh
             self._needs_login = False
             self._auth_url = None
+            # A successful refresh means the previous failure is resolved. Without
+            # this, peek_auth_error() would surface a stale error indefinitely.
+            self._auth_error = None
             try:
                 if os.path.exists(_TMP_AUTH_NEEDED):
                     os.remove(_TMP_AUTH_NEEDED)
@@ -457,11 +463,43 @@ class BedrockTokenRefresher(CustomLogger):
             return False
         # Don't re-raise — server stays up, will retry on next request
 
-    def get_auth_error(self) -> str | None:
-        """Return and clear the current auth error message."""
-        error = self._auth_error
-        self._auth_error = None
-        return error
+    def peek_auth_error(self) -> str | None:
+        """Return the current auth error without clearing it.
+
+        The auth UI polls this state every second during a login flow, so a
+        read-and-clear accessor here means an error is consumed by a poll before
+        anyone sees it. The error is instead cleared on a successful token
+        refresh and at the start of a new login attempt, which are the only two
+        points where it genuinely stops being true.
+        """
+        return self._auth_error
+
+    def auth_status_payload(self) -> dict:
+        """The auth state shared by the management app and the proxy route.
+
+        Both endpoints previously built this by hand and disagreed: the proxy
+        read `_auth_error` directly, the management app drained it, and only the
+        proxy reported `profile`.
+        """
+        now = time.time()
+        fetched_at = self._fetched_at
+        has_token = fetched_at > 0
+        age = int(now - fetched_at) if has_token else None
+        return {
+            "needs_login": self._needs_login,
+            "auth_url": self._auth_url,
+            "awaiting_code": self._awaiting_code,
+            "auth_error": self._auth_error,
+            "profile": self._profile,
+            "region": self._region,
+            "token": {
+                "present": has_token,
+                "age_seconds": age,
+                "ttl_seconds": self.TOKEN_TTL,
+                "expires_in": max(0, self.TOKEN_TTL - age) if has_token else None,
+                "stale": (not has_token) or age > self.TOKEN_TTL,
+            },
+        }
 
     def submit_code(self, code: str) -> dict:
         """Submit an authorization code to the running aws login process.
@@ -514,15 +552,7 @@ class BedrockTokenRefresher(CustomLogger):
                 _debug(
                     f"/auth/status called: needs_login={self._needs_login}, auth_url={'set' if self._auth_url else None}, awaiting_code={self._awaiting_code}"
                 )
-                return JSONResponse(
-                    {
-                        "needs_login": self._needs_login,
-                        "auth_url": self._auth_url,
-                        "awaiting_code": self._awaiting_code,
-                        "auth_error": self._auth_error,
-                        "profile": self._profile,
-                    }
-                )
+                return JSONResponse(self.auth_status_payload())
 
             @app.post("/auth/submit-code", tags=["Authentication"])
             async def submit_code(code: str = Body(..., embed=True)):
