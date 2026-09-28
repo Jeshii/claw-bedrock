@@ -107,3 +107,31 @@ single hardcoded base cannot express that mix.
 Also note `bedrock_mantle` exposes no OpenAI-compatible `/models` endpoint, so the UI's
 generic "Poll Models" (`src/static/js/models.js:522`) 404s for this provider regardless of
 configuration. Model discovery has to come from the price map or hand entry.
+
+### The override is all-or-nothing on the OpenAI surface
+
+The same variable means two different things depending on which surface reads it:
+
+- **Anthropic surface** (`bedrock/*` → `/anthropic/v1/messages`): treated as a host. A
+  trailing `/v1` or `/openai/v1` is deliberately stripped before the messages path is
+  appended (`llms/bedrock/common_utils.py:804-805, 824-829`), so `.../v1` is handled
+  correctly there.
+- **OpenAI surface** (`bedrock_mantle/*`): used verbatim, suppressing per-model derivation
+  (`llms/bedrock_mantle/chat/transformation.py:75-78`), and
+  `llms/openai/chat/gpt_transformation.py:722-731` then appends `/chat/completions` to
+  whatever it is given.
+
+Upstream notes the asymmetry at `common_utils.py:820-822`.
+
+There is no middle setting. A bare host (`https://bedrock-mantle.<region>.api.aws`) yields
+`.../chat/completions` with no version segment, which is also wrong. So on the OpenAI
+surface you can override the host *or* keep per-model path selection, never both. Since
+`src/db.py` only injects `api_base` for `type: "openai-compatible"` providers and the
+`bedrock` branch reads only `aws_region` (`src/db.py:433-435`), the environment variable is
+the sole lever — there is no per-model escape hatch.
+
+The variable exists for non-public endpoints: the docstring at
+`llms/bedrock/common_utils.py:815-818` cites "private VPC / VPCE / GovCloud Mantle
+endpoints", and `MANTLE_HOST_RE` (`common_utils.py:32`) matches any region including
+`us-gov-*`. Region falls back to `AWS_REGION` when the variable is unset
+(`common_utils.py:43-52`).

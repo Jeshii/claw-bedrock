@@ -16,8 +16,15 @@ PublishPort=8282:8282
 # Update these values:
 Environment=AWS_PROFILE=your-profile
 Environment=AWS_REGION=your-region
-Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 Environment=CONFIG_DIR=/config
+# Only set this for a NON-public endpoint (VPC endpoint, GovCloud). Against the
+# public regional endpoint litellm derives the path per model, and setting this
+# overrides that derivation. One base cannot serve both /v1 and /openai/v1, so
+# the gpt-5.x, gpt-6-*, gemma-4-* and grok-4.x families get routed to the wrong
+# path and fail as "the model does not exist", which reads as catalog churn.
+# Region still resolves from AWS_REGION when this is unset.
+# See docs/BUGS.md #10.
+# Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 # Encrypts provider API keys at rest. STRONGLY recommended: without it the app
 # falls back to a deterministic dev key derived from a hardcoded password
 # (src/encryption_utils.py), which is public in this source tree. Generate one:
@@ -28,14 +35,17 @@ Environment=CONFIG_DIR=/config
 # Environment=OPENROUTER_API_KEY=your-key  # optional
 # Secret=openrouter_api_key,type=env,target=OPENROUTER_API_KEY # another way to set
 # Environment=MANAGEMENT_PASSWORD=changeme # optional, no login screen if missing
-# Secret=managment_password,type=env,target=MANAGEMENT_PASSWORD # the better way to set
+# Secret=management_password,type=env,target=MANAGEMENT_PASSWORD # the better way to set
 # Environment=OLLAMA_API_BASE=http://your-ollama-host:11434  # optional
 
 # IMPORTANT: ~/.aws must exist (run `aws configure` to create it)
-Volume=%h/.aws:/root/.aws:Z
+# The container must be /app/.aws, not /root/.aws: the Containerfile sets
+# ENV HOME=/app, and the AWS CLI reads $HOME/.aws.
+Volume=%h/.aws:/app/.aws:Z
 
-# Mount config directory for persistence (model configs survive container restarts):
-# Create a local directory and mount it to /app:
+# Mount config directory for persistence (model configs survive container restarts).
+# Must match CONFIG_DIR above, which is /config — not the image's /app workdir.
+# Create a local directory and mount it there:
 #   mkdir -p %h/claw-bedrock-config
 Volume=%h/claw-bedrock-config:/config:Z
 
