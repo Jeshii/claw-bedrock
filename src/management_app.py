@@ -27,6 +27,7 @@ from fastapi.templating import Jinja2Templates
 import db
 import encryption_utils
 import password_utils
+import settings_resolver
 import token_refresher
 
 
@@ -49,6 +50,11 @@ LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
 VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
 
 LITELLM_BASE_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
+
+# Config-store keys for Bedrock auth. Kept distinct from the env var names so a
+# restored backup cannot collide with them — config import writes keys verbatim.
+_CONFIG_REGION_KEY = "bedrock_region"
+_CONFIG_PROFILE_KEY = "bedrock_profile"
 
 
 def _reload_litellm_config() -> bool:
@@ -313,12 +319,50 @@ def auth_status():
 
     openrouter_key = bool(os.environ.get("OPENROUTER_API_KEY"))
 
+    refresher = token_refresher.token_refresher
+    bedrock_state = refresher.auth_status_payload()
+
+    # The refresher's own _region/_profile are authoritative — they are what the
+    # token was actually minted against. The resolver only classifies where that
+    # value came from, so a disagreement between the two would show up as a
+    # source the user can act on rather than a silently wrong report.
+    region = settings_resolver.resolve(
+        "AWS_REGION",
+        config_key=_CONFIG_REGION_KEY,
+        default=bedrock_state["region"],
+    )
+    profile = settings_resolver.resolve(
+        "AWS_PROFILE",
+        config_key=_CONFIG_PROFILE_KEY,
+        default=bedrock_state["profile"],
+    )
+
+    access_key_set = bool(os.environ.get("AWS_ACCESS_KEY_ID"))
+    secret_key_set = bool(os.environ.get("AWS_SECRET_ACCESS_KEY"))
+    warnings = []
+    if profile.source != "default" and (access_key_set or secret_key_set):
+        # boto3 drops the env-var credential provider whenever a profile is
+        # passed explicitly, so these are set but inert. Worth saying out loud —
+        # the alternative is a user debugging credentials that are never read.
+        warnings.append("env_credentials_shadowed_by_profile")
+
     return {
         "auth_needed": auth_needed,
         "auth_url": auth_url,
-        "awaiting_code": token_refresher.token_refresher._awaiting_code,
-        "auth_error": token_refresher.token_refresher.get_auth_error(),
+        "awaiting_code": bedrock_state["awaiting_code"],
+        "auth_error": bedrock_state["auth_error"],
+        "needs_login": bedrock_state["needs_login"],
         "openrouter": {"configured": openrouter_key},
+        "bedrock": {
+            "region": region.as_dict(),
+            "profile": profile.as_dict(),
+            "token": bedrock_state["token"],
+            "credential_env": {
+                "access_key_set": access_key_set,
+                "secret_key_set": secret_key_set,
+            },
+            "warnings": warnings,
+        },
     }
 
 
