@@ -29,7 +29,9 @@ def test_env():
     """Each test gets an isolated CONFIG_DIR and clean module imports."""
     with tempfile.TemporaryDirectory() as tmpdir:
         os.environ["CONFIG_DIR"] = tmpdir
-        os.environ["ENCRYPTION_KEY"] = "XCy9PjoLjivjmp3anXK_4qTM8k6PfIzbW2rfnnbHmkA="
+        # Test-only key. This file is committed and the repo is public, so never
+        # reuse a deployment ENCRYPTION_KEY here — the two must stay distinct.
+        os.environ["ENCRYPTION_KEY"] = "7et38Ta-TUAjQExZycUZs4X1HZq9CqfgCoVcQmJjvMs="
         os.environ["MANAGEMENT_PASSWORD"] = ""
 
         _clean_import_modules()
