@@ -44,6 +44,66 @@ function updateDashboardBanner(data) {
 	bannerBody.innerHTML = html;
 }
 
+// Warning codes returned by /api/auth/status. The API returns codes rather than
+// prose so the wording can change here without touching Python.
+const AUTH_WARNING_TEXT = {
+	env_credentials_shadowed_by_profile:
+		"AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are set but ignored — " +
+		"boto3 skips environment credentials whenever a profile is passed " +
+		"explicitly. Unset AWS_PROFILE, or leave it unset and use the keys alone.",
+};
+
+function resolvedRow(label, setting) {
+	if (!setting) return "";
+	const badge = `<span class="source-badge source-${setting.source}">${setting.source}</span>`;
+	let shadowed = "";
+	if (setting.shadowed && setting.shadowed.length > 0) {
+		shadowed = `<span class="shadowed-note">overrides ${setting.shadowed.join(", ")}</span>`;
+	}
+	return (
+		`<div class="resolved-row"><span class="resolved-key">${label}</span>` +
+		`<span class="resolved-value">${setting.value ?? "—"}</span>${badge}${shadowed}</div>`
+	);
+}
+
+function renderResolvedSettings(data) {
+	const b = data.bedrock;
+	if (!b) return "";
+
+	let token = "no token yet";
+	if (b.token.present) {
+		token = `refreshed ${b.token.age_seconds}s ago`;
+		if (!b.token.stale) token += ` · valid for another ${b.token.expires_in}s`;
+	}
+
+	let creds;
+	if (b.credential_env.access_key_set || b.credential_env.secret_key_set) {
+		creds = "set in environment";
+	} else {
+		creds = "none set";
+	}
+
+	let html = `<h3 style="margin:18px 0 0;font-size:14px;">Effective configuration</h3>`;
+	html += `<div class="resolved-grid">`;
+	html += resolvedRow("Region", b.region);
+	html += resolvedRow("Profile", b.profile);
+	html +=
+		`<div class="resolved-row"><span class="resolved-key">Token</span>` +
+		`<span class="resolved-value">${token}</span>` +
+		`<span class="source-badge source-${b.token.stale ? "env" : "config"}">${b.token.stale ? "stale" : "fresh"}</span></div>`;
+	html +=
+		`<div class="resolved-row"><span class="resolved-key">Static keys</span>` +
+		`<span class="resolved-value">${creds}</span></div>`;
+	html += `</div>`;
+
+	for (const code of b.warnings || []) {
+		const text = AUTH_WARNING_TEXT[code];
+		if (text) html += `<div class="resolved-warning">${text}</div>`;
+	}
+
+	return html;
+}
+
 async function loadAuth() {
 	const res = await fetch("/api/auth/status");
 	const data = await res.json();
@@ -121,7 +181,7 @@ async function loadAuth() {
 			" OpenRouter not configured (set OPENROUTER_API_KEY).</p>";
 	}
 
-	authDiv.innerHTML = html;
+	authDiv.innerHTML = html + renderResolvedSettings(data);
 	if (preservedValue && data.awaiting_code) {
 		const input = document.getElementById("aws-code-input");
 		if (input) input.value = preservedValue;

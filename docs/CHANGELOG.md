@@ -18,18 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Cost awareness (Phase 4)**
+- **Cost awareness**
   - Models can record `input_cost` / `output_cost`, entered and stored as **dollars per 1M tokens** — the unit Bedrock and OpenRouter quote — with editable inputs in the model detail section (`models.js`)
   - `db._apply_model_costs()` converts to per-token and writes `litellm_params.input_cost_per_token` / `output_cost_per_token`, which is what LiteLLM's `cost-based-routing` actually reads, and mirrors the values into `model_info` for spend reporting without clobbering existing keys such as `supports_tool_calling`
   - The roadmap spec only called for `model_info`, which the router never consults. Its fallback cost-map lookup is a direct dict lookup that misses provider-prefixed names such as `bedrock_mantle/…` and `openai/…`, defaulting to $5/$5 ([BerriAI/litellm#35787](https://github.com/BerriAI/litellm/issues/35787)) — so an unpriced model reads as one of the most expensive in its group and is never picked, rather than as "unknown"
   - Groups page shows a per-member price chip, a "cheapest" chip on the group header, and a **no cost** warning on unpriced members while cost-based routing is active
   - `PATCH /api/models` accepts both fields; blank clears the key (via the new `db.unset_model_field()`, since TinyDB's `update()` merges and cannot delete), and non-numeric, negative, NaN/Inf and boolean values are rejected 400 before anything is written. `0.0` stays a real price rather than reading as blank
-  - **OpenRouter prices are auto-filled** when a model is picked in the add form — the catalog response already carried a `pricing` block, so this was pulled forward from Phase 8
+  - **OpenRouter prices are auto-filled** when a model is picked in the add form — the catalog response already carried a `pricing` block, so this was pulled forward from Polish
   - `GET /api/model-groups` reports the active `routing_strategy` so the dashboard knows when costs matter
   - `tests/test_model_costs.py` — 31 tests covering per-token conversion, free models, `model_info` merging, config cleanliness, PATCH validation and clearing, and the groups payload
   - `tests/test_router_settings.py` — 17 tests covering strategy normalization, round-tripping every literal, rejection, and clearing
 
-- **Groups dashboard (Phase 3)**
+- **Groups dashboard**
   - New `GET /api/model-groups` endpoint aggregating models by `model_group`, with provider display info attached to each member
   - New Groups page (`templates/partials/page_groups.html`, `src/static/js/groups.js`) listing every group, its member count, and expandable members with provider badges and context length
   - Per-member status chips derived from config only: `Ready`, `Check config`, `Not in config`. No live probing — status reflects what is actually written to `config.yaml`
@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clicking a member jumps to the Models page with that model expanded
   - Ungrouped-model summary with a shortcut to the Models page
   - `tests/test_model_groups.py` — 11 tests covering aggregation, sorting, status levels, `active_member_count`, and secret redaction
-- **Model groups with auto-failover (Phase 1)**
+- **Model groups with auto-failover**
   - New optional `model_group` field on models — when set, multiple models sharing a group form a LiteLLM failover group
   - `get_models_for_litellm()` in `db.py` now transforms `model_group` into LiteLLM's `model_name`, with prefix applied if configured
   - `PATCH /api/models/{name}` accepts `model_group` for per-model assignment
@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Inline group-name input in the model detail section
   - New Router Settings section in the Models page (strategy, fails, retries)
   - Backward compatible — models without `model_group` behave identically to before
-- **docs/ROADMAP.md** — full 8-phase development roadmap
+- **docs/ROADMAP.md** — full development roadmap
 - **docs/CHANGELOG.md** — this file
 
 ### Added

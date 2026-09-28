@@ -14,11 +14,17 @@ import pytest
 
 def _clean_import_modules():
     """Remove cached app modules so they re-initialize with fresh env vars."""
-    keys = [
-        k
-        for k in sys.modules
-        if k.startswith(("db", "management_app", "encryption_utils", "password_utils"))
-    ]
+    # settings_resolver is purged alongside db because it holds an `import db`
+    # reference — a cached module would keep pointing at the previous test's
+    # TinyDB even after db itself is re-imported.
+    prefixes = (
+        "db",
+        "management_app",
+        "encryption_utils",
+        "password_utils",
+        "settings_resolver",
+    )
+    keys = [k for k in sys.modules if k.startswith(prefixes)]
     for k in keys:
         del sys.modules[k]
 
