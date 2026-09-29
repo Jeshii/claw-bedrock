@@ -10,9 +10,15 @@ PID_FILE="/tmp/litellm.pid"
 
 # Initialize default configs if they don't exist
 init_configs() {
-    # Always copy token_refresher so it stays in sync with the image
-    if [[ -f "/app/token_refresher.py" ]]; then
-        cp "/app/token_refresher.py" "${CONFIG_DIR}/token_refresher.py"
+    # Always copy token_refresher so it stays in sync with the image.
+    #
+    # The image sets CONFIG_DIR=/app, so on a boot with no mounted config volume
+    # the destination is the source. cp exits 1 with "are the same file", and
+    # `set -e` turns that into a container that dies before starting anything.
+    local src="/app/token_refresher.py"
+    local dest="${CONFIG_DIR}/token_refresher.py"
+    if [[ -f "${src}" && "${src}" != "${dest}" ]]; then
+        cp "${src}" "${dest}"
     fi
 }
 

@@ -23,11 +23,11 @@ COPY requirements.txt requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
 
 # Copy application files
-COPY src/token_refresher.py .
-COPY src/encryption_utils.py .
-COPY src/password_utils.py .
-COPY src/db.py .
-COPY src/management_app.py .
+#
+# src/*.py rather than one COPY per module: an enumerated list silently omits
+# any module added later, and the omission only surfaces as an ImportError at
+# container boot, never in CI, since the image is never started by the build.
+COPY src/*.py .
 COPY deploy/start_container.sh .
 COPY templates ./templates
 COPY src/static ./static

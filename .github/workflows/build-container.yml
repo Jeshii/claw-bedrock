@@ -52,16 +52,37 @@ jobs:
             type=sha
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
-      - name: Build and push container image
+      # Build and load, but do not push: scripts/smoke.sh below boots this image
+      # and the push only happens once it passes. `docker build` never runs
+      # ENTRYPOINT, so a broken image is otherwise indistinguishable from a
+      # good one until it is deployed.
+      - name: Build container image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./.github/Containerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
+          # The AWS CLI and pip install layers are most of the build and change
+          # rarely, so caching them keeps a warm run to a couple of minutes.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: ./scripts/smoke.sh
+        env:
+          IMAGE: ${{ steps.meta.outputs.tags }}
+
+      - name: Push container image
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '); do
+            docker push "$tag"
+          done
 
       - name: Delete old package versions
         if: github.ref == 'refs/heads/develop'

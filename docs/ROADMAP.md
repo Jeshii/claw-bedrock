@@ -286,19 +286,48 @@ Read-and-clear was also doing double duty as the de facto reset, since nothing e
 
 **Two implementation decisions worth knowing.** `default` is excluded from `shadowed` — it is a fallback, not a choice anyone made, so "overrides config, default" is not actionable. And the endpoint reports the *refresher's* region and profile rather than the resolver's, because those are what the token was actually minted against; the resolver only classifies provenance, which makes a disagreement visible instead of silently wrong.
 
-**Deployment gap — do this first when resuming.** The commits are on `origin/develop` but the running container predates them, so `/api/auth/status` still returns the old five-key payload and `curl ... | jq .bedrock` raises `KeyError: 'bedrock'`. That is the correct symptom of old code, not a bug in the change. Rebuild and recreate:
+### Incident — container could not boot (fixed, uncommitted)
+
+**Status:** Cause found, fixed, and verified locally. **Not committed and not pushed.** The live service is still down.
+
+**Symptom.** The management UI died on startup with `ModuleNotFoundError: No module named 'settings_resolver'`, from `management_app.py:30`. Because `start_container.sh` ends in `wait ${MGMT_PID}`, the app exiting took the container with it, so port 8282 stopped serving entirely and the unit sat in its `Restart=on-failure` loop rather than running degraded.
+
+**Cause.** `.github/Containerfile` copied each Python module with its own `COPY` line, and `settings_resolver.py` was added to `src/` in `8c5ff71` without a matching line. The image built clean and every test passed. This is the second time that list lost a module — `8a9ff62` recovered `encryption_utils.py` and `password_utils.py` the same way — which is why the list was removed rather than extended.
+
+**Confirmed on the running host**, not inferred: `/app/VERSION` read `dev-4fca2c6` (HEAD, the `dev-${GITHUB_SHA::7}` build arg), and `ls /app` held exactly the five enumerated modules with no `settings_resolver.py`. The image was current, not stale, which is what the previous note on this section assumed. The unit already reads `ghcr.io/jeshii/claw-bedrock:develop`, so no unit change is needed.
+
+**What is done.**
+
+| File | Change |
+|---|---|
+| `.github/Containerfile` | Five enumerated `COPY src/*.py` lines → `COPY src/*.py .`, so a new module cannot be omitted |
+| `deploy/start_container.sh` | `init_configs()` skips the copy when source and destination are the same file. The image sets `CONFIG_DIR=/app`, so an unmounted boot ran `cp` with identical paths, `cp` exited 1 with "are the same file", and `set -euo pipefail` killed the container before either process started. Deployments never hit it because `CONFIG_DIR` points at a mounted volume |
+| `scripts/smoke.sh` | **New.** Boots the image and asserts it serves. Called by `build-container.yml` between build and push, so a broken image is never published. Honours `$CONTAINER_ENGINE`; `SKIP_BUILD=1` tests an existing image |
+| `.github/workflows/build-container.yml` | Build now `load: true` without pushing, smoke test runs, then a separate push step. Added `cache-from`/`cache-to: type=gha` — the AWS CLI and pip layers are most of the build and change rarely |
+| `tests/test_containerfile.py` | **New.** 12 tests. Static half of the same guarantee: every `src/*.py` is copied, plus `templates`/`static`/`start_container.sh` |
+| `AGENTS.md`, `docs/FILE_STRUCTURE.md`, `docs/CHANGELOG.md` | Smoke test is now part of the pre-commit loop; scratch files go in `.scratch/` |
+
+**Verified.** 210 tests pass (198 + 12). Image built with podman and confirmed to contain `settings_resolver.py`; `scripts/smoke.sh` passed end to end against it, asserting `/api/version` and `litellm_status == 200`. Reverting the Containerfile to the old enumerated list makes exactly one test fail, `test_module_is_copied[settings_resolver.py]`, and no other — so the test is specific rather than failing broadly.
+
+The health assertion is deliberately stricter than `AGENTS.md` used to state. `management_app.py:1646` returns `status: ok` whenever the probe does not *raise*, so a 404 or 500 from LiteLLM still reads as healthy; the smoke test also asserts `litellm_status == 200`.
+
+**Two things to know before resuming.**
+
+The smoke test builds for the host arch, so a local arm64 run proves the app boots but not that the published `linux/amd64` image does. The first CI run is the real check.
+
+`lint.sh` is currently red on this machine, for a reason unrelated to the above and not yet explained. `djlint` intermittently fails with `Path 'templates/' is not readable`. Ruled out so far: the permissions are correct (`os.access` returns `True` in 2000/2000 calls from fresh processes, and `ls`/`stat` agree), it fails identically at clean `HEAD` with the working tree stashed, and `ruff`, `biome`, and the lock check all pass. The pattern looks cold-start or macOS-`TCC`-related rather than repo-related — this repo sits in `~/Documents`, and an unrelated `git stash` also hit `Operation not permitted` on `.git/config` from a `com.apple.provenance` xattr. `brew doctor` is the obvious next thing to rule out, but the evidence so far does not point at Homebrew. **Nothing may be committed until this is resolved**, per the `AGENTS.md` rule.
+
+**To finish, once lint is green:** push `develop` (CI builds and smoke-tests `:develop`), then tag and push `v0.1.2`. The `latest` tag is gated on `startsWith(github.ref, 'refs/tags/v')`, which is correct as written, so tagging a `v*` release does move `latest` — currently frozen at `v0.1.1` from June simply because no newer tag has been pushed. Tagging publishes everything since that release, a history not yet audited. Then on the host:
 
 ```bash
-git pull
-podman build -t localhost/claw-bedrock:dev -f Containerfile . 2>&1 | tail -5
-systemctl --user daemon-reload && systemctl --user restart claw-bedrock
+podman pull ghcr.io/jeshii/claw-bedrock:develop
+systemctl --user restart claw-bedrock
 sleep 15
-curl -s http://127.0.0.1:8282/api/auth/status | python3 -m json.tool
+podman exec claw-bedrock ls /app | grep settings_resolver
+curl -s http://127.0.0.1:8282/api/health/litellm | python3 -m json.tool
 ```
 
-Use whichever image tag `~/.config/containers/systemd/claw-bedrock.container` actually names, or the rebuild will not be picked up. `GET /api/version` confirms which image is live.
-
-Then confirm the fix by calling the endpoint **twice** — `auth_error` must be identical both times, which is the shell-visible version of the regression test. If `warnings` contains `env_credentials_shadowed_by_profile`, that is a live confirmation of the botocore `disable_env_vars` behavior; an empty list leaves that path untested against reality until Step 2.
+Then confirm the Step 1 fix by calling `/api/auth/status` **twice** — `auth_error` must be identical both times, which is the shell-visible version of the regression test. If `warnings` contains `env_credentials_shadowed_by_profile`, that is live confirmation of the botocore `disable_env_vars` behavior; an empty list leaves that path untested against reality until Step 2.
 
 ### Step 2 — GUI Bedrock Auth Configuration
 

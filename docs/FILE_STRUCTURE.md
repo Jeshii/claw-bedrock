@@ -11,7 +11,7 @@ All files are organized into logical subdirectories, keeping only conventional r
 ```
 claw-bedrock/
 ├── .github/
-│   ├── Containerfile
+│   ├── Containerfile — the real image build; `COPY src/*.py .` so a new module cannot be omitted
 │   └── workflows/
 │       └── build-container.yml
 ├── src/
@@ -19,6 +19,7 @@ claw-bedrock/
 │   ├── encryption_utils.py
 │   ├── management_app.py
 │   ├── password_utils.py
+│   ├── settings_resolver.py
 │   ├── static/
 │   │   ├── management.css
 │   │   ├── unofficial-b52s-Regular.ttf
@@ -109,6 +110,10 @@ Deployment and container-related files:
 Developer tooling:
 - `lint.sh` — Single source of truth for the lint checks; run before committing, and run
   by CI in `.github/workflows/lint.yml`
+- `smoke.sh` — Builds the image and boots it, asserting the app imports and LiteLLM
+  reaches `status: ok` / `litellm_status: 200`. Called by CI between build and push,
+  since `docker build` never runs `ENTRYPOINT` and cannot detect an unbootable image.
+  Locally: `./scripts/smoke.sh`, or `IMAGE=<ref> SKIP_BUILD=1 ./scripts/smoke.sh`
 
 ### `.opencode/`
 Opencode-specific configuration and dependencies:
