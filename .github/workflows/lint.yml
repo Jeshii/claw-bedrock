@@ -21,8 +21,11 @@ jobs:
         with:
           persist-credentials: false
 
+      # v6 declares `runs: using: 'node24'`; v5 declared node20 and drew a
+      # deprecation warning. Not copying the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24
+      # shim that build-container.yml uses — v6 actually runs on node24.
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.14"
 
@@ -55,7 +58,7 @@ jobs:
 
       # Must match the python:3.14-slim base in .github/Containerfile.
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.14"
 

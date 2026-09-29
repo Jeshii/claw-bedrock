@@ -49,6 +49,24 @@ machine-level defaults.
   check a command against the version CI actually uses, without changing what is installed
   here: `podman run --rm -v "$PWD:/w" -w /w docker.io/library/node:22 node --test
   tests/*.test.mjs`
+- **`ubuntu-latest` becomes Ubuntu 26 on October 19, 2026.** Leaving it unpinned is
+  deliberate — do not "fix" it without reading this. Two facts make it a non-event, and
+  neither is easy to re-derive:
+  - `actions/setup-python` ships **per-Ubuntu** builds, and the version is encoded in the
+    *filename* (`python-3.14.7-linux-26.04-x64.tar.gz`), not in the `platform` field, which
+    just says `linux` and makes this easy to check wrongly. Stable **3.14.6 and 3.14.7 already
+    have `linux-26.04` builds**, so `python-version: "3.14"` resolves on the new image. To
+    re-check: fetch `actions/python-versions` `versions-manifest.json` and grep the filenames.
+  - The published image is `FROM python:3.14-slim` — Debian, and independent of the runner's
+    OS — so the migration cannot affect the container that ships.
+  Pinning `ubuntu-24.04` would trade runner security patches for determinism this repo does
+  not need, and its failure mode is a loud red job, not a silent pass. If it *does* break, the
+  honest fix is to bump the version the workflow asks for, not to freeze the image.
+- **`actions/setup-python` is on v6 for `runs: using: 'node24'`.** v5 declared node20 and drew
+  a deprecation warning on every run. Note that `build-container.yml` sets
+  `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`, which is the *shim* for the same problem — do not
+  copy it into `lint.yml`. v6 runs on node24 for real; the shim in `build-container.yml` is left
+  alone because it may still be load-bearing for the `docker/*` actions.
 - `ruff.toml` — pins `target-version = "py314"` and the explicit rule set. Regenerate the
   rule list with `ruff check --show-settings | sed -n '/linter.rules.enabled/,/^]/p'`
 - `biome.json` — excludes `templates/` and `tests/**/*.html` (Jinja `{{ }}` is unparseable by
