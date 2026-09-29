@@ -1920,11 +1920,14 @@ dialog::backdrop {
 	.playground-input-area button {
 		width: 100%;
 	}
-	/* The mic toggle has no text label, so it keeps its own width rather than
-	   stretching with the Send and Stop buttons above it. */
+	/* The mic toggle has no text label, so it sizes to its icon instead of
+	   stretching across the row with the Send and Stop buttons. `width: auto`
+	   does not do that here: in a column flex container with align-items:
+	   stretch, an auto cross-size fills the axis anyway. align-self is what
+	   actually opts out. */
 	.playground-input-area #playground-mic-btn {
-		width: auto;
-		min-width: 48px;
+		align-self: center;
+		min-width: 56px;
 		padding: 8px 14px;
 	}
 	.playground-audio-bar {

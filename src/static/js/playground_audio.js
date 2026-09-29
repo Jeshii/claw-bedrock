@@ -328,8 +328,12 @@ let spokenConsumed = 0;
 const resultSession = {
 	finalTranscript: "",
 	interimTranscript: "",
-	/** How far through this session's results we have read. */
-	seenFinalCount: 0,
+	/**
+	 * How many results have been committed as final text. Not a count of
+	 * entries *read* — see accumulateResult for why that distinction is the
+	 * whole ballgame.
+	 */
+	finalIndex: 0,
 };
 let cachedVoice = null;
 let restartHandle = null;
@@ -522,31 +526,53 @@ function afterSpeechChange() {
 }
 
 /**
- * Accumulate recognition results.
+ * Read new text out of a recognition event.
  *
- * event.results is cumulative for the life of a recognition session, and
- * resultIndex points at the first entry that changed. Both reset when the
- * session restarts, which happens on every turn here, so seenFinalCount is
- * reset with them. Without it a re-fired event would append the same final
- * transcript twice and send it doubled.
- */
-/**
- * Read new entries out of a recognition event, advancing seenFinalCount.
- *
- * Split out from handleResult so the overlap case is testable without a
- * browser: the accumulation is the fiddly part, the DOM update is not.
+ * Split out from handleResult so the accumulation is testable without a
+ * browser: it is the fiddly part, and the part that has been wrong.
  */
 function accumulateResult(session, event) {
+	// Interim text is provisional by design — it is meant to be re-read and
+	// replaced on every event — so it is taken fresh from resultIndex each time
+	// and needs no bookkeeping at all.
 	let interim = "";
-	const start = Math.max(event.resultIndex, session.seenFinalCount);
-	for (let i = start; i < event.results.length; i++) {
-		const result = event.results[i];
-		if (result.isFinal) session.finalTranscript += result[0].transcript;
-		else interim += result[0].transcript;
+	for (let i = event.resultIndex; i < event.results.length; i++) {
+		if (!event.results[i].isFinal) interim += event.results[i][0].transcript;
 	}
-	session.seenFinalCount = event.results.length;
+
+	// Finals are appended exactly once. The pointer advances only while entries
+	// really are final — NOT merely because they have been read. A browser
+	// delivers a result as interim first and then flips the same entry to
+	// isFinal, so a count of read entries has already passed it by the time the
+	// finalised text arrives, and the completed transcript is never stored. The
+	// send then goes out empty and audio mode silently does nothing, which is
+	// exactly the bug this ordering exists to prevent.
+	//
+	// Stopping at the first non-final rather than skipping ahead to any later
+	// final keeps the transcript in utterance order.
+	while (
+		session.finalIndex < event.results.length &&
+		event.results[session.finalIndex].isFinal
+	) {
+		appendFinal(session, event.results[session.finalIndex][0].transcript);
+		session.finalIndex++;
+	}
+
 	session.interimTranscript = interim;
 	return joinTranscript(session.finalTranscript, interim);
+}
+
+/**
+ * Commit one finalised result, inserting the space the browser may have
+ * omitted between two adjacent results. joinTranscript does the same job for
+ * final-plus-interim; without both, a reply reads "What istwo plustwo."
+ */
+function appendFinal(session, text) {
+	const chunk = (text || "").trim();
+	if (!chunk) return;
+	session.finalTranscript = session.finalTranscript
+		? `${session.finalTranscript.trimEnd()} ${chunk}`
+		: chunk;
 }
 
 function handleResult(event) {
@@ -603,7 +629,7 @@ function startRecognition() {
 		};
 	}
 	// Results are indexed per session, and a fresh session starts them over.
-	resultSession.seenFinalCount = 0;
+	resultSession.finalIndex = 0;
 	try {
 		recognition.start();
 		state.recognitionActive = true;
@@ -636,7 +662,7 @@ function currentTranscript() {
 function resetTranscript() {
 	resultSession.finalTranscript = "";
 	resultSession.interimTranscript = "";
-	resultSession.seenFinalCount = 0;
+	resultSession.finalIndex = 0;
 	clearInterim();
 	// Each reply restarts the chunker, since fullContent begins again from the
 	// assistant's first token. Left to run on from the previous reply, the
@@ -650,6 +676,12 @@ function sendFromTranscript() {
 		// Armed silence, not an utterance. Go back to waiting rather than
 		// bouncing a "Please enter a message" toast off a hands-free flow.
 		resetTranscript();
+		// Repaint here rather than relying on maybeRestart. onSend() has not run,
+		// so recognition was never stopped and maybeRestart bails on
+		// state.recognitionActive — which would leave the countdown's last words,
+		// "Sending in 1s", on screen indefinitely. The chip has to be corrected
+		// whether or not anything else needs doing.
+		setState("listening");
 		maybeRestart();
 		return;
 	}
@@ -741,7 +773,17 @@ function stopCountdown() {
 
 // --- public surface -------------------------------------------------------
 
-const PlaygroundAudio = {
+/**
+ * Assigned to window explicitly, like MarkdownRenderer.
+ *
+ * A top-level `const` in a classic script creates a global *lexical* binding,
+ * which is not a property of `window` — so `window.PlaygroundAudio` would be
+ * undefined and every `if (window.PlaygroundAudio)` guard in playground.js and
+ * navigation.js would quietly skip. Those guards are what made that failure
+ * invisible: the feature armed, listened and counted down, while the mic never
+ * closed on send, no reply was ever spoken, and leaving the page never disarmed.
+ */
+window.PlaygroundAudio = {
 	isSupported,
 
 	arm,

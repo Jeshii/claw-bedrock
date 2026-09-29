@@ -1,18 +1,19 @@
 /**
- * Unit tests for the pure half of src/static/js/playground_audio.js.
+ * Unit tests for src/static/js/playground_audio.js.
  *
- * Audio APIs cannot run headlessly, so this covers the two pieces of real logic
- * that carry the feature — the sentence chunker and the silence timer — plus the
- * restart gate and voice pick. Everything else in that file is a manual matrix:
- * Chrome and Safari, denied permission, no microphone, light and dark.
+ * Audio APIs cannot run headlessly, so this covers what carries the feature
+ * without a microphone: the sentence chunker, the silence timer and its grace
+ * window, the restart gate, voice pick, and transcript accumulation. Everything
+ * else is a manual matrix — Chrome and Safari, denied permission, no microphone,
+ * light and dark.
  *
  * Run with `node --test tests/`, which scripts/lint.sh does on every run.
  *
  * The source is a classic script with top-level declarations, not a module, so
- * it is loaded by evaluating the file and pulling the functions off the result.
- * `new Function` needs its DOM and Web Speech globals supplied as parameters,
- * which is what the empty stubs below are. That is also why the file guards its
- * own initialisation on `typeof document`.
+ * it is loaded by evaluating the file. `new Function` needs its DOM and Web
+ * Speech globals supplied as parameters; the pure functions are then pulled off
+ * the result. `document` is passed as undefined on purpose, which is what the
+ * file's own `typeof document` guard keys off to skip initialisation.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -33,7 +34,11 @@ const source = readFileSync(
  */
 const noDom = undefined;
 
-function load() {
+/**
+ * Evaluate the source against a given `window`, and hand back both the pure
+ * functions and that window — the tests need to inspect what the file put on it.
+ */
+function evaluate(fakeWindow) {
 	return new Function(
 		"window",
 		"document",
@@ -57,7 +62,7 @@ function load() {
 			SPEECH_MAX_CHARS,
 		};`,
 	)(
-		noDom,
+		fakeWindow,
 		noDom,
 		function SpeechSynthesisUtteranceStub() {},
 		setTimeout,
@@ -65,6 +70,13 @@ function load() {
 		setInterval,
 		clearInterval,
 	);
+}
+
+function load() {
+	// A window object is needed even for the pure tests, because the file
+	// publishes the adapter onto it at load time. `document` stays undefined so
+	// the DOM wiring does not run.
+	return evaluate({});
 }
 
 const { nextSpeechChunk, stripMarkdown } = load();
@@ -249,6 +261,52 @@ test("chunker is a no-op on empty and whitespace input", () => {
 	assert.equal(nextSpeechChunk(undefined, 0).text, null);
 });
 
+// --- public surface --------------------------------------------------------
+
+test("the adapter is published on window, not just as a lexical binding", () => {
+	// The one that nearly shipped: a top-level `const` in a classic script is a
+	// global lexical binding, NOT a property of window. Declaring the adapter
+	// that way left `window.PlaygroundAudio` undefined, so all eight
+	// `if (window.PlaygroundAudio)` call sites in playground.js and
+	// navigation.js skipped silently — no mic shutdown on send, no speech, no
+	// disarm on page leave. The guards are what made it invisible.
+	const fakeWindow = {
+		SpeechRecognition: function FakeRecognition() {},
+		speechSynthesis: { getVoices: () => [] },
+	};
+	evaluate(fakeWindow);
+
+	assert.ok(
+		fakeWindow.PlaygroundAudio,
+		"window.PlaygroundAudio must be set, or every guarded call site is dead code",
+	);
+	for (const method of [
+		"arm",
+		"disarm",
+		"toggle",
+		"onSend",
+		"onDelta",
+		"onStreamComplete",
+		"onStreamEnd",
+		"cancelSpeech",
+		"isSupported",
+	]) {
+		assert.equal(
+			typeof fakeWindow.PlaygroundAudio[method],
+			"function",
+			`window.PlaygroundAudio.${method} is called by name from playground.js`,
+		);
+	}
+});
+
+test("an unsupported browser reports false rather than throwing", () => {
+	// Firefox has no SpeechRecognition. isSupported() gates the mic button, and
+	// arm() has to be safe to call either way.
+	const fakeWindow = { speechSynthesis: { getVoices: () => [] } };
+	evaluate(fakeWindow);
+	assert.equal(fakeWindow.PlaygroundAudio.isSupported(), false);
+});
+
 // --- transcript assembly ---------------------------------------------------
 
 test("final and interim text join with a space", () => {
@@ -262,35 +320,128 @@ test("final and interim text join with a space", () => {
 	assert.equal(joinTranscript("", ""), "");
 });
 
+/** The session shape the adapter keeps, fresh for one test. */
+function newSession() {
+	return { finalTranscript: "", interimTranscript: "", finalIndex: 0 };
+}
+
+/** A browser's cumulative results list, with the given [text, isFinal] pairs. */
+function resultList(...entries) {
+	return entries.map(([transcript, isFinal]) => ({
+		0: { transcript },
+		isFinal,
+	}));
+}
+
+test("a result that finalises after being interim still reaches the transcript", () => {
+	// The regression. A browser delivers a result as interim first and then
+	// flips the *same entry* to isFinal. If the append pointer advances past an
+	// entry merely because it was read, the completed text is never stored, the
+	// send goes out empty, and audio mode silently does nothing.
+	const { accumulateResult } = load();
+	const session = newSession();
+	const results = resultList(["what is", false]);
+
+	// First event: interim only. Nothing can be committed yet.
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }),
+		"what is",
+		"the interim text is shown while it is still provisional",
+	);
+	assert.equal(
+		session.finalTranscript,
+		"",
+		"provisional text must not be committed",
+	);
+
+	// The same entry, now final. This is the event that carries the answer.
+	results[0].isFinal = true;
+	results[0][0].transcript = "what is two plus two";
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }),
+		"what is two plus two",
+	);
+	assert.equal(
+		session.finalTranscript,
+		"what is two plus two",
+		"the finalised text must be committed, or there is nothing to send",
+	);
+});
+
 test("a re-fired result event does not double the transcript", () => {
 	// recognition.results is cumulative and resultIndex marks the first changed
 	// entry, so a browser may deliver an event whose window overlaps one already
-	// read. seenFinalCount is what stops "hello" becoming "hellohello".
+	// read. The append pointer is what stops "hello" becoming "hellohello".
 	const { accumulateResult } = load();
-	// The session is a plain object with the same shape the adapter keeps.
-	const session = {
-		finalTranscript: "",
-		interimTranscript: "",
-		seenFinalCount: 0,
-	};
-	const results = [{ 0: { transcript: "hello" }, isFinal: true }];
+	const session = newSession();
+	const results = resultList(["hello", true]);
 
 	assert.equal(accumulateResult(session, { results, resultIndex: 0 }), "hello");
 	// The same event again — must not append.
 	assert.equal(accumulateResult(session, { results, resultIndex: 0 }), "hello");
-	// A genuinely new result appends.
-	results.push({ 0: { transcript: " world" }, isFinal: true });
+	// A genuinely new result appends, spaced even though the browser omitted it.
+	results.push(resultList(["world", true])[0]);
 	assert.equal(
 		accumulateResult(session, { results, resultIndex: 1 }),
 		"hello world",
 	);
-	// A session restart resets the counter, so the same text is heard again.
-	session.seenFinalCount = 0;
+	// A session restart resets the pointer, so the same text is heard again.
+	session.finalIndex = 0;
 	session.finalTranscript = "";
 	session.interimTranscript = "";
 	assert.equal(
 		accumulateResult(session, { results, resultIndex: 0 }),
 		"hello world",
+	);
+});
+
+test("two results finalising together are appended in order, once each", () => {
+	const { accumulateResult } = load();
+	const session = newSession();
+	const results = resultList(["First part. ", false]);
+
+	accumulateResult(session, { results, resultIndex: 0 });
+	assert.equal(
+		session.finalTranscript,
+		"",
+		"still provisional, nothing committed",
+	);
+
+	// The browser finalises it, and a second result finalises in the same event.
+	// Browsers finalise in utterance order, so both are contiguous and commit
+	// together — in order, which is why the pointer stops at the first entry
+	// that is not final rather than skipping ahead to any later one.
+	results[0].isFinal = true;
+	results.push(resultList(["Second part.", true])[0]);
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }),
+		"First part. Second part.",
+	);
+	assert.equal(session.finalIndex, 2, "both entries accounted for");
+
+	// Re-firing must not duplicate either.
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }),
+		"First part. Second part.",
+	);
+});
+
+test("adjacent final results are spaced even when the browser omits whitespace", () => {
+	const { accumulateResult } = load();
+	const session = newSession();
+	const results = resultList(
+		["What is", true],
+		["two plus", true],
+		["two.", true],
+	);
+
+	accumulateResult(session, { results, resultIndex: 0 });
+	accumulateResult(session, { results, resultIndex: 1 });
+	accumulateResult(session, { results, resultIndex: 2 });
+	assert.equal(
+		session.finalTranscript,
+		"What is two plus two.",
+		"one commit, one space between — not 'What istwo plustwo.'",
 	);
 });
 
