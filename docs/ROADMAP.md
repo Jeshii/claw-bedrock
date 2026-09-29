@@ -17,16 +17,21 @@ been dishonest. This list is the ordering.
 | 2 | Playground V1 (Session-Scoped Chat) | Complete | — |
 | 3 | Groups Dashboard | Complete | Core Model Grouping |
 | 4 | Cost Awareness | Complete | Core Model Grouping |
-| 5 | **Bedrock Auth Configuration** | **Next** | — |
+| 5 | **Bedrock Auth Configuration** | **In progress** — step 1 of 3 shipped | — |
 | 6 | Skills Library V1 (Browse / Manage) | Planned | — |
 | 7 | Playground V2 (Persistent Conversations) | Planned | Playground V1 |
 | 8 | Skills Library V2 (MCP Integration) | Planned | Skills Library V1 |
 | 9 | Polish & Everything Else | Planned | varies — see table |
 
-**Bedrock Auth Configuration is next.** It is independent of the skills-library
-and playground-conversation threads, and it unblocks a live problem: the Bedrock
-auth surface currently collects configuration that does nothing and reports
-status that is not accurate. Everything below it is unaffected by doing it first.
+**Bedrock Auth Configuration is the active workstream.** It is independent of
+the skills-library and playground-conversation threads, and it addresses a live
+problem: the Bedrock auth surface collects configuration that does nothing and
+reported status that was not accurate. Everything below it is unaffected by
+finishing it first.
+
+Resume here. The immediate task is not code — it is rebuilding the container so
+Step 1's changes are actually running, then confirming the auth-error fix from
+the shell. See the Step 1 section for the commands.
 
 ---
 
@@ -244,7 +249,7 @@ OpenRouter's model catalog already returned a `pricing` block (`prompt` / `compl
 
 ## Bedrock Auth Configuration
 
-**Status:** Not started. Delivered in three steps; the first is next.
+**Status:** Step 1 shipped but unverified in the running container. Steps 2 and 3 not started.
 
 **Goal:** Make the Bedrock auth surface tell the truth, then move auth configuration out of dead form fields and into settings that actually take effect. The governing principle: **the GUI is the friendly space, environment variables are expert mode.** Anything the GUI can own, it should; anything the environment owns, the GUI yields to and warns about.
 
@@ -259,19 +264,41 @@ The Bedrock provider form currently asks for three AWS fields. Investigation fou
 
 Auth actually comes from the token refresher, entirely out of band: `AWS_PROFILE` + `AWS_REGION` → `boto3.Session(...)` → `get_token()` → `os.environ["BEDROCK_MANTLE_API_KEY"]`. The provider record plays no part.
 
-### Step 1 — Auth Status Truth (next)
+### Step 1 — Auth Status Truth ✅
 
-Read-only. No behavior change.
+**Status:** Code complete and pushed (`8c5ff71`, `8a75317`, `7b8858e`, `a10c0df`). 198 tests pass, lint clean. **Not yet verified against the running container** — see below.
+
+Read-only with respect to configuration: nothing about how auth works changed, only what the app reports about it.
 
 | File | Change |
 |---|---|
-| `src/settings_resolver.py` | **New.** `resolve(name, *, flag, default)` walks flag → env → config → default, returns `(value, source, shadowed)`. One resolver so precedence cannot drift between the engine and the warning badges |
-| `src/management_app.py` | Extend `GET /api/auth/status` with a `bedrock` block: region, profile, credential source, token presence/age/expiry, `needs_login`. All existing keys preserved |
-| `src/token_refresher.py` | Split `get_auth_error()` into peek and clear; add a shared `auth_status_payload()` used by both the management endpoint and the proxy's `/auth/status` |
-| `src/static/js/auth.js` | Render the `bedrock` block — source badges, token age, credential note |
-| `templates/partials/page_auth.html` | Container for the resolved-settings display |
+| `src/settings_resolver.py` | **New.** `resolve()` walks flag → env → config → default, returns `(value, source, shadowed)`. One resolver so precedence cannot drift between the engine and the warning badges |
+| `src/management_app.py` | Extended `GET /api/auth/status` with a `bedrock` block. All five keys the auth UI depends on preserved |
+| `src/token_refresher.py` | `peek_auth_error()` replaces the read-and-clear accessor; `_auth_error` now cleared on successful refresh and at the start of a retry; shared `auth_status_payload()` for both status endpoints |
+| `src/static/js/auth.js` | Renders the `bedrock` block with source badges; warning codes mapped to prose in JS |
+| `src/static/management.css` | `.resolved-*` and `.source-badge` styles |
+| `tests/test_settings_resolver.py` | **New.** 21 tests — precedence, blank-value handling, namespacing, statelessness |
+| `tests/test_auth_status.py` | **New.** 30 tests — response shape, provenance, token arithmetic, error lifecycle, no credential leakage |
 
-**The bug this fixes.** `get_auth_error()` is read-and-clear (`token_refresher.py:460-464`, the docstring says so) and `management_app.py:320` calls it inside the status endpoint, while `auth.js` re-polls every **1 second** during the login flow. A login error can therefore be consumed by a poll before it is ever displayed. The proxy's own `/auth/status` reads `self._auth_error` directly and does not drain it — two status endpoints with divergent semantics, one of them destructive.
+**The bug this fixed.** `get_auth_error()` was read-and-clear (`token_refresher.py:460-464`, the docstring said so) and `management_app.py` called it from inside the status endpoint, while `auth.js` re-polls every **1 second** during the login flow. An error could be consumed by a poll before it was ever displayed. The proxy's own `/auth/status` read `self._auth_error` directly and did not drain it — two status endpoints with divergent semantics, one destructive.
+
+Read-and-clear was also doing double duty as the de facto reset, since nothing else cleared `_auth_error`. Peeking alone would have left a stale error on the page forever, so the clear moved to the two points where the error genuinely stops being true.
+
+**Two implementation decisions worth knowing.** `default` is excluded from `shadowed` — it is a fallback, not a choice anyone made, so "overrides config, default" is not actionable. And the endpoint reports the *refresher's* region and profile rather than the resolver's, because those are what the token was actually minted against; the resolver only classifies provenance, which makes a disagreement visible instead of silently wrong.
+
+**Deployment gap — do this first when resuming.** The commits are on `origin/develop` but the running container predates them, so `/api/auth/status` still returns the old five-key payload and `curl ... | jq .bedrock` raises `KeyError: 'bedrock'`. That is the correct symptom of old code, not a bug in the change. Rebuild and recreate:
+
+```bash
+git pull
+podman build -t localhost/claw-bedrock:dev -f Containerfile . 2>&1 | tail -5
+systemctl --user daemon-reload && systemctl --user restart claw-bedrock
+sleep 15
+curl -s http://127.0.0.1:8282/api/auth/status | python3 -m json.tool
+```
+
+Use whichever image tag `~/.config/containers/systemd/claw-bedrock.container` actually names, or the rebuild will not be picked up. `GET /api/version` confirms which image is live.
+
+Then confirm the fix by calling the endpoint **twice** — `auth_error` must be identical both times, which is the shell-visible version of the regression test. If `warnings` contains `env_credentials_shadowed_by_profile`, that is a live confirmation of the botocore `disable_env_vars` behavior; an empty list leaves that path untested against reality until Step 2.
 
 ### Step 2 — GUI Bedrock Auth Configuration
 
