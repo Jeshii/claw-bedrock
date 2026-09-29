@@ -52,12 +52,19 @@ def test_env():
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+# The Bedrock auth fields (aws_region, aws_access_key_env,
+# aws_secret_key_env) were retired: they collected configuration no runtime code
+# read, and region is now a global setting. Tests that need to exercise the
+# migration seed them explicitly rather than carrying them as the default.
 BEDROCK_DEFAULT = {
     "name": "bedrock",
     "display_name": "Bedrock (Mantle)",
     "type": "bedrock",
     "color": "#FF9900",
     "notes": "AWS Bedrock via Mantle",
+}
+
+LEGACY_BEDROCK_FIELDS = {
     "aws_region": "us-east-1",
     "aws_access_key_env": "AWS_ACCESS_KEY_ID",
     "aws_secret_key_env": "AWS_SECRET_ACCESS_KEY",
@@ -113,7 +120,6 @@ class TestMetadataEdits:
         data = resp.json()
         assert data["provider"]["color"] == "#00FF00"
         assert data["provider"]["display_name"] == "Bedrock (Mantle)"
-        assert data["provider"]["aws_region"] == "us-east-1"
 
     def test_notes_update(self, test_env):
         """Editing notes does not change other fields."""
@@ -192,7 +198,9 @@ class TestApiKeySemantics:
         assert resp.status_code == 200
         data = resp.json()
         assert data["provider"].get("api_key") is None
-        # has_api_key remains True because bedrock still has aws_access_key_env / aws_secret_key_env
+        # has_api_key is derived from api_key alone (db.sanitize_provider_for_response),
+        # so it reads False here. The comment claiming the retired
+        # aws_access_key_env / aws_secret_key_env fields kept it True was wrong.
 
         raw = get_provider_by_name(db_mod, "bedrock")
         assert raw.get("api_key") is None
@@ -286,32 +294,93 @@ class TestRuntimeFieldEdits:
         raw = get_provider_by_name(db_mod, "norb-test")
         assert raw["api_base"] == "http://fail-host:9999/v1"
 
-    def test_edit_aws_region(self, test_env, monkeypatch):
-        """Editing a Bedrock provider's region is persisted."""
-        client, _, db_mod = test_env
+    def test_bedrock_auth_fields_are_rejected(self, test_env):
+        """The retired auth fields are no longer writable.
 
-        import requests as req_mod
+        They were accepted, stored, rendered and round-tripped while no runtime
+        code read them, so accepting them kept the illusion alive. A 400 names
+        the field rather than silently ignoring it.
+        """
+        client, *_ = test_env
+        for field in LEGACY_BEDROCK_FIELDS:
+            resp = client.put(
+                "/api/providers/bedrock",
+                json={field: "eu-west-1" if field == "aws_region" else "SOMETHING"},
+            )
+            assert resp.status_code == 400, field
+            assert field in resp.json()["detail"]
 
-        class MockOK:
-            status_code = 200
-            ok = True
+    def test_dead_fields_stripped_on_read(self, test_env):
+        """A stored provider carrying the retired fields never returns them."""
+        client, db_mod = test_env[0], test_env[2]
+        db_mod._upsert_provider_raw({**BEDROCK_DEFAULT, **LEGACY_BEDROCK_FIELDS})
 
-            def json(self):
-                return {}
+        detail = client.get("/api/providers/bedrock").json()["provider"]
+        for field in LEGACY_BEDROCK_FIELDS:
+            assert field not in detail
 
-        monkeypatch.setattr(req_mod, "post", lambda *a, **kw: MockOK())
+        listed = client.get("/api/providers").json()["providers"]
+        bedrock = next(p for p in listed if p["name"] == "bedrock")
+        for field in LEGACY_BEDROCK_FIELDS:
+            assert field not in bedrock
 
-        resp = client.put(
-            "/api/providers/bedrock",
-            json={"aws_region": "eu-west-1"},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["provider"]["aws_region"] == "eu-west-1"
-        assert data["runtime_changed"] is True
+    def test_dead_fields_stripped_on_write(self, test_env):
+        """A POST replaying the retired fields cannot reintroduce them."""
+        db_mod = test_env[2]
+        db_mod.upsert_provider({**BEDROCK_DEFAULT, **LEGACY_BEDROCK_FIELDS})
+        raw = get_provider_by_name(db_mod, "bedrock")
+        for field in LEGACY_BEDROCK_FIELDS:
+            assert field not in raw
+
+    def test_migration_removes_dead_fields_without_seeding_region(self, test_env):
+        """The migration drops the fields and seeds nothing in their place.
+
+        `aws_region` was inert for its whole life, so its value is not evidence
+        of an operator's current intent and is deliberately not carried into the
+        global region setting.
+        """
+        _, db_mod = test_env[0], test_env[2]
+        db_mod._upsert_provider_raw({**BEDROCK_DEFAULT, **LEGACY_BEDROCK_FIELDS})
+
+        removed = db_mod.migrate_dead_bedrock_fields()
+        assert removed == len(LEGACY_BEDROCK_FIELDS)
 
         raw = get_provider_by_name(db_mod, "bedrock")
-        assert raw["aws_region"] == "eu-west-1"
+        for field in LEGACY_BEDROCK_FIELDS:
+            assert field not in raw
+        assert db_mod.get_setting(db_mod.BEDROCK_REGION_SETTING) is None
+
+    def test_migration_is_idempotent(self, test_env):
+        _, db_mod = test_env[0], test_env[2]
+        db_mod._upsert_provider_raw({**BEDROCK_DEFAULT, **LEGACY_BEDROCK_FIELDS})
+        assert db_mod.migrate_dead_bedrock_fields() == len(LEGACY_BEDROCK_FIELDS)
+        assert db_mod.migrate_dead_bedrock_fields() == 0
+
+    def test_bedrock_config_uses_aws_region_name(self, test_env, monkeypatch):
+        """Region reaches LiteLLM under the key it actually reads.
+
+        The old code wrote `litellm_params["aws_region"]`, which LiteLLM's
+        GenericLiteLLMParams does not declare — it is silently dropped, so the
+        field looked functional and did nothing.
+        """
+        client, db_mod = test_env[0], test_env[2]
+        monkeypatch.setenv("AWS_REGION", "eu-central-1")
+
+        client.post(
+            "/api/models",
+            json={
+                "model_name": "bedrock-test-model",
+                "litellm_params": {"model": "bedrock_mantle/claude-haiku-4-5"},
+                "provider": "bedrock",
+            },
+        )
+
+        merged = db_mod.get_models_for_litellm()
+        entry = next(
+            m for m in merged["model_list"] if m["model_name"] == "bedrock-test-model"
+        )
+        assert entry["litellm_params"]["aws_region_name"] == "eu-central-1"
+        assert "aws_region" not in entry["litellm_params"]
 
 
 class TestConfigMerge:
@@ -434,7 +503,6 @@ class TestSanitization:
     SENSITIVE_PATTERNS: ClassVar[list[str]] = [
         "api_key",
         "secret_key",
-        "aws_secret_key_env",
     ]
 
     def _check_no_secrets(self, obj, path=""):
@@ -444,7 +512,7 @@ class TestSanitization:
                     any(p in k.lower() for p in self.SENSITIVE_PATTERNS)
                     and isinstance(v, str)
                     and len(v) > 0
-                    and k not in ("has_api_key", "aws_secret_key_env")
+                    and k != "has_api_key"
                 ):
                     pytest.fail(f"Secret leaked at {path}.{k}={v!r}")
                 self._check_no_secrets(v, f"{path}.{k}")
@@ -801,15 +869,15 @@ class TestApiBaseNormalization:
         self._make_openai_provider(db_mod, "p7", "http://host:1234")
         assert self._normalize(db_mod, "p7", "") == "http://host:1234/v1"
 
-    def test_bedrock_type_untouched(self, test_env):
+    def test_bedrock_type_gets_no_api_base(self, test_env):
+        """Bedrock providers must never receive an api_base.
+
+        BUGS.md #10: an explicit api_base on the bedrock surface overrides
+        litellm's per-model path derivation, and one base cannot serve both /v1
+        and /openai/v1. Only `type: "openai-compatible"` gets api_base merged.
+        """
         _, _, db_mod = test_env
-        db_mod.upsert_provider(
-            {
-                "name": "bedrock-test",
-                "type": "bedrock",
-                "aws_region": "us-east-1",
-            }
-        )
+        db_mod.upsert_provider({"name": "bedrock-test", "type": "bedrock"})
         model = {
             "provider": "bedrock-test",
             "litellm_params": {"model": "anthropic.claude-v3"},
@@ -817,3 +885,23 @@ class TestApiBaseNormalization:
         result = db_mod._merge_provider_defaults(model, {})
         assert result is not None
         assert "api_base" not in result
+
+    def test_bedrock_region_comes_from_the_global_setting(self, test_env, monkeypatch):
+        """The retired per-provider field is not a fallback for the global one."""
+        _, _, db_mod = test_env
+        db_mod.upsert_provider(
+            {
+                "name": "bedrock-test",
+                "type": "bedrock",
+                # Stripped on write, so it cannot influence config generation.
+                "aws_region": "eu-central-1",
+            }
+        )
+        monkeypatch.setenv("AWS_REGION", "ap-south-1")
+        model = {
+            "provider": "bedrock-test",
+            "litellm_params": {"model": "anthropic.claude-v3"},
+        }
+        result = db_mod._merge_provider_defaults(model, {})
+        assert result["aws_region_name"] == "ap-south-1"
+        assert "aws_region" not in result

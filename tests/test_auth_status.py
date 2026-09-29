@@ -101,6 +101,7 @@ class TestBackwardCompatibility:
             "region",
             "profile",
             "token",
+            "static_keys",
             "credential_env",
             "warnings",
         }
@@ -265,18 +266,29 @@ class TestCredentialWarnings:
         mp.setenv("AWS_PROFILE", "my-profile")
         assert _status(client)["bedrock"]["warnings"] == []
 
-    def test_warning_when_profile_shadows_static_keys(self, test_env):
+    def test_env_keys_alongside_profile_are_not_shadowed(self, test_env):
+        """Env keys are honoured even when AWS_PROFILE is set.
+
+        Step 1 shipped a warning here, because `_get_valid_session` always
+        passed `profile_name`, which makes botocore set `disable_env_vars` and
+        drop the EnvProvider — so the keys were set but inert. Step 2 fixes the
+        cause (`_build_session` omits the profile when credentials are
+        available), which makes the warning false. Asserting its absence is
+        deliberate: the condition it described no longer exists, and re-adding
+        it would report a lie on every install with both set.
+        """
         client, _db, _r, mp = test_env
         mp.setenv("AWS_PROFILE", "my-profile")
         mp.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
-        codes = _status(client)["bedrock"]["warnings"]
-        assert codes == ["env_credentials_shadowed_by_profile"]
+        mp.setenv("AWS_SECRET_ACCESS_KEY", "secret-value")
+        assert _status(client)["bedrock"]["warnings"] == []
 
-    def test_no_warning_for_keys_alone(self, test_env):
-        """With no profile, boto3 does read the env keys — nothing to warn about."""
+    def test_env_keys_alone_reported_as_present(self, test_env):
         client, _db, _r, mp = test_env
         mp.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
         mp.setenv("AWS_SECRET_ACCESS_KEY", "secret-value")
+        creds = _status(client)["bedrock"]["credential_env"]
+        assert creds == {"access_key_set": True, "secret_key_set": True}
         assert _status(client)["bedrock"]["warnings"] == []
 
     def test_blank_profile_does_not_trip_the_warning(self, test_env):
@@ -284,6 +296,38 @@ class TestCredentialWarnings:
         mp.setenv("AWS_PROFILE", "   ")
         mp.setenv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE")
         assert _status(client)["bedrock"]["warnings"] == []
+
+    def test_incomplete_stored_key_pair_warns(self, test_env):
+        """Half a key pair cannot authenticate; say so rather than trying."""
+        client, db_mod, _r, _mp = test_env
+        db_mod.set_secret_setting(db_mod.BEDROCK_ACCESS_KEY_SETTING, "AKIAEXAMPLE")
+        state = _status(client)["bedrock"]
+        assert state["static_keys"]["configured"] is False
+        assert state["static_keys"]["state"] == "incomplete"
+        assert "incomplete_static_key_pair" in state["warnings"]
+
+    def test_undecryptable_stored_credentials_warn(self, test_env):
+        """A key pair restored under a different ENCRYPTION_KEY is reported.
+
+        decrypt_data returns its input unchanged on failure, so without this the
+        raw Fernet ciphertext would be handed to boto3 as a secret and read as a
+        plausible credential. See BUGS.md #8.
+        """
+        client, db_mod, _r, _mp = test_env
+        db_mod.set_setting(db_mod.BEDROCK_ACCESS_KEY_SETTING, "not-a-fernet-token")
+        state = _status(client)["bedrock"]
+        assert state["static_keys"]["configured"] is False
+        assert "stored_credentials_undecryptable" in state["warnings"]
+
+    def test_static_keys_report_presence_only(self, test_env):
+        """No part of the key pair is echoed back, not even a masked prefix."""
+        client, db_mod, _r, _mp = test_env
+        db_mod.set_secret_setting(db_mod.BEDROCK_ACCESS_KEY_SETTING, "AKIAEXAMPLE")
+        db_mod.set_secret_setting(db_mod.BEDROCK_SECRET_KEY_SETTING, "wJalrEXAMPLE")
+        blob = json.dumps(_status(client))
+        assert "AKIAEXAMPLE" not in blob
+        assert "wJalrEXAMPLE" not in blob
+        assert _status(client)["bedrock"]["static_keys"]["configured"] is True
 
     def test_secret_values_never_appear_in_the_response(self, test_env):
         client, _db, _r, mp = test_env

@@ -13,8 +13,6 @@ import os
 from dataclasses import dataclass
 from typing import Literal
 
-import db
-
 Source = Literal["flag", "env", "config", "default"]
 
 #: Precedence order. Index 0 wins.
@@ -71,6 +69,12 @@ def resolve(
     verbatim from a restored backup, so reusing an env var name as a config key
     would invite collisions.
     """
+    # Imported per call rather than at module scope. `db` opens its TinyDB file
+    # at import, and callers that reload the module set (the test suite does, to
+    # isolate CONFIG_DIR) would otherwise leave this module holding a reference
+    # to a closed file.
+    import db  # local import keeps this module free of import-order coupling
+
     config_value = db.get_setting(config_key) if config_key else None
 
     layers: dict[Source, object] = {

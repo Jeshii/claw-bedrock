@@ -5,6 +5,7 @@ Run from project root:
 """
 
 import asyncio
+import os
 import threading
 import time
 
@@ -30,7 +31,173 @@ def _bare_refresher():
     r._profile = "test-profile"
     r._region = "ap-northeast-1"
     r._generator = None
+    r._access_key_id = ""
+    r._secret_access_key = ""
+    r._auth_error = None
     return r
+
+
+# --- _build_session: the profile_name pivot ----------------------------
+
+
+class TestBuildSession:
+    """`profile_name` decides whether env credentials are readable at all.
+
+    botocore sets `disable_env_vars` whenever a profile is passed explicitly
+    (`credentials.py:95`) and then removes the EnvProvider from the chain, so
+    passing a profile made AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+    set-but-inert on every install. Omitting the profile is the only way to
+    reach them, and boto3.Session only does that when profile_name is None
+    (`session.py:81-82`).
+    """
+
+    def test_profile_passed_when_no_key_pair(self, monkeypatch):
+        r = _bare_refresher()
+        captured = {}
+
+        def fake_session(**kwargs):
+            captured.update(kwargs)
+            return "session"
+
+        monkeypatch.setattr(tr.boto3, "Session", fake_session)
+        r._build_session()
+
+        assert captured["profile_name"] == "test-profile"
+        assert captured["region_name"] == "ap-northeast-1"
+        assert "aws_access_key_id" not in captured
+
+    def test_profile_omitted_when_key_pair_configured(self, monkeypatch):
+        """The regression this fixes: keys passed explicitly, profile omitted."""
+        r = _bare_refresher()
+        r._access_key_id = "AKIAEXAMPLE"
+        r._secret_access_key = "wJalrEXAMPLE"
+        captured = {}
+
+        def fake_session(**kwargs):
+            captured.update(kwargs)
+            return "session"
+
+        monkeypatch.setattr(tr.boto3, "Session", fake_session)
+        r._build_session()
+
+        assert captured["aws_access_key_id"] == "AKIAEXAMPLE"
+        assert captured["aws_secret_access_key"] == "wJalrEXAMPLE"
+        # The kwarg must be absent. boto3.Session treats an explicit None and an
+        # omitted argument the same (`session.py:81-82` only calls
+        # set_config_variable when profile_name is not None), but asserting
+        # absence is what pins the behaviour: a future edit that passes
+        # `profile_name=self._profile` unconditionally is the bug returning.
+        assert "profile_name" not in captured
+
+    def test_half_a_key_pair_still_uses_the_profile(self, monkeypatch):
+        """One half cannot authenticate, so it must not displace the profile."""
+        r = _bare_refresher()
+        r._access_key_id = "AKIAEXAMPLE"
+        captured = {}
+
+        monkeypatch.setattr(
+            tr.boto3, "Session", lambda **kw: captured.update(kw) or "session"
+        )
+        r._build_session()
+
+        assert captured["profile_name"] == "test-profile"
+
+
+# --- configure() -------------------------------------------------------
+
+
+class TestConfigure:
+    """configure() is what makes the settings card live without a restart."""
+
+    def test_rebuilds_session_on_region_change(self, monkeypatch):
+        """The new region must reach the session that mints the token.
+
+        configure() delegates to _refresh, which calls _build_session; this
+        exercises the whole chain with only the token generator stubbed, because
+        the link worth pinning is region -> session, not that _refresh runs.
+        """
+        r = _bare_refresher()
+        sessions = []
+
+        class FakeSession:
+            def __init__(self):
+                sessions.append(r._region)
+
+            def get_credentials(self):
+                return object()
+
+        monkeypatch.setattr(tr.boto3, "Session", lambda **kw: FakeSession())
+        monkeypatch.setattr(
+            r, "_generator", type("G", (), {"get_token": lambda *a: "tok"})()
+        )
+
+        assert r.configure(region="eu-west-1") is True
+        assert r._region == "eu-west-1"
+        assert sessions == ["eu-west-1"]
+        assert os.environ["BEDROCK_MANTLE_API_KEY"] == "tok"
+
+    def test_drops_stale_token_before_refresh(self, monkeypatch):
+        """A failed refresh must not leave the previous token looking current."""
+        r = _bare_refresher()
+        r._fetched_at = time.time()
+        r._needs_login = True
+        r._auth_error = "stale failure"
+        monkeypatch.setattr(r, "_refresh", lambda **kw: False)
+
+        assert r.configure(region="eu-west-1") is False
+        assert r._fetched_at == 0
+        assert r._needs_login is False
+        assert r._auth_error is None
+
+    def test_forced_refresh_bypasses_coalescing(self, monkeypatch):
+        """A deliberate reconfigure must not be absorbed by a recent attempt."""
+        r = _bare_refresher()
+        r._last_refresh_attempt = time.time()
+        seen = {}
+
+        def fake_refresh(force=False, coalesce=True):
+            seen["force"] = force
+            seen["coalesce"] = coalesce
+            return True
+
+        monkeypatch.setattr(r, "_refresh", fake_refresh)
+        r.configure(region="eu-west-1")
+
+        assert seen == {"force": True, "coalesce": False}
+
+    def test_no_change_skips_refresh(self, monkeypatch):
+        r = _bare_refresher()
+        r._fetched_at = time.time()
+        monkeypatch.setattr(
+            r, "_refresh", lambda **kw: pytest.fail("refresh should be skipped")
+        )
+
+        assert r.configure(region=r._region, profile=r._profile) is True
+
+    def test_clearing_key_pair_returns_to_profile(self, monkeypatch):
+        """Clearing the pair must hand control back to the SSO profile."""
+        r = _bare_refresher()
+        r._access_key_id = "AKIAEXAMPLE"
+        r._secret_access_key = "wJalrEXAMPLE"
+        captured = {}
+
+        def fake_session(**kwargs):
+            captured.update(kwargs)
+            return _FakeSession()
+
+        monkeypatch.setattr(tr.boto3, "Session", fake_session)
+        monkeypatch.setattr(
+            r, "_generator", type("G", (), {"get_token": lambda *a: "tok"})()
+        )
+
+        assert r.configure(access_key_id="", secret_access_key="") is True
+        assert r._access_key_id == ""
+        assert captured["profile_name"] == r._profile
+
+
+class _FakeSession:
+    def get_credentials(self):
+        return object()
 
 
 # --- _is_expired_error -------------------------------------------------

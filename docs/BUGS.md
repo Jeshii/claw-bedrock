@@ -73,6 +73,23 @@ unrelated error that happens to contain the word "expired".
 
 ## 10. BEDROCK_MANTLE_API_BASE overrides per-model path selection, misrouting half the catalog
 
+> **Correction (Step 2).** An earlier revision of this entry also claimed
+> "`bedrock_mantle` exposes no OpenAI-compatible `/models` endpoint". That was
+> wrong, and wrong in a way that mattered: it made model discovery look
+> impossible and pushed a UI workaround into the codebase. Verified against the
+> live endpoint:
+>
+> ```
+> GET https://bedrock-mantle.us-east-1.api.aws/v1/models         -> 401 (exists; wants a bearer token)
+> GET https://bedrock-mantle.us-east-1.api.aws/openai/v1/models  -> 404
+> ```
+>
+> Discovery exists at `/v1/models` and takes the same `BEDROCK_MANTLE_API_KEY`
+> the proxy uses. The 404 on `/openai/v1/models` is the real constraint, and it
+> is a different one: the gpt-5.x, gpt-6-\*, gemma-4-\* and grok-4.x families are
+> served on `/openai/v1`, so **a fetched list will not contain them**. Discovery
+> can therefore supplement manual entry but must never replace it.
+
 `BEDROCK_MANTLE_API_BASE` looks like a harmless region hint, but it takes precedence over
 per-model path derivation. In litellm's
 `llms/bedrock_mantle/chat/transformation.py`:
@@ -104,10 +121,6 @@ precedence). The 42 `bedrock_mantle/*` models split cleanly: gpt-5.x, gpt-6-*, g
 grok-4.x use `/openai/v1`; claude-haiku-4-5, deepseek, kimi, qwen and gpt-oss use `/v1`. A
 single hardcoded base cannot express that mix.
 
-Also note `bedrock_mantle` exposes no OpenAI-compatible `/models` endpoint, so the UI's
-generic "Poll Models" (`src/static/js/models.js:522`) 404s for this provider regardless of
-configuration. Model discovery has to come from the price map or hand entry.
-
 ### The override is all-or-nothing on the OpenAI surface
 
 The same variable means two different things depending on which surface reads it:
@@ -135,3 +148,50 @@ The variable exists for non-public endpoints: the docstring at
 endpoints", and `MANTLE_HOST_RE` (`common_utils.py:32`) matches any region including
 `us-gov-*`. Region falls back to `AWS_REGION` when the variable is unset
 (`common_utils.py:43-52`).
+
+## 11. LiteLLM's log is not in `podman logs`, which sent a diagnosis down a dead end
+
+`start_container.sh:56` redirects LiteLLM's stdout and stderr:
+
+```bash
+litellm --config "${CONFIG_PATH}" --port 4000 --host 0.0.0.0 > "${CONFIG_DIR}/litellm.log" 2>&1 &
+```
+
+So **LiteLLM's output only ever appears in `${CONFIG_DIR}/litellm.log`** (`/config/litellm.log`
+on a normal deployment). `podman logs` shows the management UI and the entrypoint's own echo,
+and will *never* contain `Uvicorn running on ...:4000` or a LiteLLM traceback. The management
+UI's `exec > >(tee -a container.log)` on line 42 does not capture it either — the redirect is
+per-command.
+
+This cost a real diagnosis. An earlier note recorded that "LiteLLM's own log had produced no
+`Uvicorn running on :4000` line, so it appears stuck or still initialising" — an inference
+drawn from an absence the file layout guarantees. LiteLLM had been up the whole time.
+
+```bash
+podman exec claw-bedrock cat /config/litellm.log | tail -60
+```
+
+## 12. `/api/health/litellm` is an active model check, not a liveness probe
+
+`GET /api/health/litellm` proxies LiteLLM's `/health`, which is **not** a liveness endpoint.
+It runs `_perform_health_check_and_save` against every model in `model_list` unless
+`general_settings.background_health_checks: true` is set — and this config does not set it
+(`llms/../proxy/health_endpoints/_health_endpoints.py:1110-1140`).
+
+Two consequences, both of which produced wrong conclusions:
+
+1. **It is coupled to provider auth.** With Bedrock unauthenticated, nine models' worth of
+   outbound calls each attempt a token refresh and fail, so the whole set exceeds the probe's
+   5s budget and the endpoint returns `Read timed out`. This looks exactly like a dead proxy
+   and is not one — `/config/litellm.log` shows `Uvicorn running on http://0.0.0.0:4000`.
+2. **With zero models it passes vacuously.** In CI the container has no `model_list`, so the
+   check returns 200 instantly. `scripts/smoke.sh` asserted on this endpoint, which is why CI
+   reported `litellm_status == 200` while proving nothing about serving a request. The
+   `linux/amd64` conclusion drawn from it is narrower than stated: the image boots and the
+   management UI serves; whether LiteLLM serves *requests* on amd64 remains unproven.
+
+`/health/liveliness` (`_health_endpoints.py:1938-1958`) is the actual liveness endpoint — it
+only checks whether a graceful shutdown has begun, with no model list, no provider calls and no
+auth. `smoke.sh` now asserts that. `/api/health/litellm` is deliberately **left** on the active
+check: a red reading there means models genuinely cannot be served, and swapping it for
+liveliness would make the dashboard green while Bedrock stayed dark.

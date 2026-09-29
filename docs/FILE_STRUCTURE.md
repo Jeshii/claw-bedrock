@@ -89,6 +89,7 @@ Contains all Python source files and static assets for the application:
 - `encryption_utils.py` — Encryption utilities for sensitive data
 - `management_app.py` — Management UI (uvicorn on port 8282)
 - `password_utils.py` — Password hashing and validation utilities
+- `settings_resolver.py` — Settings precedence (flag → env → config → default) with provenance
 - `static/` — Static assets for the management UI:
   - `management.css` — All CSS styles
   - `unofficial-b52s-Regular.ttf` — Font file

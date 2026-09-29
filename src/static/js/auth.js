@@ -47,10 +47,13 @@ function updateDashboardBanner(data) {
 // Warning codes returned by /api/auth/status. The API returns codes rather than
 // prose so the wording can change here without touching Python.
 const AUTH_WARNING_TEXT = {
-	env_credentials_shadowed_by_profile:
-		"AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are set but ignored — " +
-		"boto3 skips environment credentials whenever a profile is passed " +
-		"explicitly. Unset AWS_PROFILE, or leave it unset and use the keys alone.",
+	incomplete_static_key_pair:
+		"Only one half of the static IAM key pair is stored. Both are needed — " +
+		"the AWS profile is being used until they are.",
+	stored_credentials_undecryptable:
+		"Stored credentials cannot be decrypted with the current ENCRYPTION_KEY. " +
+		"They were probably restored from a backup taken under a different key. " +
+		"Re-enter them on the Providers page.",
 };
 
 function resolvedRow(label, setting) {
@@ -76,11 +79,18 @@ function renderResolvedSettings(data) {
 		if (!b.token.stale) token += ` · valid for another ${b.token.expires_in}s`;
 	}
 
+	// Where the credentials in play came from. Only presence is ever reported —
+	// no part of a key pair is rendered.
 	let creds;
-	if (b.credential_env.access_key_set || b.credential_env.secret_key_set) {
+	if (b.static_keys?.configured) {
+		creds = "static key pair stored";
+	} else if (
+		b.credential_env.access_key_set ||
+		b.credential_env.secret_key_set
+	) {
 		creds = "set in environment";
 	} else {
-		creds = "none set";
+		creds = "none — using the AWS profile";
 	}
 
 	let html = `<h3 style="margin:18px 0 0;font-size:14px;">Effective configuration</h3>`;
@@ -92,7 +102,7 @@ function renderResolvedSettings(data) {
 		`<span class="resolved-value">${token}</span>` +
 		`<span class="source-badge source-${b.token.stale ? "env" : "config"}">${b.token.stale ? "stale" : "fresh"}</span></div>`;
 	html +=
-		`<div class="resolved-row"><span class="resolved-key">Static keys</span>` +
+		`<div class="resolved-row"><span class="resolved-key">Credentials</span>` +
 		`<span class="resolved-value">${creds}</span></div>`;
 	html += `</div>`;
 

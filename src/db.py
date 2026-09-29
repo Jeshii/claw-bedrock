@@ -8,6 +8,7 @@ import sys
 import threading
 
 import yaml
+from cryptography.fernet import InvalidToken
 from tinydb import Query, TinyDB, where
 
 import encryption_utils
@@ -161,6 +162,50 @@ def get_settings():
     """Get all settings as a dict."""
     records = settings_table.all()
     return {r["key"]: r["value"] for r in records}
+
+
+@_serialized
+def set_secret_setting(key, value):
+    """Store a setting encrypted at rest.
+
+    `set_setting` writes plaintext, which is right for a region name and wrong
+    for a credential. Values are Fernet-encrypted before they reach TinyDB, the
+    same treatment `litellm_master_key` already gets.
+    """
+    settings_table.upsert(
+        {"key": key, "value": encryption_utils.encrypt_data(value) if value else None},
+        where("key") == key,
+    )
+
+
+@_serialized
+def get_secret_setting(key):
+    """Read an encrypted setting, distinguishing the three states it can be in.
+
+    Returns (value, state) where state is one of:
+      "absent"     — never set
+      "ok"         — set and decryptable
+      "undecryptable" — set, but not under the current ENCRYPTION_KEY
+
+    The third state is why this is not just `decrypt_data`: that function
+    returns its input unchanged on failure, so a value restored under a
+    different key reads back as a plausible-looking string and gets handed to
+    boto3 as a credential. See BUGS.md #8. An empty or missing value counts as
+    absent rather than as a decryptable empty string.
+    """
+    record = settings_table.get(where("key") == key)
+    if not record or not record["value"]:
+        return None, "absent"
+    try:
+        return encryption_utils.decrypt_data_strict(record["value"]), "ok"
+    except InvalidToken:
+        return None, "undecryptable"
+
+
+@_serialized
+def clear_secret_setting(key):
+    """Remove an encrypted setting entirely."""
+    settings_table.remove(where("key") == key)
 
 
 # LiteLLM's Router takes a fixed set of routing_strategy literals; anything
@@ -336,7 +381,7 @@ def get_models_for_litellm():
 
     Provider-level defaults are dynamically merged into each model's litellm_params:
       - OpenAI-compatible: api_base, api_key
-      - Bedrock: aws_region, credential env refs
+      - Bedrock: the resolved global region, written as aws_region_name
     Precedence: model explicit override > provider default > application default
     """
     use_prefix = get_setting("use_prefix", True)
@@ -429,10 +474,35 @@ def _merge_provider_defaults(
                         file=sys.stderr,
                     )
     elif provider_type == "bedrock":
-        if provider.get("aws_region"):
-            lp["aws_region"] = provider["aws_region"]
+        # Written as `aws_region_name`, which is the field LiteLLM's
+        # GenericLiteLLMParams actually declares and reads. The old code wrote
+        # `aws_region`, which is silently discarded — the form looked functional
+        # and did nothing. Region comes from the global setting rather than the
+        # provider record because there is one token refresher and one
+        # BEDROCK_MANTLE_API_KEY; a per-provider region would present a token
+        # minted for one region to a model configured for another.
+        region = _resolved_bedrock_region()
+        if region:
+            lp["aws_region_name"] = region
 
     return lp
+
+
+def _resolved_bedrock_region() -> str | None:
+    """The effective Bedrock region, using the same precedence the UI reports.
+
+    Delegates to `settings_resolver` rather than re-walking env-then-config
+    here. The resolver is the single source of truth for precedence, and a
+    second copy in the config path is exactly the drift it exists to prevent:
+    the engine would resolve one region while the auth page reported another.
+
+    The import is function-local because `settings_resolver` imports `db` at
+    module level. That cycle only matters during import; by the time config
+    generation runs, both modules are loaded.
+    """
+    from settings_resolver import resolve  # local import breaks a module cycle
+
+    return resolve("AWS_REGION", config_key=BEDROCK_REGION_SETTING).value
 
 
 @_serialized
@@ -511,6 +581,69 @@ def get_models_by_tag(tag_name):
 
 providers_table = db.table("providers")
 
+# Fields the Bedrock provider form used to collect that no runtime code ever
+# read. `aws_access_key_env` / `aws_secret_key_env` named *environment
+# variables* rather than holding credentials, and were worse than inert: the
+# substring match in `_is_sensitive_field` encrypted the variable NAME,
+# `sanitize_provider_for_response` nulled it so the edit form always rendered
+# blank, and saving the form wrote the blank back — so simply opening a Bedrock
+# provider, renaming it and saving silently destroyed the field.
+#
+# `aws_region` is retired for a different reason: it was merged into
+# `litellm_params["aws_region"]`, which LiteLLM does not read (it reads
+# `aws_region_name`), so it looked functional and did nothing. Region is now a
+# global setting — see BEDROCK_REGION_SETTING — because there is one token
+# refresher, one region, and one BEDROCK_MANTLE_API_KEY.
+DEAD_BEDROCK_PROVIDER_FIELDS = frozenset(
+    {"aws_access_key_env", "aws_secret_key_env", "aws_region"}
+)
+
+#: Config-store key holding the global Bedrock region. Deliberately distinct
+#: from the AWS_REGION env var name, since backup import writes keys verbatim.
+BEDROCK_REGION_SETTING = "bedrock_region"
+BEDROCK_PROFILE_SETTING = "bedrock_profile"
+BEDROCK_ACCESS_KEY_SETTING = "bedrock_access_key_id"
+BEDROCK_SECRET_KEY_SETTING = "bedrock_secret_access_key"
+
+
+@_serialized
+def migrate_dead_bedrock_fields():
+    """Drop the retired Bedrock provider fields from stored records.
+
+    Read-time and idempotent: the fields are stripped from anything returned to
+    a caller as well as from the stored record, so a restored backup carrying
+    them cannot reintroduce them through the API. The stored values are not
+    migrated anywhere — `aws_region` in particular is deliberately *not* seeded
+    into the global region setting, because a value that was inert for the
+    lifetime of this field is not evidence of an operator's current intent.
+    """
+    removed = 0
+    for provider in providers_table.all():
+        present = DEAD_BEDROCK_PROVIDER_FIELDS & set(provider)
+        if not present:
+            continue
+    removed = 0
+    for provider in providers_table.all():
+        present = DEAD_BEDROCK_PROVIDER_FIELDS & set(provider)
+        if not present:
+            continue
+        # TinyDB has no unset and no replace: `update()` merges, so a key absent
+        # from the payload is left untouched, and `upsert()` just calls `update()`
+        # (table.py:592). Passing nulls instead of popping them would leave
+        # tombstones that still read as "field present" to the check above, so
+        # the field is never actually gone. Remove and reinsert: the doc_id
+        # changes, which nothing references.
+        doc_id = provider.doc_id
+        cleaned = {
+            k: v for k, v in provider.items() if k not in DEAD_BEDROCK_PROVIDER_FIELDS
+        }
+        providers_table.remove(doc_ids=[doc_id])
+        providers_table.insert(cleaned)
+        removed += len(present)
+    if removed:
+        logger.info("Removed %d retired Bedrock provider field(s)", removed)
+    return removed
+
 
 @_serialized
 def seed_default_providers():
@@ -523,9 +656,6 @@ def seed_default_providers():
             "type": "bedrock",
             "color": "#FF9900",
             "notes": "AWS Bedrock via Mantle — pre-configured on startup",
-            "aws_region": "us-east-1",
-            "aws_access_key_env": "AWS_ACCESS_KEY_ID",
-            "aws_secret_key_env": "AWS_SECRET_ACCESS_KEY",
         }
     )
 
@@ -555,11 +685,23 @@ def _decrypt_sensitive_fields(provider: dict) -> dict:
     return decrypted
 
 
+def _without_dead_bedrock_fields(provider: dict) -> dict:
+    """Drop the retired Bedrock fields from a provider dict on its way out.
+
+    Read-time, not just migration-time: a backup restored under a different
+    ENCRYPTION_KEY still carries these keys verbatim, and returning them would
+    put a form field back in the UI that cannot work.
+    """
+    return {k: v for k, v in provider.items() if k not in DEAD_BEDROCK_PROVIDER_FIELDS}
+
+
 @_serialized
 def get_all_providers():
     """Get all provider definitions."""
     providers = providers_table.all()
-    return [_decrypt_sensitive_fields(p) for p in providers]
+    return [
+        _decrypt_sensitive_fields(_without_dead_bedrock_fields(p)) for p in providers
+    ]
 
 
 @_serialized
@@ -567,7 +709,7 @@ def get_provider(name):
     """Get a single provider by name."""
     provider = providers_table.get(where("name") == name)
     if provider:
-        return _decrypt_sensitive_fields(provider)
+        return _decrypt_sensitive_fields(_without_dead_bedrock_fields(provider))
     return None
 
 
@@ -599,7 +741,9 @@ def sanitize_provider_for_response(provider: dict) -> dict:
 def _get_provider_raw(name: str) -> dict | None:
     """Get a provider record from TinyDB without decrypting sensitive fields."""
     record = providers_table.get(where("name") == name)
-    return dict(record) if record else None
+    if not record:
+        return None
+    return _without_dead_bedrock_fields(dict(record))
 
 
 @_serialized
@@ -616,11 +760,12 @@ def upsert_provider(provider: dict):
     Raises RuntimeError on TinyDB failure. Sensitive fields are auto-encrypted.
     """
     name = provider.get("name", "<unknown>")
-    changed_fields = [
-        k for k in provider if k not in ("name", "api_key", "aws_secret_key_env")
-    ]
+    # Stripped on write as well as on read, so a POST body replaying a retired
+    # field (or a restored backup) cannot reintroduce it.
+    cleaned = _without_dead_bedrock_fields(provider)
+    changed_fields = [k for k in cleaned if k not in ("name", "api_key")]
     try:
-        encrypted = _encrypt_sensitive_fields(provider)
+        encrypted = _encrypt_sensitive_fields(cleaned)
         providers_table.upsert(encrypted, where("name") == name)
     except Exception as e:
         print(f"[DB] upsert_provider FAILED name={name} error={e}", file=sys.stderr)

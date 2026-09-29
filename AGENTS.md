@@ -75,7 +75,10 @@ machine-level defaults.
 - `scripts/smoke.sh` builds for the host arch. The published image is `linux/amd64`
   (GitHub Actions), so a local arm64 run verifies the app boots but not that arch
 - **`GET /api/health/litellm` returns `status: ok` whenever the probe does not raise**,
-  whatever code LiteLLM returned. Assert `litellm_status: 200`, not `status: ok` alone
+  whatever code LiteLLM returned. Assert `litellm_status: 200`, not `status: ok` alone.
+  It also proxies `/health`, an active per-model check, so it is coupled to provider auth
+  and passes vacuously with no models. `scripts/smoke.sh` asserts
+  `/api/health/litellm/liveliness` instead, which cannot be red for auth reasons
 
 ## Git Workflow
 - Never push directly to `main`, just push to `develop` first, PRs unnecessary for now
@@ -90,6 +93,28 @@ machine-level defaults.
   lives inside the workspace so it survives across tool calls, and is where the
   rest of the work in this repo already keeps scratch output. Anything written
   outside the repo is invisible to `git status` and is easy to leave behind
+
+## Remote Access
+- **Never `ssh`/`scp`/`sftp`/`rsync` into any host from the shell** — especially
+  `mobydisk`, which is live LiteLLM infrastructure. Reach for a local workflow, the
+  management UI, or the API instead
+- This is enforced as a hard policy deny in `~/.config/opencode/opencode.jsonc`, not just
+  a preference. Do not attempt a workaround via `nc`, `socat`, `mosh`, or `sshpass`
+- If a task appears to genuinely require remote access, stop and ask rather than routing
+  around it. Running it yourself in a terminal is the intended escape hatch
+
+## Diagnosing the Running Container
+Two traps here cost real time. Both are recorded in `docs/BUGS.md` #11 and #12.
+
+- **LiteLLM's output is not in `podman logs`.** `start_container.sh:56` redirects it to
+  `${CONFIG_DIR}/litellm.log`. `podman logs` shows the management UI only, so the absence of
+  `Uvicorn running on ...:4000` there means nothing. Read
+  `podman exec claw-bedrock cat /config/litellm.log` before concluding LiteLLM is down
+- **`/api/health/litellm` is not a liveness probe.** It proxies LiteLLM's `/health`, which
+  makes a real call to every model in `model_list`. It is therefore coupled to Bedrock auth
+  and goes red when credentials are missing, even though the proxy is healthy — and it
+  passes *vacuously* when there are no models, which is how it read as a green CI smoke test.
+  Use `/api/health/litellm/liveliness` to answer "did the image boot"
 
 ## Project Map
 - `src/management_app.py` — Management UI (uvicorn on port 8282)

@@ -35,20 +35,6 @@
                               padding:2px;
                               cursor:pointer" />
             </div>
-            <div id="new-provider-bedrock-fields"
-                 class="inline-row"
-                 style="margin-top:8px;
-                        flex-wrap:wrap">
-                <input id="new-provider-aws-region"
-                       placeholder="AWS Region (e.g., us-east-1)"
-                       style="width:200px" />
-                <input id="new-provider-aws-key-env"
-                       placeholder="Access Key Env Var (e.g., AWS_ACCESS_KEY_ID)"
-                       style="width:250px" />
-                <input id="new-provider-aws-secret-env"
-                       placeholder="Secret Key Env Var (e.g., AWS_SECRET_ACCESS_KEY)"
-                       style="width:250px" />
-            </div>
             <div id="new-provider-openai-fields"
                  class="hidden"
                  style="margin-top:8px;
@@ -78,5 +64,20 @@
              style="display:flex;
                     flex-direction:column;
                     gap:6px"></div>
+    </div>
+    <div class="section">
+        <div class="section-header-row">
+            <h2>Bedrock Authentication</h2>
+        </div>
+        <p class="muted" style="font-size:13px; margin-bottom:12px">
+            Auth for Bedrock applies to every Bedrock model, so it is configured
+            once here rather than per provider. Environment variables take
+            precedence over these fields; when one is set, the badge below shows
+            which value is actually in effect. Saving re-mints a token without
+            restarting the container.
+        </p>
+        <div id="bedrock-settings-body">
+            <p class="muted">Loading…</p>
+        </div>
     </div>
 </div>

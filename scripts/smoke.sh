@@ -110,12 +110,25 @@ fi
 echo "   version: $version"
 
 echo "== waiting for LiteLLM on :$LITELLM_PORT"
-# management_app.py returns status ok whenever the probe does not *raise*,
-# whatever code it got back, so a 404 from LiteLLM still reads as ok. Assert
-# the upstream status code too.
+# Asserts the *liveliness* endpoint, not /health.
+#
+# /api/health/litellm proxies LiteLLM's /health, which is an active check: it
+# makes a real call to every model in model_list unless
+# general_settings.background_health_checks is set, which this config does not
+# set. It is therefore coupled to provider credentials, and with no models
+# configured it passes vacuously — which is exactly what it did in CI, where the
+# assertion proved nothing about serving requests.
+#
+# /health/liveliness only reports whether the proxy process is up, so it cannot
+# go red for reasons unrelated to "did this image boot". That is the question
+# this script exists to answer. Whether Bedrock can actually serve is checked on
+# the dashboard, where a red /health means what it says.
+#
+# The upstream status code is asserted too: management_app.py returns
+# status: ok whenever the probe does not *raise*, whatever code it got back.
 litellm_ok=0
 for _ in $(seq "$TIMEOUT"); do
-    body=$(curl -fsS "http://127.0.0.1:${MGMT_PORT}/api/health/litellm" 2>/dev/null)
+    body=$(curl -fsS "http://127.0.0.1:${MGMT_PORT}/api/health/litellm/liveliness" 2>/dev/null)
     if [ -n "$body" ] && echo "$body" | python3 -c '
 import json, sys
 try:
@@ -131,7 +144,7 @@ sys.exit(0 if d.get("status") == "ok" and d.get("litellm_status") == 200 else 1)
 done
 
 if [ "$litellm_ok" -ne 1 ]; then
-    fail "LiteLLM did not become healthy within ${TIMEOUT}s"
+    fail "LiteLLM did not become live within ${TIMEOUT}s"
     diagnose
     exit 1
 fi

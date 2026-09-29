@@ -149,9 +149,65 @@ class BedrockTokenRefresher(CustomLogger):
         self._generator = BedrockTokenGenerator()
         self._region = os.environ.get("AWS_REGION", "ap-northeast-1")
         self._profile = os.environ.get("AWS_PROFILE", "bedrock-openai20b")
+        # Long-lived IAM key pair, when one is configured. Empty means "use the
+        # profile", which is the SSO path. See _build_session for why passing a
+        # profile and also expecting env credentials cannot both work.
+        self._access_key_id = ""
+        self._secret_access_key = ""
         # Attempt startup refresh — if it fails, wait for user to initiate login via web UI
         self._refresh()
         self._register_auth_endpoint()
+
+    def configure(
+        self,
+        region: str | None = None,
+        profile: str | None = None,
+        access_key_id: str | None = None,
+        secret_access_key: str | None = None,
+    ) -> bool:
+        """Re-resolve auth settings and refresh, without restarting anything.
+
+        Called by the management UI when the Bedrock settings card is saved.
+        Previously, changing any of these meant editing the unit file and
+        restarting the container.
+
+        Returns True if a token was minted with the new settings. False is a
+        normal outcome rather than an error: a wrong region or a bad key fails
+        at token-mint time, and the caller reports that instead of pretending
+        the save applied.
+        """
+        _debug(
+            f"configure() region={region!r} profile={profile!r} "
+            f"key_pair={'yes' if access_key_id and secret_access_key else 'no'}"
+        )
+        changed = (
+            (region is not None and region != self._region)
+            or (profile is not None and profile != self._profile)
+            or (access_key_id or "") != self._access_key_id
+            or (secret_access_key or "") != self._secret_access_key
+        )
+        if region is not None:
+            self._region = region
+        if profile is not None:
+            self._profile = profile
+        self._access_key_id = access_key_id or ""
+        self._secret_access_key = secret_access_key or ""
+
+        if not changed:
+            _debug("configure(): no effective change, skipping forced refresh")
+            return bool(self._fetched_at)
+
+        # Credentials changed, so a token minted against the old ones is no
+        # longer trustworthy. Drop it before refreshing, so a failed refresh
+        # cannot leave the previous token in place looking current.
+        self._fetched_at = 0
+        self._needs_login = False
+        self._auth_error = None
+        self._auth_url = None
+        # The coalescing window exists to collapse a burst of failures. Here we
+        # are the deliberate trigger, so a recent failed attempt must not
+        # absorb the refresh we were explicitly asked for.
+        return self._refresh(force=True, coalesce=False)
 
     def _is_interactive(self) -> bool:
         result = sys.stdin.isatty()
@@ -365,9 +421,7 @@ class BedrockTokenRefresher(CustomLogger):
         if self._needs_login:
             return None
         try:
-            session = boto3.Session(
-                profile_name=self._profile, region_name=self._region
-            )
+            session = self._build_session()
             credentials = session.get_credentials()
         except Exception as e:  # noqa: BLE001 - no usable session; caller triggers login
             _debug(f"Session creation failed: {e}")
@@ -380,6 +434,33 @@ class BedrockTokenRefresher(CustomLogger):
             self._write_auth_needed_flag()
             return None
         return session
+
+    def _build_session(self) -> boto3.Session:
+        """Construct the boto3 session for the configured credential source.
+
+        `profile_name` is the pivot. botocore sets `disable_env_vars` whenever a
+        profile is passed explicitly (`credentials.py:95`), which removes the
+        EnvProvider from the credential chain — so passing a profile made
+        AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY set-but-inert. The non-SSO path
+        was therefore broken for every install, and the only way to reach env
+        credentials was to omit the profile entirely.
+
+        With a key pair configured we pass the credentials directly and omit the
+        profile, which both honours the keys and leaves botocore's env, IMDS and
+        container providers in the chain. With no key pair we pass the profile,
+        because that is the SSO path the login flow drives.
+        """
+        if self._access_key_id and self._secret_access_key:
+            _debug(
+                "_build_session(): using configured key pair, omitting profile_name "
+                "so botocore honours them and the env provider"
+            )
+            return boto3.Session(
+                aws_access_key_id=self._access_key_id,
+                aws_secret_access_key=self._secret_access_key,
+                region_name=self._region,
+            )
+        return boto3.Session(profile_name=self._profile, region_name=self._region)
 
     def _write_auth_needed_flag(self):
         """Write the auth_needed flag file if it doesn't already exist."""
@@ -492,6 +573,16 @@ class BedrockTokenRefresher(CustomLogger):
             "auth_error": self._auth_error,
             "profile": self._profile,
             "region": self._region,
+            # Reported as a boolean only. An AWS access key ID is half a
+            # credential — the prefix alone identifies the account and key
+            # vintage — so unlike the locally generated LiteLLM master key,
+            # there is nothing to gain from revealing any of it.
+            "static_keys": {
+                "configured": bool(self._access_key_id and self._secret_access_key),
+                "source": "config"
+                if (self._access_key_id and self._secret_access_key)
+                else None,
+            },
             "token": {
                 "present": has_token,
                 "age_seconds": age,

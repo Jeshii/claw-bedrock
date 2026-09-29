@@ -17,7 +17,7 @@ been dishonest. This list is the ordering.
 | 2 | Playground V1 (Session-Scoped Chat) | Complete | — |
 | 3 | Groups Dashboard | Complete | Core Model Grouping |
 | 4 | Cost Awareness | Complete | Core Model Grouping |
-| 5 | **Bedrock Auth Configuration** | **In progress** — step 1 deployed, 2 open host items | — |
+| 5 | **Bedrock Auth Configuration** | **In progress** — steps 1 and 2 shipped, step 3 next | — |
 | 6 | Skills Library V1 (Browse / Manage) | Planned | — |
 | 7 | Playground V2 (Persistent Conversations) | Planned | Playground V1 |
 | 8 | Skills Library V2 (MCP Integration) | Planned | Skills Library V1 |
@@ -29,12 +29,11 @@ problem: the Bedrock auth surface collects configuration that does nothing and
 reported status that was not accurate. Everything below it is unaffected by
 finishing it first.
 
-Resume here. Step 1's code is shipped and the service is running again on
-`mobydisk`, but **two items are open and both need the host** — LiteLLM is not
-answering `/api/health/litellm`, and the Step 1 auth-error double-poll has not
-been run against the live service. `AGENTS.md` now forbids `ssh` into any host,
-so these cannot be finished from the dev machine. See "Where this stands" in
-the Step 1 section for the exact commands to run by hand.
+Resume at **Step 3 — Mantle Model Discovery**. Steps 1 and 2 are shipped. The
+two items left open by Step 1 were run by hand and are now closed; both came
+back with a different answer than expected, and "Corrections after host
+verification" below records what they were. Step 2's own GUI surface still has
+no host verification — see "What Step 2 still needs from the host".
 
 ---
 
@@ -252,7 +251,16 @@ OpenRouter's model catalog already returned a `pricing` block (`prompt` / `compl
 
 ## Bedrock Auth Configuration
 
-**Status:** Step 1 shipped but unverified in the running container. Steps 2 and 3 not started.
+**Status:** Steps 1 and 2 shipped. Step 3 not started.
+
+> **Revised after host verification (Step 2).** Three claims in this section were
+> wrong and are corrected below: the "LiteLLM is not answering" diagnosis, the
+> `linux/amd64` conclusion drawn from CI, and the strength of Step 1's host
+> verification. The short version: LiteLLM was never down, `podman logs` simply
+> does not contain LiteLLM's output; the CI health assertion passed vacuously
+> because the test container has no models; and Step 1's double-poll was
+> non-diagnostic because there was no error to preserve. See "Corrections after
+> host verification" at the end of this section.
 
 **Goal:** Make the Bedrock auth surface tell the truth, then move auth configuration out of dead form fields and into settings that actually take effect. The governing principle: **the GUI is the friendly space, environment variables are expert mode.** Anything the GUI can own, it should; anything the environment owns, the GUI yields to and warns about.
 
@@ -267,9 +275,11 @@ The Bedrock provider form currently asks for three AWS fields. Investigation fou
 
 Auth actually comes from the token refresher, entirely out of band: `AWS_PROFILE` + `AWS_REGION` → `boto3.Session(...)` → `get_token()` → `os.environ["BEDROCK_MANTLE_API_KEY"]`. The provider record plays no part.
 
-### Step 1 — Auth Status Truth ✅ (deployed, live verification pending)
+### Step 1 — Auth Status Truth ✅ (shipped)
 
-**Status:** Code complete, pushed, and running on `mobydisk` as `dev-fcbc415`. 210 tests pass, lint clean, CI green. **The live auth-error double-poll is still unverified** — see "Where this stands".
+**Status:** Shipped and running on `mobydisk`. **Verification rests on the unit
+tests, not on the host** — the host double-poll was run and came back
+non-diagnostic. See "Corrections after host verification".
 
 Read-only with respect to configuration: nothing about how auth works changed, only what the app reports about it.
 
@@ -345,19 +355,75 @@ ERROR: failed to build: Cache export is not supported for the docker driver.
 | CI, lint + 210 tests | pass |
 | CI, build + smoke + push | pass, 1m51s total; build 55s, smoke 19s |
 | CI smoke assertions | `version: dev-fcbc415`, `litellm_status == 200`, booted with `SKIP_BUILD=1` so it tested the pushed artifact |
-| `linux/amd64` published image boots | confirmed by the CI smoke test, closing the arch gap above |
+| `linux/amd64` published image boots | **partially** — the management UI boots and serves. It does **not** prove LiteLLM serves requests on amd64; the health assertion it rested on passed vacuously. See below |
 | `mobydisk` | pulled `:develop`, restarted. `/app/VERSION` = `dev-fcbc415`, `settings_resolver.py` present, `NRestarts` 912 → **0**, `/api/version` 200, 9 models merged |
 | `/api/auth/status` double-poll | **NOT verified** — see below |
 
-**Open issue: LiteLLM is not answering on `mobydisk`.** `/api/health/litellm` returns
+**Open issue (now resolved, and the diagnosis was wrong): LiteLLM is not
+answering on `mobydisk`.** `/api/health/litellm` returned
 
 ```json
 {"status":"error","detail":"HTTPConnectionPool(host='localhost', port=4000): Read timed out. (read timeout=5)"}
 ```
 
-persistently across 12 attempts spanning ~4 minutes after a healthy restart. LiteLLM's own log had produced no `Uvicorn running on :4000` line, so it appears stuck or still initialising, while the management UI is fine. The `read timeout=5` is the probe's own budget and may simply be too tight on a host this loaded, which would make this a false alarm rather than an outage — **that is a hypothesis, not a diagnosis.** Note CI's smoke test got LiteLLM healthy in 19s on a clean runner, so the image itself is fine. Needs a look at LiteLLM's log on the host.
+persistently across 12 attempts spanning ~4 minutes after a healthy restart.
+The note above went on to reason: *"LiteLLM's own log had produced no
+`Uvicorn running on :4000` line, so it appears stuck or still initialising"*,
+with a fallback that *"`read timeout=5` is the probe's own budget and may
+simply be too tight on a host this loaded"*.
 
-**Not verified: the Step 1 fix on the running service.** Calling `/api/auth/status` **twice** and confirming `auth_error` is identical is the shell-visible version of the regression test, and it has not been run against the live host. The earlier check reported two empty files as "identical", which was a false pass — the port was not serving yet.
+**Both inferences were unfounded, and the first one was based on a file that
+cannot contain the evidence.** `start_container.sh:56` redirects LiteLLM's
+stdout and stderr to `${CONFIG_DIR}/litellm.log`:
+
+```bash
+litellm --config "${CONFIG_PATH}" --port 4000 --host 0.0.0.0 > "${CONFIG_DIR}/litellm.log" 2>&1 &
+```
+
+`podman logs` shows the management UI and the entrypoint's own echo, and will
+never contain LiteLLM's output. Reading the file that does:
+
+```
+INFO:     Uvicorn running on http://0.0.0.0:4000 (Press CTRL+C to quit)
+```
+
+LiteLLM was up the entire time. The "stuck or still initialising" reading came
+from an absence the file layout guarantees — the same failure shape as the CI
+lesson recorded two sections earlier, where a local pass was mistaken for a
+deployment. Now `docs/BUGS.md` #11.
+
+**The real cause is that `/api/health/litellm` is not a liveness probe.**
+`/api/health/litellm` proxies LiteLLM's `/health`, which runs an *active* check
+against every model in `model_list` unless `general_settings.background_health_checks`
+is set — and this config does not set it
+(`proxy/health_endpoints/_health_endpoints.py:1110-1140`). The host's
+`/api/auth/status` reports `needs_login: true` with no token ever minted, so
+each of the nine models' health checks attempts a refresh and fails, and the
+set exceeds the probe's 5s budget. The endpoint was measuring Bedrock auth and
+reporting it as a proxy outage.
+
+Note that this made the endpoint *more* honest than a liveness check would
+have: a red reading genuinely meant models could not be served. Step 2 adds
+`/api/health/litellm/liveliness` for the "did it boot" question and leaves
+`/api/health/litellm` on the active check deliberately. `docs/BUGS.md` #12.
+
+**Not verified (and now known to be non-diagnostic): the Step 1 fix on the
+running service.** Calling `/api/auth/status` twice and confirming `auth_error`
+is identical is the shell-visible version of the regression test. It was run by
+hand on the host, and it passed — but it proves nothing. Both responses were 438
+bytes and byte-identical, and `auth_error` was `null` in both:
+
+```json
+{ "auth_error": null, "needs_login": true,
+  "bedrock": { "token": { "present": false, "stale": true }, ... } }
+```
+
+There was no error to drain, so the diff would have come out identical against
+the old read-and-clear code too. **Step 1's fix is verified by the 51 unit
+tests in `test_auth_status.py` and by nothing else.** The guard against the
+earlier false pass (two empty files) did its job — it is the *emptiness of the
+error* that makes this run vacuous, which is a different failure and one the
+`wc -c` check cannot detect.
 
 **Remote access is now off-limits.** `AGENTS.md` forbids `ssh` into any host, `mobydisk` explicitly, enforced as a hard deny in `opencode.jsonc`. The two items above were captured immediately before that landed and cannot be finished from here. **To close them out, run this yourself on the host:**
 
@@ -385,23 +451,111 @@ Note that the pending change touches **zero** templates or `.html` files, so the
 
 **`v0.1.2` is not tagged, deliberately.** It stays untagged until the two open items above are closed by hand. `latest` is frozen at `v0.1.1` from June because no newer tag has been pushed, and tagging moves it — the workflow gates `latest` on `startsWith(github.ref, 'refs/tags/v')`, which is correct as written. Tagging would publish all 62 commits since that release, a history still not audited.
 
-### Step 2 — GUI Bedrock Auth Configuration
+### Step 2 — GUI Bedrock Auth Configuration ✅ (shipped, host verification pending)
 
-A settings section below Manage Providers on the Providers page, matching how settings sit below the main content on other pages.
+A settings section below Manage Providers on the Providers page, matching how
+settings sit below the main content on other pages.
 
 | File | Change |
 |---|---|
-| `src/db.py` | Encrypted settings path (`set_setting` is plaintext today); read-time migration off the dead `aws_*_env` fields |
-| `src/token_refresher.py` | `configure()` — re-read region/profile/creds, rebuild the session, force a refresh, no container restart. Store the profile so the login flow targets it |
-| `src/management_app.py` | `GET/PUT` settings endpoints; drop `aws_access_key_env` / `aws_secret_key_env` from allowed fields, the encrypt loop, and runtime-change detection |
-| `src/static/js/providers.js` | Remove the two dead fields; add the settings card with region, profile, and a collapsed advanced section |
-| `templates/partials/page_providers.html` | New settings section below Manage Providers |
+| `src/db.py` | `set_secret_setting` / `get_secret_setting` / `clear_secret_setting`; `decrypt_data_strict` in `encryption_utils`; `migrate_dead_bedrock_fields()`; bedrock branch of `_merge_provider_defaults` now writes `aws_region_name` |
+| `src/token_refresher.py` | `configure()` and `_build_session()`; static-key state in `auth_status_payload()` |
+| `src/management_app.py` | `GET/PUT /api/settings/bedrock`; shared `_bedrock_auth_state()`; `/api/health/litellm/liveliness`; dead fields dropped from `ALLOWED_PROVIDER_FIELDS`, the encrypt loop and runtime-change detection |
+| `src/static/js/providers.js` | Settings card (region, profile, collapsed advanced key pair); dead fields removed |
+| `templates/partials/page_providers.html` | Settings section below Manage Providers |
+| `src/static/js/auth.js` | Warning text; credential-source row |
+| `scripts/smoke.sh` | Asserts liveliness rather than the auth-coupled check |
+| `tests/test_bedrock_settings.py` | **New.** 26 tests |
+| `tests/test_auth_status.py`, `tests/test_provider_persistence.py`, `tests/test_token_refresher.py` | Rewritten assertions for the new contract; `TestBuildSession` and `TestConfigure` added |
 
-**Long-lived IAM keys are restored, not dropped.** `token_refresher` always calls `boto3.Session(profile_name=self._profile)`, and botocore sets `disable_env_vars` whenever a profile is explicitly passed (`credentials.py:95`), skipping the env-var provider unless *all three* of `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` are set. The non-SSO path is broken today. The fix: when a key pair is configured, pass the credentials explicitly and **omit `profile_name`**.
+**Long-lived IAM keys are restored, not dropped.** `token_refresher` always
+called `boto3.Session(profile_name=self._profile)`, and botocore sets
+`disable_env_vars` whenever a profile is explicitly passed
+(`credentials.py:95`), which removes the EnvProvider from the credential chain —
+so `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` were set-but-inert on every
+install. The non-SSO path was broken for everyone. `_build_session()` now passes
+the credentials explicitly and **omits** `profile_name`, which is the only way to
+reach them (`boto3/session.py:81-82` only sets the profile config variable when
+`profile_name is not None`). `TestBuildSession` pins this, including the
+half-a-key-pair case falling back to the profile rather than displacing it.
 
-The key pair is opt-in behind a collapsed advanced section and encrypted at rest. The section notes that the equivalent env vars also work, and which one wins.
+**This invalidates Step 1's warning, deliberately.** Step 1 shipped
+`env_credentials_shadowed_by_profile` to explain why env keys were inert. Step 2
+fixes the cause, so the warning is *removed* rather than kept — leaving it would
+fire on a condition the same release repairs, which is the exact failure mode
+this workstream exists to eliminate. `tests/test_auth_status.py` asserts its
+absence and says why in the test name.
 
-**Region is a global setting, not a per-provider field.** One refresher, one `self._region`, one `BEDROCK_MANTLE_API_KEY` in `os.environ` — a second provider in another region would present a token minted for the first. A per-provider region field is a lie regardless of the key-name fix, so it is replaced by a global free-text field, soft-validated on set. Validation warns rather than blocks: botocore can list Bedrock regions offline (`get_available_regions('bedrock')`, 33 regions, no network), but that is the **public partition only** and would falsely reject GovCloud and regions AWS adds later. A wrong region fails loudly at token-mint time; a false rejection would be worse.
+**Region is a global setting, not a per-provider field.** One refresher, one
+`self._region`, one `BEDROCK_MANTLE_API_KEY` in `os.environ` — a second provider
+in another region would present a token minted for the first. The per-provider
+field is retired with the other two, and `aws_region_name` (the key LiteLLM
+actually declares; `aws_region` is silently dropped) is now injected into
+`litellm_params` from the resolved global region. Region resolution goes through
+`settings_resolver` via a function-local import rather than a second
+env-then-config walk in `db`, because a duplicated walk is exactly the drift the
+resolver exists to prevent. **No seeding**: a `aws_region` value that was inert
+for its entire life is not evidence of an operator's current intent, so the
+global setting starts unset and env/default wins.
+
+Validation warns rather than blocks — a region is lowercased with a message
+rather than rejected. botocore can enumerate Bedrock regions offline, but that is
+the **public partition only** and would falsely reject GovCloud and regions AWS
+adds later.
+
+**Secrets are reported as presence, never echoed.** The key pair follows the
+existing provider `api_key` convention (`has_api_key` boolean, never the value),
+not the LiteLLM master key's `key[:12] + "..." + key[-4:]` masked reveal. An AWS
+access key ID is half a credential — the `AKIA` prefix identifies the account and
+the key vintage — so there is nothing a mask would reveal that the boolean does
+not. `get_secret_setting` returns a **state** rather than a bare value, so
+"never configured" is distinguishable from "configured under a different
+`ENCRYPTION_KEY`": `decrypt_data` returns its input unchanged on failure, which
+would otherwise hand raw Fernet ciphertext to boto3 as a secret (BUGS.md #8).
+The latter now raises a `stored_credentials_undecryptable` warning.
+
+**A save that persists but cannot mint a token reports that.** `PUT` returns
+`saved` and `token_refreshed` separately, and the UI renders
+`Saved, but no token could be minted` rather than a green success. A wrong region
+or bad key fails at token-mint time, not at validation.
+
+**What Step 2 still needs from the host.** The unit tests use a fake boto3
+session; no real token has been minted through `configure()`. Worth running by
+hand once deployed — save a region change and confirm `region.source` flips from
+`env` to `config` with `shadowed: ["env"]`, and that a token actually re-mints.
+
+### Corrections after host verification
+
+Three claims in this section were wrong. Recording them because the failure
+mode is consistent: **each was an inference from an absence, and each absence
+turned out to be guaranteed by something structural rather than informative.**
+
+| Claim | What was actually true |
+|---|---|
+| "LiteLLM's log has no `Uvicorn running on :4000`, so it appears stuck or still initialising" | `podman logs` cannot contain LiteLLM's output — `start_container.sh:56` redirects it to `${CONFIG_DIR}/litellm.log`. LiteLLM was up the whole time |
+| "CI smoke assertions: `litellm_status == 200` … closing the `linux/amd64` arch gap" | The CI container has no `model_list`, so `/health` returns 200 instantly. The assertion proved the management UI boots and nothing about LiteLLM serving requests |
+| "the Step 1 auth-error double-poll is still unverified" | It was run, and it passed *vacuously* — `auth_error` was `null` in both responses, so it would have been identical against the old code too |
+
+The first two are the same mistake the CI section already documents as its
+lesson — *"A local pass is not a deployment"* — committed twice more in the
+document that recorded it. The third is new and worth stating plainly: a green
+double-diff is not evidence unless there was something to differ on. `wc -c`
+guards the empty-file case; nothing guards the empty-error case.
+
+Two mitigations now exist so this is cheaper next time. `scripts/smoke.sh`
+asserts `/api/health/litellm/liveliness`, which cannot be red for provider-auth
+reasons and cannot pass vacuously with no models. And `AGENTS.md` carries a
+"Diagnosing the Running Container" section pointing at
+`${CONFIG_DIR}/litellm.log` and naming which health endpoint answers which
+question.
+
+The host's real state, for whoever picks this up: LiteLLM is healthy, and
+Bedrock auth has **never** completed on it — `needs_login: true`, no token ever
+minted, no static keys set. `AWS_PROFILE=default` and
+`AWS_REGION=ap-northeast-1` both resolve `source: env`, which confirms the
+resolver's precedence is working live. Step 2's settings card is the intended way
+out of that state, and completing the SSO login in the browser remains the only
+thing that mints a real token.
 
 ### Step 3 — Mantle Model Discovery
 
@@ -413,7 +567,19 @@ The key pair is opt-in behind a collapsed advanced section and encrypted at rest
 
 The Bedrock add-model form is currently the least helpful of the four: OpenRouter gets a searchable list, Ollama gets a Fetch Models button, and Bedrock gets a bare text input wrapped in two paragraphs of defensive caveats. Those caveats existed because polling Bedrock models was previously impossible. They are tech debt, not warnings anyone still needs.
 
-**Discovery is available.** `https://bedrock-mantle.<region>.api.aws/v1/models` exists — the OpenAI-compatible client `models.list()` path. An earlier entry in `docs/BUGS.md` claiming otherwise is wrong and needs correcting. Per-model path derivation already handles the GPT-5.6+/GPT-6 family, so `BEDROCK_MANTLE_API_BASE` should stay unset.
+**Discovery is available, with one caveat that shapes the UI.**
+`https://bedrock-mantle.<region>.api.aws/v1/models` exists and takes the same
+`BEDROCK_MANTLE_API_KEY` the proxy uses. Verified live: `/v1/models` returns 401
+(wants a bearer), `/openai/v1/models` returns 404. An earlier entry in
+`docs/BUGS.md` claimed no `/models` endpoint existed at all; that was wrong and is
+now corrected.
+
+The 404 is the real constraint: the gpt-5.x, gpt-6-\*, gemma-4-\* and grok-4.x
+families are served on `/openai/v1`, so **a fetched list will not contain
+them**. "Fetch Models" must therefore supplement manual entry rather than replace
+it, and the UI should say so — otherwise the families it omits read as models that
+do not exist. Per-model path derivation already handles the GPT-5.6+/GPT-6
+family, so `BEDROCK_MANTLE_API_BASE` should stay unset.
 
 ---
 
@@ -613,7 +779,7 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 |---|---|---|
 | Playground V1 | done | `page_playground.html`, `playground.js` |
 | Groups Dashboard | done | `page_groups.html`, `groups.js` |
-| Bedrock Auth Configuration | next | `settings_resolver.py` |
+| Bedrock Auth Configuration | done | `settings_resolver.py` |
 | Skills Library V1 | planned | `page_skills.html`, `skills.js` |
 | Playground V2 | planned | `conversations_db.py` |
 | Skills Library V2 | planned | `mcp_skills_server.py` |
@@ -658,9 +824,9 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Playground V1 (Session-Scoped Chat) | — | 2 | 2-3 days | done |
 | Groups Dashboard | — | 2 | 1-2 days | done |
 | Cost Awareness | TinyDB (cost fields) | — | 1 day | done |
-| Bedrock Auth Configuration — Step 1 | — | — | 0.5 day | next |
-| Bedrock Auth Configuration — Step 2 | TinyDB (encrypted settings) | — | 1-2 days | planned |
-| Bedrock Auth Configuration — Step 3 | — | — | 0.5-1 day | planned |
+| Bedrock Auth Configuration — Step 1 | — | — | 0.5 day | done |
+| Bedrock Auth Configuration — Step 2 | TinyDB (encrypted settings) | — | 1-2 days | done |
+| Bedrock Auth Configuration — Step 3 | — | — | 0.5-1 day | next |
 | Skills Library V1 (Browse / Manage) | TinyDB (skills table) | 2 | 2-3 days | planned |
 | Playground V2 (Persistent Conversations) | SQLite (conversations.db) | — | 3-4 days | planned |
 | Skills Library V2 (MCP Integration) | — | — | 3-4 days | planned |

@@ -10,6 +10,7 @@ async function loadProvidersPage() {
 	window._allProviders = provData.providers || [];
 	window._allModels = modData.models || [];
 	renderProvidersList(window._allProviders);
+	loadBedrockSettings();
 }
 
 function renderProvidersList(providers) {
@@ -70,11 +71,6 @@ async function toggleProvider(name) {
 function renderProviderDetail(provider, models) {
 	const detail = document.getElementById(`provider-detail-${provider.name}`);
 	const escName = provider.name.replace(/'/g, "\\'");
-	const bedrockFields = `
-        <div class="provider-field-row"><label>AWS Region</label><input id="prov-aws-region" value="${provider.aws_region || ""}" /></div>
-        <div class="provider-field-row"><label>Access Key Env</label><input id="prov-aws-key-env" value="${provider.aws_access_key_env || ""}" /></div>
-        <div class="provider-field-row"><label>Secret Key Env</label><input id="prov-aws-secret-env" value="${provider.aws_secret_key_env || ""}" /></div>
-    `;
 	const apiKeyField = provider.has_api_key
 		? `<div class="api-key-set" id="api-key-set-indicator">
 			 <span class="api-key-masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
@@ -110,7 +106,6 @@ function renderProviderDetail(provider, models) {
                 <option value="custom" ${provider.type === "custom" ? "selected" : ""}>Custom</option>
             </select>
         </div>
-        <div id="prov-bedrock-fields" class="${provider.type === "bedrock" ? "" : "hidden"}">${bedrockFields}</div>
         <div id="prov-openai-fields" class="${provider.type === "openai-compatible" ? "" : "hidden"}">${openaiFields}</div>
         <div class="provider-field-row"><label>Notes</label><input id="prov-notes" value="${provider.notes || ""}" /></div>
         <div style="margin-top:16px;">
@@ -125,10 +120,234 @@ function renderProviderDetail(provider, models) {
     `;
 }
 
+// Warning codes from /api/settings/bedrock. Codes rather than prose so the
+// wording can change without touching Python.
+const BEDROCK_SETTING_WARNINGS = {
+	stored_credentials_undecryptable:
+		"Stored credentials cannot be decrypted with the current ENCRYPTION_KEY. " +
+		"They were probably restored from a backup taken under a different key. " +
+		"Re-enter them, or the values cannot be used.",
+	incomplete_static_key_pair:
+		"Only one half of the static key pair is stored. Both are needed — the " +
+		"profile is being used until they are.",
+};
+
+function bedrockSettingRow(label, setting) {
+	if (!setting) return "";
+	const badge = `<span class="source-badge source-${setting.source}">${setting.source}</span>`;
+	let shadowed = "";
+	if (setting.shadowed && setting.shadowed.length > 0) {
+		shadowed = `<span class="shadowed-note">overrides ${setting.shadowed.join(", ")}</span>`;
+	}
+	return (
+		`<div class="resolved-row"><span class="resolved-key">${label}</span>` +
+		`<span class="resolved-value">${setting.value ?? "—"}</span>${badge}${shadowed}</div>`
+	);
+}
+
+async function loadBedrockSettings() {
+	const wrap = document.getElementById("bedrock-settings-body");
+	if (!wrap) return;
+	let data;
+	try {
+		const res = await fetch("/api/settings/bedrock");
+		data = await res.json();
+	} catch (_e) {
+		wrap.innerHTML = '<p class="muted">Could not load Bedrock settings.</p>';
+		return;
+	}
+
+	// Values come from the API, so the inputs show what is actually in effect
+	// rather than what was last typed. Source badges make it obvious when the
+	// environment is winning and these fields are inert.
+	const region = data.region?.value || "";
+	const profile = data.profile?.value || "";
+	const keysConfigured = data.static_keys?.configured;
+
+	let warnings = "";
+	for (const code of data.warnings || []) {
+		const text = BEDROCK_SETTING_WARNINGS[code];
+		if (text) warnings += `<div class="resolved-warning">${text}</div>`;
+	}
+
+	wrap.innerHTML = `
+        <div class="resolved-grid">
+            ${bedrockSettingRow("Region", data.region)}
+            ${bedrockSettingRow("Profile", data.profile)}
+        </div>
+        ${warnings}
+        <div class="stack-sm" style="margin-top:12px;">
+            <label class="inline-row" style="gap:8px;">
+                <span style="min-width:150px;font-size:13px;">Region:</span>
+                <input type="text" id="bedrock-region-input" value="${region}"
+                       placeholder="e.g. us-east-1" style="width:220px;" />
+            </label>
+            <label class="inline-row" style="gap:8px;">
+                <span style="min-width:150px;font-size:13px;">AWS profile:</span>
+                <input type="text" id="bedrock-profile-input" value="${profile}"
+                       placeholder="e.g. bedrock-openai20b" style="width:220px;" />
+            </label>
+        </div>
+        <details style="margin-top:12px;">
+            <summary style="cursor:pointer;font-size:13px;">
+                Advanced &mdash; static IAM keys
+            </summary>
+            <div class="stack-sm" style="margin-top:10px;">
+                <p class="muted" style="font-size:12px;margin:0 0 6px;">
+                    Optional. With no key pair, the AWS profile above is used and
+                    the browser login flow applies. With a key pair, the profile is
+                    ignored. The equivalent environment variables
+                    (<code>AWS_ACCESS_KEY_ID</code> / <code>AWS_SECRET_ACCESS_KEY</code>)
+                    also work and take precedence over values stored here. Keys are
+                    encrypted at rest and are never shown again after saving.
+                </p>
+                <div id="bedrock-keys-set" class="api-key-set ${keysConfigured ? "" : "hidden"}">
+                    <span class="api-key-masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+                    <span class="api-key-saved-label">(saved)</span>
+                    <button type="button" class="rename-btn" onclick="showBedrockKeyInputs()">Change</button>
+                    <button type="button" class="delete-btn" id="clear-bedrock-keys-btn"
+                            onclick="clearBedrockKeys()">Clear</button>
+                </div>
+                <div id="bedrock-key-inputs" class="${keysConfigured ? "hidden" : ""}">
+                    <label class="inline-row" style="gap:8px;">
+                        <span style="min-width:150px;font-size:13px;">Access key ID:</span>
+                        <input type="password" id="bedrock-access-key-input"
+                               placeholder="AKIA..." style="width:320px;" />
+                    </label>
+                    <label class="inline-row" style="gap:8px;margin-top:6px;">
+                        <span style="min-width:150px;font-size:13px;">Secret access key:</span>
+                        <input type="password" id="bedrock-secret-key-input"
+                               placeholder="secret access key" style="width:320px;" />
+                    </label>
+                </div>
+            </div>
+        </details>
+        <div class="inline-row" style="margin-top:14px;">
+            <button type="button" class="btn-primary" id="save-bedrock-settings-btn"
+                    onclick="saveBedrockSettings()">Save &amp; Apply</button>
+        </div>
+    `;
+}
+
+function showBedrockKeyInputs() {
+	document.getElementById("bedrock-keys-set")?.classList.add("hidden");
+	document.getElementById("bedrock-key-inputs")?.classList.remove("hidden");
+}
+
+async function clearBedrockKeys() {
+	const btn = document.getElementById("clear-bedrock-keys-btn");
+	if (!btn || btn.dataset.confirming === "true") return;
+	btn.dataset.confirming = "true";
+	btn.textContent = "Confirm Clear";
+	btn.className = "confirm-btn";
+	btn.disabled = true;
+	setTimeout(() => {
+		btn.disabled = false;
+	}, 1000);
+	setTimeout(() => {
+		if (btn.dataset.confirming === "true") clearBedrockKeysReset(btn);
+	}, 5000);
+
+	const toast = showToast("Clearing static keys...", "info", 0, true);
+	try {
+		const res = await fetch("/api/settings/bedrock", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ clear_static_keys: true }),
+		});
+		if (res.ok) {
+			const data = await res.json();
+			updateToast(
+				toast,
+				bedrockSaveMessage(data),
+				data.token_refreshed ? "success" : "warning",
+				true,
+				5000,
+			);
+			loadBedrockSettings();
+		} else {
+			const err = await res.json();
+			updateToast(
+				toast,
+				`Error: ${err.detail || "Failed to clear keys"}`,
+				"error",
+				true,
+				8000,
+			);
+			clearBedrockKeysReset(btn);
+		}
+	} catch (e) {
+		updateToast(toast, `Error: ${e.message}`, "error", true, 8000);
+		clearBedrockKeysReset(btn);
+	}
+}
+
+function clearBedrockKeysReset(btn) {
+	if (!btn) return;
+	btn.dataset.confirming = "false";
+	btn.textContent = "Clear";
+	btn.className = "delete-btn";
+	btn.disabled = false;
+}
+
+// A save can persist and still fail to produce a token — a wrong region or a
+// bad key fails at token-mint time, not at validation. Reporting that as plain
+// success is the exact failure mode this workstream exists to remove.
+function bedrockSaveMessage(data) {
+	if (data.token_refreshed) return "Saved — token refreshed";
+	if (data.warnings?.length)
+		return `Saved, but not applied: ${data.warnings.join(", ")}`;
+	return "Saved, but no token could be minted. Check the region and credentials.";
+}
+
+async function saveBedrockSettings() {
+	const body = {
+		region: document.getElementById("bedrock-region-input")?.value.trim(),
+		profile: document.getElementById("bedrock-profile-input")?.value.trim(),
+	};
+	const accessKey = document
+		.getElementById("bedrock-access-key-input")
+		?.value.trim();
+	const secretKey = document
+		.getElementById("bedrock-secret-key-input")
+		?.value.trim();
+	if (accessKey) body.access_key_id = accessKey;
+	if (secretKey) body.secret_access_key = secretKey;
+
+	const toast = showToast("Applying Bedrock settings...", "info", 0, true);
+	try {
+		const res = await fetch("/api/settings/bedrock", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		if (res.ok) {
+			const data = await res.json();
+			updateToast(
+				toast,
+				bedrockSaveMessage(data),
+				data.token_refreshed ? "success" : "warning",
+				true,
+				5000,
+			);
+			loadBedrockSettings();
+		} else {
+			const err = await res.json();
+			updateToast(
+				toast,
+				`Error: ${typeof err.detail === "string" ? err.detail : "Failed to save"}`,
+				"error",
+				true,
+				8000,
+			);
+		}
+	} catch (e) {
+		updateToast(toast, `Error: ${e.message}`, "error", true, 8000);
+	}
+}
+
 function toggleDetailProviderFields() {
 	const type = document.getElementById("prov-type").value;
-	document.getElementById("prov-bedrock-fields").style.display =
-		type === "bedrock" ? "" : "none";
 	document.getElementById("prov-openai-fields").style.display =
 		type === "openai-compatible" ? "" : "none";
 }
@@ -316,8 +535,6 @@ function hideCreateProviderForm() {
 
 function toggleNewProviderFields() {
 	const type = document.getElementById("new-provider-type").value;
-	document.getElementById("new-provider-bedrock-fields").style.display =
-		type === "bedrock" ? "flex" : "none";
 	document.getElementById("new-provider-openai-fields").style.display =
 		type === "openai-compatible" ? "flex" : "none";
 }
@@ -334,17 +551,7 @@ async function createProvider() {
 		color: document.getElementById("new-provider-color").value,
 		notes: document.getElementById("new-provider-notes").value.trim(),
 	};
-	if (type === "bedrock") {
-		provider.aws_region = document
-			.getElementById("new-provider-aws-region")
-			.value.trim();
-		provider.aws_access_key_env = document
-			.getElementById("new-provider-aws-key-env")
-			.value.trim();
-		provider.aws_secret_key_env = document
-			.getElementById("new-provider-aws-secret-env")
-			.value.trim();
-	} else if (type === "openai-compatible") {
+	if (type === "openai-compatible") {
 		provider.api_base = document
 			.getElementById("new-provider-api-base")
 			.value.trim();
@@ -381,14 +588,7 @@ async function saveProviderDetail(name) {
 		color: swatch?.dataset?.color || "#888888",
 		notes: document.getElementById("prov-notes").value.trim(),
 	};
-	if (type === "bedrock") {
-		provider.aws_region =
-			document.getElementById("prov-aws-region")?.value.trim() || "";
-		provider.aws_access_key_env =
-			document.getElementById("prov-aws-key-env")?.value.trim() || "";
-		provider.aws_secret_key_env =
-			document.getElementById("prov-aws-secret-env")?.value.trim() || "";
-	} else if (type === "openai-compatible") {
+	if (type === "openai-compatible") {
 		const apiBase = document.getElementById("prov-api-base");
 		if (apiBase) provider.api_base = apiBase.value.trim();
 		const apiKeyInput = document.getElementById("prov-api-key");

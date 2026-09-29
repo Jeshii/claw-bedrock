@@ -96,6 +96,22 @@ def decrypt_data(token: str) -> str:
     # fmt: on
 
 
+def decrypt_data_strict(token: str) -> str:
+    """Decrypt, raising InvalidToken instead of returning the ciphertext unchanged.
+
+    `decrypt_data` swallows every failure so that values stored before
+    encryption existed keep working. That makes a value encrypted under a
+    *different* ENCRYPTION_KEY indistinguishable from plaintext, which for a
+    credential means handing raw Fernet ciphertext to the consumer as if it were
+    a secret. Callers that need to tell those two apart — see
+    `db.get_secret_setting` — use this instead.
+    """
+    if not token:
+        return token
+    f = Fernet(_get_encryption_key())
+    return f.decrypt(token.encode("utf-8")).decode("utf-8")
+
+
 def get_encryption_mode() -> tuple[bool, str]:
     """Get encryption status: (configured: bool, mode: str).
 

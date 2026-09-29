@@ -53,8 +53,69 @@ LITELLM_BASE_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
 
 # Config-store keys for Bedrock auth. Kept distinct from the env var names so a
 # restored backup cannot collide with them — config import writes keys verbatim.
-_CONFIG_REGION_KEY = "bedrock_region"
-_CONFIG_PROFILE_KEY = "bedrock_profile"
+_CONFIG_REGION_KEY = db.BEDROCK_REGION_SETTING
+_CONFIG_PROFILE_KEY = db.BEDROCK_PROFILE_SETTING
+_CONFIG_ACCESS_KEY = db.BEDROCK_ACCESS_KEY_SETTING
+_CONFIG_SECRET_KEY = db.BEDROCK_SECRET_KEY_SETTING
+
+
+def _bedrock_auth_state() -> dict:
+    """The Bedrock auth settings block, shared by status and the settings card.
+
+    Provenance comes from `settings_resolver`, so the values the UI shows and the
+    values the engine uses cannot disagree. Credential *presence* is reported as
+    a boolean; the values themselves never leave the server.
+    """
+    refresher = token_refresher.token_refresher
+    region = settings_resolver.resolve(
+        "AWS_REGION",
+        config_key=_CONFIG_REGION_KEY,
+        default=refresher._region,
+    )
+    profile = settings_resolver.resolve(
+        "AWS_PROFILE",
+        config_key=_CONFIG_PROFILE_KEY,
+        default=refresher._profile,
+    )
+    access_key, access_key_state = db.get_secret_setting(_CONFIG_ACCESS_KEY)
+    secret_key, secret_key_state = db.get_secret_setting(_CONFIG_SECRET_KEY)
+
+    states = {access_key_state, secret_key_state}
+    if "undecryptable" in states:
+        # Reported rather than silently ignored: decrypt_data returns its input
+        # unchanged on failure, so without this the raw Fernet ciphertext would
+        # reach boto3 as if it were a secret. See BUGS.md #8.
+        key_state = "undecryptable"
+    elif states == {"absent"}:
+        # Not configured at all, which is the normal case — the AWS profile is
+        # then the credential source. Distinct from half-configured.
+        key_state = "absent"
+    elif states == {"ok"}:
+        key_state = "ok"
+    else:
+        # One half stored. It cannot authenticate, and the profile is used
+        # instead — which is baffling without being told.
+        key_state = "incomplete"
+
+    warnings = []
+    if key_state == "undecryptable":
+        warnings.append("stored_credentials_undecryptable")
+    elif key_state == "incomplete":
+        warnings.append("incomplete_static_key_pair")
+
+    return {
+        "region": region.as_dict(),
+        "profile": profile.as_dict(),
+        "static_keys": {
+            "configured": bool(access_key and secret_key),
+            "state": key_state,
+        },
+        "credential_env": {
+            "access_key_set": bool(os.environ.get("AWS_ACCESS_KEY_ID")),
+            "secret_key_set": bool(os.environ.get("AWS_SECRET_ACCESS_KEY")),
+        },
+        "warnings": warnings,
+    }
 
 
 def _reload_litellm_config() -> bool:
@@ -197,6 +258,9 @@ def login_page(request: Request):
 def startup_event():
     db._migrate_yaml_to_db()
     db.seed_default_providers()
+    # Drops provider fields that no runtime code reads. Idempotent, and a no-op
+    # on a database that never had them.
+    db.migrate_dead_bedrock_fields()
     merge_configs()
     print(f"[Startup] Merged configs on startup (CONFIG_DIR={CONFIG_DIR})")
     # Start watchdog in background thread
@@ -307,6 +371,110 @@ def set_router_settings_route(body: dict):
     return {"success": True}
 
 
+@app.get("/api/settings/bedrock")
+def get_bedrock_settings():
+    """Effective Bedrock auth settings, with provenance and credential presence."""
+    return _bedrock_auth_state()
+
+
+@app.put("/api/settings/bedrock")
+def update_bedrock_settings(body: dict):
+    """Save Bedrock auth settings and re-mint a token, without a restart.
+
+    Semantics for the key pair mirror the provider api_key field:
+      omitted                    → keep whatever is stored
+      present and empty          → keep whatever is stored
+      present and non-empty      → replace
+      clear_static_keys: true    → remove both halves
+
+    Returns whether a token was actually minted. A false `token_refreshed`
+    alongside `saved: true` means the settings persisted but AWS rejected them —
+    a wrong region or a bad key — and the caller must not report success.
+    """
+    unknown = set(body) - {
+        "region",
+        "profile",
+        "access_key_id",
+        "secret_access_key",
+        "clear_static_keys",
+    }
+    if unknown:
+        raise HTTPException(400, f"Unknown field(s): {', '.join(sorted(unknown))}")
+
+    region = body.get("region")
+    profile = body.get("profile")
+
+    # Soft validation: warn rather than reject. botocore can enumerate Bedrock
+    # regions offline, but only for the public partition — it would falsely
+    # reject GovCloud and any region AWS adds later. A wrong region fails loudly
+    # at token-mint time, and a false rejection would be the worse failure.
+    region_warning = None
+    if region:
+        cleaned = region.strip()
+        if cleaned != cleaned.lower():
+            region_warning = f"AWS regions are lowercase; using '{cleaned.lower()}'."
+            cleaned = cleaned.lower()
+        region = cleaned
+
+    if region is not None:
+        db.set_setting(_CONFIG_REGION_KEY, region)
+    if profile is not None:
+        db.set_setting(_CONFIG_PROFILE_KEY, profile.strip())
+
+    access_key = body.get("access_key_id")
+    secret_key = body.get("secret_access_key")
+    if body.get("clear_static_keys"):
+        db.clear_secret_setting(_CONFIG_ACCESS_KEY)
+        db.clear_secret_setting(_CONFIG_SECRET_KEY)
+        access_key = secret_key = None
+    else:
+        if access_key:
+            db.set_secret_setting(_CONFIG_ACCESS_KEY, access_key.strip())
+        if secret_key:
+            db.set_secret_setting(_CONFIG_SECRET_KEY, secret_key.strip())
+
+    # Read back through the same accessor the resolver uses, so what is applied
+    # is what was stored rather than what was submitted.
+    stored_access, access_state = db.get_secret_setting(_CONFIG_ACCESS_KEY)
+    stored_secret, secret_state = db.get_secret_setting(_CONFIG_SECRET_KEY)
+
+    refresher = token_refresher.token_refresher
+    effective_region = settings_resolver.resolve(
+        "AWS_REGION", config_key=_CONFIG_REGION_KEY, default=refresher._region
+    ).value
+    effective_profile = settings_resolver.resolve(
+        "AWS_PROFILE", config_key=_CONFIG_PROFILE_KEY, default=refresher._profile
+    ).value
+
+    refreshed = refresher.configure(
+        region=effective_region,
+        profile=effective_profile,
+        access_key_id=stored_access or "",
+        secret_access_key=stored_secret or "",
+    )
+
+    # Region is baked into the generated config as aws_region_name, so the
+    # config must be regenerated for a region change to reach LiteLLM.
+    merge_configs()
+    reloaded = _reload_litellm_config()
+
+    state = _bedrock_auth_state()
+    return {
+        "saved": True,
+        "token_refreshed": refreshed,
+        "config_reloaded": reloaded,
+        "warnings": [
+            w for w in state["warnings"] if w != "stored_credentials_undecryptable"
+        ]
+        + ([region_warning] if region_warning else []),
+        "bedrock": state,
+        "credential_states": {
+            "access_key": access_state,
+            "secret_key": secret_state,
+        },
+    }
+
+
 @app.get("/api/auth/status")
 def auth_status():
     """Check if AWS auth is needed and get auth URL."""
@@ -319,32 +487,10 @@ def auth_status():
 
     openrouter_key = bool(os.environ.get("OPENROUTER_API_KEY"))
 
-    refresher = token_refresher.token_refresher
-    bedrock_state = refresher.auth_status_payload()
-
-    # The refresher's own _region/_profile are authoritative — they are what the
-    # token was actually minted against. The resolver only classifies where that
-    # value came from, so a disagreement between the two would show up as a
-    # source the user can act on rather than a silently wrong report.
-    region = settings_resolver.resolve(
-        "AWS_REGION",
-        config_key=_CONFIG_REGION_KEY,
-        default=bedrock_state["region"],
-    )
-    profile = settings_resolver.resolve(
-        "AWS_PROFILE",
-        config_key=_CONFIG_PROFILE_KEY,
-        default=bedrock_state["profile"],
-    )
-
-    access_key_set = bool(os.environ.get("AWS_ACCESS_KEY_ID"))
-    secret_key_set = bool(os.environ.get("AWS_SECRET_ACCESS_KEY"))
-    warnings = []
-    if profile.source != "default" and (access_key_set or secret_key_set):
-        # boto3 drops the env-var credential provider whenever a profile is
-        # passed explicitly, so these are set but inert. Worth saying out loud —
-        # the alternative is a user debugging credentials that are never read.
-        warnings.append("env_credentials_shadowed_by_profile")
+    bedrock_state = token_refresher.token_refresher.auth_status_payload()
+    # Region/profile provenance is resolved in one place so the status endpoint
+    # and the settings card cannot disagree about what is in effect.
+    auth = _bedrock_auth_state()
 
     return {
         "auth_needed": auth_needed,
@@ -354,14 +500,10 @@ def auth_status():
         "needs_login": bedrock_state["needs_login"],
         "openrouter": {"configured": openrouter_key},
         "bedrock": {
-            "region": region.as_dict(),
-            "profile": profile.as_dict(),
+            **auth,
+            # The refresher's own view of the token, which is what was actually
+            # minted and against which region.
             "token": bedrock_state["token"],
-            "credential_env": {
-                "access_key_set": access_key_set,
-                "secret_key_set": secret_key_set,
-            },
-            "warnings": warnings,
         },
     }
 
@@ -1201,11 +1343,8 @@ ALLOWED_PROVIDER_FIELDS = frozenset(
         "color",
         "notes",
         "api_base",
-        "aws_region",
         "api_key",
         "clear_api_key",
-        "aws_access_key_env",
-        "aws_secret_key_env",
     }
 )
 
@@ -1225,16 +1364,18 @@ def update_provider(name: str, body: dict):
       6. On merge/reload failure — return structured 503, NO DB rollback.
 
     Field semantics:
-      - Non-sensitive fields (display_name, type, color, notes, api_base, aws_region):
+      - Non-sensitive fields (display_name, type, color, notes, api_base):
         updated when present in body.
       - api_key:
           omitted        → retains existing encrypted blob
           present, empty → treated as no-change (keep existing)
           non-empty      → encrypts and replaces
           clear_api_key  → removes the key field entirely
-      - aws_access_key_env, aws_secret_key_env:
-          present        → encrypted and stored
-          omitted        → retains existing encrypted blob
+
+    The Bedrock auth fields this used to accept (aws_region,
+    aws_access_key_env, aws_secret_key_env) are gone. They collected
+    configuration no runtime code read; see db.DEAD_BEDROCK_PROVIDER_FIELDS.
+    Region is a global setting at PUT /api/settings/bedrock.
     """
     existing_raw = db._get_provider_raw(name)
     if not existing_raw:
@@ -1257,7 +1398,7 @@ def update_provider(name: str, body: dict):
 
     merged = dict(existing_raw)
 
-    for field in ("display_name", "type", "color", "notes", "api_base", "aws_region"):
+    for field in ("display_name", "type", "color", "notes", "api_base"):
         if field in body:
             merged[field] = (
                 (body[field] or "").strip()
@@ -1271,14 +1412,6 @@ def update_provider(name: str, body: dict):
         val = body["api_key"]
         if val:
             merged["api_key"] = encryption_utils.encrypt_data(val)
-
-    for field in ("aws_access_key_env", "aws_secret_key_env"):
-        if field in body:
-            val = body[field]
-            if val:
-                merged[field] = encryption_utils.encrypt_data(val)
-            else:
-                merged.pop(field, None)
 
     merged["name"] = name
 
@@ -1429,10 +1562,7 @@ def _detect_provider_runtime_change(before_raw: dict, after_raw: dict) -> bool:
     runtime_fields = {
         "type",
         "api_base",
-        "aws_region",
         "api_key",
-        "aws_access_key_env",
-        "aws_secret_key_env",
     }
     before_norm = {k: v for k, v in before_raw.items() if k in runtime_fields}
     after_norm = {k: v for k, v in after_raw.items() if k in runtime_fields}
@@ -1640,11 +1770,38 @@ def reload_litellm() -> dict:
 
 @app.get("/api/health/litellm")
 def health_litellm():
-    """Proxy health check to LiteLLM."""
+    """Report whether LiteLLM can actually serve models.
+
+    Note this proxies `/health`, which on LiteLLM is an *active* health check:
+    it makes a real call to every model in `model_list` unless
+    `general_settings.background_health_checks` is set, which this config does
+    not. So this endpoint is coupled to provider auth — with Bedrock
+    unauthenticated it reports `error` while the proxy itself is perfectly
+    healthy. That coupling is deliberate and load-bearing: a red reading here
+    means models genuinely cannot be served. For "is the proxy process alive",
+    use /api/health/litellm/liveliness, which touches no provider.
+    """
     try:
         resp = requests.get("http://localhost:4000/health", timeout=5)
         return {"status": "ok", "litellm_status": resp.status_code}
     except Exception as e:  # noqa: BLE001 - health probe failure is returned as status
+        return {"status": "error", "detail": str(e)}
+
+
+@app.get("/api/health/litellm/liveliness")
+def health_litellm_liveliness():
+    """Report whether the LiteLLM process is serving, independent of providers.
+
+    LiteLLM's `/health/liveliness` only checks whether a graceful shutdown has
+    begun — no model list, no outbound calls, no auth. That makes it the correct
+    assertion for "did this image boot", and the wrong one for "can this serve a
+    request"; `/api/health/litellm` answers the latter and is the one that goes
+    red when provider credentials are missing.
+    """
+    try:
+        resp = requests.get("http://localhost:4000/health/liveliness", timeout=5)
+        return {"status": "ok", "litellm_status": resp.status_code}
+    except Exception as e:  # noqa: BLE001 - probe failure is returned as status
         return {"status": "error", "detail": str(e)}
 
 
