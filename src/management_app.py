@@ -241,7 +241,13 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # microphone=(self) is same-origin only, which is the correct scope for a
+    # single-user management UI. camera and geolocation stay denied; there is no
+    # reason to widen them. Without this the browser refuses SpeechRecognition
+    # and getUserMedia before any feature code runs.
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(self), geolocation=()"
+    )
     return response
 
 
