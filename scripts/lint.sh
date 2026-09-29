@@ -6,11 +6,33 @@
 # feedback comes from running this directly (or from your editor's language
 # servers). See AGENTS.md.
 #
-# Requires ruff, djlint and biome on PATH:
-#   pip install -r requirements-dev.txt   # ruff, djlint
-#   npm install -g @biomejs/biome@2.5.14  # biome
+# Toolchain (biome is not pip-installable, so it stays global):
+#   .venv/bin/pip install -r requirements-dev.txt      # ruff, djlint, pytest
+#   npm install -g @biomejs/biome@2.5.14               # biome
 set -uo pipefail
 cd "$(dirname "$0")/.."
+
+# Prefer the pinned toolchain in .venv over whatever is on PATH. Both can be
+# present, and a Homebrew djlint silently answering for the pinned one means a
+# version drift shows up as a pass instead of a failure. CI has no .venv, so
+# this is a no-op there and the PATH lookup stands.
+if [ -d .venv/bin ]; then
+    PATH=".venv/bin:$PATH"
+    export PATH
+fi
+
+# Fail loudly and specifically if a tool is absent, rather than letting the
+# shell report "command not found" from inside a step() several lines later.
+for tool in ruff djlint biome; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "lint.sh: '$tool' not found." >&2
+        case "$tool" in
+            biome) echo "  npm install -g @biomejs/biome@2.5.14" >&2 ;;
+            *)     echo "  .venv/bin/pip install -r requirements-dev.txt" >&2 ;;
+        esac
+        exit 127
+    fi
+done
 
 status=0
 

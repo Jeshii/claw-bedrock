@@ -8,8 +8,10 @@
   executes `ENTRYPOINT`, so lint and pytest both pass on an image that cannot boot —
   a module missing from the image only surfaces in the container log. CI runs the smoke
   test between build and push, so a broken image is never published.
-- First-time setup: `pip install -r requirements-dev.txt` (ruff, djlint, pytest) and
-  `npm install -g @biomejs/biome@2.5.14` (biome is not pip-installable)
+- First-time setup: `.venv/bin/pip install -r requirements-dev.txt` (ruff, djlint, pytest) and
+  `npm install -g @biomejs/biome@2.5.14` (biome is not pip-installable, so it stays global).
+  Install into `.venv`, not bare `pip` — `lint.sh` prefers `.venv/bin`, and a bare install
+  leaves Homebrew's copies on `PATH` to answer instead
 - The script only reports. To fix what it finds:
   - python — `ruff check --fix` then `ruff format`
   - static HTML/JS/CSS — `biome check --write .`
@@ -18,14 +20,20 @@
 - **No git hooks by design.** Nothing is installed into `.git/hooks`. For as-you-type
   feedback use your editor's language servers instead — both ruff and biome ship one and
   need no repo config.
-- Never commit if `./scripts/lint.sh` fails
+- Never commit if `./scripts/lint.sh` reports a **finding**. A tool that fails to
+  *start* is not a finding: `lint.sh` exits 127 with an install hint when a tool is
+  missing, and djlint's `Path '...' is not readable` is click's `os.access()` on the
+  argument, not a template problem (see the lint incident in `docs/ROADMAP.md`)
 - Ask before pushing since develop branch will build on push
 
 ## Lint Configuration
 All three linters are configured in-repo so results are reproducible. Do not rely on
 machine-level defaults.
 - `scripts/lint.sh` — the checks themselves: `ruff check`, `ruff format --check`, `biome ci`,
-  and djlint in both lint and format modes, plus a duplicate-pin check on `requirements.lock`
+  and djlint in both lint and format modes, plus a duplicate-pin check on `requirements.lock`.
+  It prepends `.venv/bin` to `PATH` so the pinned toolchain wins over any Homebrew copy on
+  `PATH`, and exits 127 with an install hint if a tool is absent — without that, a version
+  drift shows up as a pass instead of a failure. CI has no `.venv`, so it is a no-op there
 - `ruff.toml` — pins `target-version = "py314"` and the explicit rule set. Regenerate the
   rule list with `ruff check --show-settings | sed -n '/linter.rules.enabled/,/^]/p'`
 - `biome.json` — excludes `templates/` and `tests/**/*.html` (Jinja `{{ }}` is unparseable by
