@@ -129,9 +129,14 @@ Developer tooling:
 - `lint.sh` — Single source of truth for the lint checks; run before committing, and run
   by CI in `.github/workflows/lint.yml`. Covers `ruff check`, `ruff format --check`,
   `biome ci`, djlint in lint and format modes, a duplicate-pin check on
-  `requirements.lock`, and `node --test tests/` for the audio-mode unit tests.
-  Accumulates findings rather than failing fast, and exits 127 with an install
-  hint if a tool is missing, so a version drift cannot read as a pass
+  `requirements.lock`, and `node --test tests/*.test.mjs` for the audio-mode
+  unit tests. Accumulates findings rather than failing fast, and exits 127 with
+  an install hint if a tool is missing, so a version drift cannot read as a
+  pass. The node version is printed in its step header: unlike every other tool
+  here it is a runtime constraint rather than a config-file one, so a local
+  major newer than CI's is the drift to watch for. The glob is wrapped in a
+  `nullglob` no-match guard, because node exits 0 on a pattern that matches
+  nothing — without it, a renamed test file is a silent pass.
 - `smoke.sh` — Builds the image and boots it, asserting the app imports and LiteLLM
   reaches `status: ok` / `litellm_status: 200`. Called by CI between build and push,
   since `docker build` never runs `ENTRYPOINT` and cannot detect an unbootable image.

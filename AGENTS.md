@@ -30,10 +30,25 @@
 All three linters are configured in-repo so results are reproducible. Do not rely on
 machine-level defaults.
 - `scripts/lint.sh` — the checks themselves: `ruff check`, `ruff format --check`, `biome ci`,
-  and djlint in both lint and format modes, plus a duplicate-pin check on `requirements.lock`.
-  It prepends `.venv/bin` to `PATH` so the pinned toolchain wins over any Homebrew copy on
-  `PATH`, and exits 127 with an install hint if a tool is absent — without that, a version
-  drift shows up as a pass instead of a failure. CI has no `.venv`, so it is a no-op there
+  djlint in both lint and format modes, `node --test tests/*.test.mjs`, and a duplicate-pin
+  check on `requirements.lock`. It prepends `.venv/bin` to `PATH` so the pinned toolchain wins
+  over any Homebrew copy on `PATH`, and exits 127 with an install hint if a tool is absent —
+  without that, a version drift shows up as a pass instead of a failure. CI has no `.venv`, so
+  it is a no-op there
+- **Node is a runtime constraint, not a script one.** Every other tool here is pinned by a
+  config file, so "CI runs the same file" genuinely means the same behaviour. Node is not:
+  `.github/workflows/lint.yml` pins `node-version: 22` via `actions/setup-node`, and a local
+  node is typically a major or two newer. `lint.sh` prints the version it used in the
+  `node --test` step header — if that disagrees with the workflow, the disagreement is in the
+  log. The first symptom of getting this wrong is a green local run and a red CI run of the
+  identical command, which is what happened once: `node --test tests/` passes on node 26 and
+  fails on 22 with `MODULE_NOT_FOUND`, because 26 searches a directory argument and 22 loads
+  it as a module path. Hence the glob — plus a `nullglob` no-match guard around it, because an
+  unmatched glob is *not* loud: node reads the literal pattern, finds nothing, and exits 0
+  having run zero tests, so a renamed test file would turn the step into a silent pass. To
+  check a command against the version CI actually uses, without changing what is installed
+  here: `podman run --rm -v "$PWD:/w" -w /w docker.io/library/node:22 node --test
+  tests/*.test.mjs`
 - `ruff.toml` — pins `target-version = "py314"` and the explicit rule set. Regenerate the
   rule list with `ruff check --show-settings | sed -n '/linter.rules.enabled/,/^]/p'`
 - `biome.json` — excludes `templates/` and `tests/**/*.html` (Jinja `{{ }}` is unparseable by

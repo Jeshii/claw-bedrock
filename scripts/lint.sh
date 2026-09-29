@@ -59,7 +59,32 @@ step "djlint format" djlint templates/ --check
 # No test runner for JS otherwise, and no dependencies to install: node ships
 # its own. These cover the sentence chunker and the silence timer, which are the
 # parts of audio mode that can be tested without a microphone.
-step "node --test"   node --test tests/
+#
+# The glob is deliberate and not shorthand. A bare directory argument is not
+# portable across node majors: node 22 loads "tests" as a module path and dies
+# with MODULE_NOT_FOUND, while node 26 searches it. That cost a red build once,
+# because CI pins 22 and a developer's local node is usually newer. Shell
+# expansion gives node an explicit file list, which behaves the same on every
+# major.
+#
+# The no-match guard is load-bearing, and not belt-and-braces. An unmatched glob
+# is *not* a loud failure: node reads the literal pattern, finds nothing, and
+# exits 0 having run zero tests. So renaming or moving the test file would turn
+# this step into a silent pass — the exact failure mode the exit-127 check above
+# exists to prevent, one layer down. nullglob expands the pattern to zero words
+# instead of a literal, which is what makes the count checkable.
+shopt -s nullglob
+js_tests=(tests/*.test.mjs)
+shopt -u nullglob
+if [ "${#js_tests[@]}" -eq 0 ]; then
+    echo "no files matched tests/*.test.mjs -- refusing to report a pass" >&2
+    status=1
+else
+    # The version in the step header is the local one, which is the point: when
+    # it disagrees with the node-version in .github/workflows/lint.yml, that is
+    # visible in the log instead of something to deduce from a stack trace.
+    step "node --test ($(node --version))" node --test "${js_tests[@]}"
+fi
 
 # Guards the failure mode the build-deps skill documents: a hand-edited or
 # badly-merged lock carries duplicate pins and only surfaces as
