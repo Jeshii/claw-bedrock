@@ -52,10 +52,29 @@ jobs:
             type=sha
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
+      # A single local-only tag for the smoke test to boot. steps.meta.outputs.tags
+      # is multi-line (develop plus sha-<short>), and an env: binding passes that
+      # whole block to smoke.sh as one image name, which no build tool accepts.
+      # Built alongside the published tags and never pushed.
+      - name: Set smoke test image tag
+        id: smoke
+        run: echo "image=claw-bedrock:smoke-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
       # Build and load, but do not push: scripts/smoke.sh below boots this image
       # and the push only happens once it passes. `docker build` never runs
       # ENTRYPOINT, so a broken image is otherwise indistinguishable from a
       # good one until it is deployed.
+      #
+      # No `cache-to: type=gha` here. It was added in a834ee8 and has never
+      # worked: without docker/setup-buildx-action the runner uses the `docker`
+      # driver, which supports gha cache import but not export, so the build
+      # failed at setup with "Cache export is not supported for the docker
+      # driver" and no image was ever published. Measured cost of skipping it:
+      # the pip and AWS CLI layers are 946 MB of the 1.1 GB image and rebuild in
+      # ~85s of the 90s build; everything that changes per commit is 391 kB and
+      # rebuilds in 1.45s. For a public repo on free minutes that is not worth a
+      # ~950 MB up-and-down per push into a store that expires silently in 7
+      # days, leaving dead config behind when it does.
       - name: Build container image
         uses: docker/build-push-action@v7
         with:
@@ -63,19 +82,28 @@ jobs:
           file: ./.github/Containerfile
           push: false
           load: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ steps.smoke.outputs.image }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
-          # The AWS CLI and pip install layers are most of the build and change
-          # rarely, so caching them keeps a warm run to a couple of minutes.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Smoke test
-        run: ./scripts/smoke.sh
         env:
-          IMAGE: ${{ steps.meta.outputs.tags }}
+          # load: true put this exact image in the runner's Docker store, so boot
+          # that artifact. Without SKIP_BUILD smoke.sh rebuilds from scratch and
+          # tests a different image than the one about to be pushed.
+          IMAGE: ${{ steps.smoke.outputs.image }}
+          SKIP_BUILD: "1"
+          # smoke.sh prefers podman when it is on PATH, and ubuntu runners may
+          # have it. Podman's store is separate from Docker's, so it would not
+          # see the image buildx just loaded. Docker is guaranteed here.
+          CONTAINER_ENGINE: docker
+          # A cold runner is slower than a local podman VM, and LiteLLM's first
+          # launch races the config write before the watchdog retries it.
+          TIMEOUT: "240"
+        run: ./scripts/smoke.sh
 
       - name: Push container image
         if: ${{ github.event_name != 'pull_request' }}
