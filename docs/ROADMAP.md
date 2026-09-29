@@ -17,7 +17,7 @@ been dishonest. This list is the ordering.
 | 2 | Playground V1 (Session-Scoped Chat) | Complete | — |
 | 3 | Groups Dashboard | Complete | Core Model Grouping |
 | 4 | Cost Awareness | Complete | Core Model Grouping |
-| 5 | **Bedrock Auth Configuration** | **In progress** — step 1 of 3 shipped | — |
+| 5 | **Bedrock Auth Configuration** | **In progress** — step 1 deployed, 2 open host items | — |
 | 6 | Skills Library V1 (Browse / Manage) | Planned | — |
 | 7 | Playground V2 (Persistent Conversations) | Planned | Playground V1 |
 | 8 | Skills Library V2 (MCP Integration) | Planned | Skills Library V1 |
@@ -29,9 +29,12 @@ problem: the Bedrock auth surface collects configuration that does nothing and
 reported status that was not accurate. Everything below it is unaffected by
 finishing it first.
 
-Resume here. The immediate task is not code — it is rebuilding the container so
-Step 1's changes are actually running, then confirming the auth-error fix from
-the shell. See the Step 1 section for the commands.
+Resume here. Step 1's code is shipped and the service is running again on
+`mobydisk`, but **two items are open and both need the host** — LiteLLM is not
+answering `/api/health/litellm`, and the Step 1 auth-error double-poll has not
+been run against the live service. `AGENTS.md` now forbids `ssh` into any host,
+so these cannot be finished from the dev machine. See "Where this stands" in
+the Step 1 section for the exact commands to run by hand.
 
 ---
 
@@ -264,9 +267,9 @@ The Bedrock provider form currently asks for three AWS fields. Investigation fou
 
 Auth actually comes from the token refresher, entirely out of band: `AWS_PROFILE` + `AWS_REGION` → `boto3.Session(...)` → `get_token()` → `os.environ["BEDROCK_MANTLE_API_KEY"]`. The provider record plays no part.
 
-### Step 1 — Auth Status Truth ✅
+### Step 1 — Auth Status Truth ✅ (deployed, live verification pending)
 
-**Status:** Code complete and pushed (`8c5ff71`, `8a75317`, `7b8858e`, `a10c0df`). 198 tests pass, lint clean. **Not yet verified against the running container** — see below.
+**Status:** Code complete, pushed, and running on `mobydisk` as `dev-fcbc415`. 210 tests pass, lint clean, CI green. **The live auth-error double-poll is still unverified** — see "Where this stands".
 
 Read-only with respect to configuration: nothing about how auth works changed, only what the app reports about it.
 
@@ -286,9 +289,9 @@ Read-and-clear was also doing double duty as the de facto reset, since nothing e
 
 **Two implementation decisions worth knowing.** `default` is excluded from `shadowed` — it is a fallback, not a choice anyone made, so "overrides config, default" is not actionable. And the endpoint reports the *refresher's* region and profile rather than the resolver's, because those are what the token was actually minted against; the resolver only classifies provenance, which makes a disagreement visible instead of silently wrong.
 
-### Incident — container could not boot (fixed, uncommitted)
+### Incident — container could not boot (fixed, shipped, deployed)
 
-**Status:** Cause found, fixed, and verified locally. **Not committed and not pushed.** The live service is still down.
+**Status:** Fixed and shipped as `a834ee8`, `30cbed5`, `fcbc415`. The service runs again on `mobydisk`. **One open issue and one unverified claim remain** — see "Where this stands".
 
 **Symptom.** The management UI died on startup with `ModuleNotFoundError: No module named 'settings_resolver'`, from `management_app.py:30`. Because `start_container.sh` ends in `wait ${MGMT_PID}`, the app exiting took the container with it, so port 8282 stopped serving entirely and the unit sat in its `Restart=on-failure` loop rather than running degraded.
 
@@ -303,7 +306,7 @@ Read-and-clear was also doing double duty as the de facto reset, since nothing e
 | `.github/Containerfile` | Five enumerated `COPY src/*.py` lines → `COPY src/*.py .`, so a new module cannot be omitted |
 | `deploy/start_container.sh` | `init_configs()` skips the copy when source and destination are the same file. The image sets `CONFIG_DIR=/app`, so an unmounted boot ran `cp` with identical paths, `cp` exited 1 with "are the same file", and `set -euo pipefail` killed the container before either process started. Deployments never hit it because `CONFIG_DIR` points at a mounted volume |
 | `scripts/smoke.sh` | **New.** Boots the image and asserts it serves. Called by `build-container.yml` between build and push, so a broken image is never published. Honours `$CONTAINER_ENGINE`; `SKIP_BUILD=1` tests an existing image |
-| `.github/workflows/build-container.yml` | Build now `load: true` without pushing, smoke test runs, then a separate push step. Added `cache-from`/`cache-to: type=gha` — the AWS CLI and pip layers are most of the build and change rarely |
+| `.github/workflows/build-container.yml` | Build now `load: true` without pushing, smoke test runs, then a separate push step |
 | `tests/test_containerfile.py` | **New.** 12 tests. Static half of the same guarantee: every `src/*.py` is copied, plus `templates`/`static`/`start_container.sh` |
 | `AGENTS.md`, `docs/FILE_STRUCTURE.md`, `docs/CHANGELOG.md` | Smoke test is now part of the pre-commit loop; scratch files go in `.scratch/` |
 
@@ -311,9 +314,64 @@ Read-and-clear was also doing double duty as the de facto reset, since nothing e
 
 The health assertion is deliberately stricter than `AGENTS.md` used to state. `management_app.py:1646` returns `status: ok` whenever the probe does not *raise*, so a 404 or 500 from LiteLLM still reads as healthy; the smoke test also asserts `litellm_status == 200`.
 
-**One thing to know before resuming.**
+### Incident — the CI build never ran at all
 
-The smoke test builds for the host arch, so a local arm64 run proves the app boots but not that the published `linux/amd64` image does. The first CI run is the real check.
+**Status:** Found and fixed in `fcbc415`. This is the one that actually kept the service down, and the section above could not see it.
+
+**Symptom.** `a834ee8` fixed the Containerfile, `30cbed5` fixed the lint toolchain, both pushed, and *nothing changed on the host*. The `develop` image was still `dev-4fca2c6` — the exact broken commit.
+
+**Cause.** The build job had been failing at setup on every run since `a834ee8`, in 1m0s, before building anything:
+
+```
+ERROR: failed to build: Cache export is not supported for the docker driver.
+```
+
+`a834ee8` added `cache-to: type=gha,mode=max` to a workflow that never called `docker/setup-buildx-action`, so the runner used its implicit default builder, which is the **`docker` driver** — it supports gha cache *import* but not *export*. A `docker-container` driver is what supports export, and nothing here created one.
+
+**There were two more bugs behind it,** both of which would have surfaced the moment the cache error was cleared:
+
+- `IMAGE: ${{ steps.meta.outputs.tags }}` binds a **multi-line** block (`develop` + `sha-<short>`) into one env var, so `smoke.sh` would have passed two tag names to `docker build -t`. It now gets a single local-only tag, built alongside the published ones and never pushed.
+- The smoke step ran with no `SKIP_BUILD`, so it would have **rebuilt from scratch** rather than booting the artifact the push step publishes — defeating the whole build → smoke → push arrangement. It now runs `SKIP_BUILD=1` against the image `load: true` already put in the runner's store.
+- Also pinned `CONTAINER_ENGINE: docker`: `smoke.sh` prefers podman when on `PATH`, ubuntu runners may have it, and podman's store is separate from Docker's, so it would not have seen the loaded image.
+
+**Why the build cache was removed rather than fixed.** The `docker-container` driver would have worked. Measured first: the pip and AWS CLI layers are **946 MB of the 1.1 GB image** and account for ~85s of a 90s cold build; everything that changes per commit is **391 kB** and rebuilds in **1.45s**. So the cache buys ~85s by pushing ~950 MB up and back down per push, into a store that expires silently after 7 days and leaves dead config behind when it does. For a public repo on free minutes that is not a trade worth the new failure surface — and this cache had *already* cost one broken build plus a false "Verified" line in this very section. The `docker-container` fix is four lines if the build ever gets painful.
+
+**Lesson, and it is the one worth keeping.** The verification above was real but **local-only**: podman on arm64. The "Verified" claim was true and still wrong about production, because nothing had asked whether CI could build. A local pass is not a deployment. The `linux/amd64` question that this section flagged as open is now answered by the first green CI run.
+
+**Where this stands (as of `fcbc415`).**
+
+| Check | Result |
+|---|---|
+| CI, lint + 210 tests | pass |
+| CI, build + smoke + push | pass, 1m51s total; build 55s, smoke 19s |
+| CI smoke assertions | `version: dev-fcbc415`, `litellm_status == 200`, booted with `SKIP_BUILD=1` so it tested the pushed artifact |
+| `linux/amd64` published image boots | confirmed by the CI smoke test, closing the arch gap above |
+| `mobydisk` | pulled `:develop`, restarted. `/app/VERSION` = `dev-fcbc415`, `settings_resolver.py` present, `NRestarts` 912 → **0**, `/api/version` 200, 9 models merged |
+| `/api/auth/status` double-poll | **NOT verified** — see below |
+
+**Open issue: LiteLLM is not answering on `mobydisk`.** `/api/health/litellm` returns
+
+```json
+{"status":"error","detail":"HTTPConnectionPool(host='localhost', port=4000): Read timed out. (read timeout=5)"}
+```
+
+persistently across 12 attempts spanning ~4 minutes after a healthy restart. LiteLLM's own log had produced no `Uvicorn running on :4000` line, so it appears stuck or still initialising, while the management UI is fine. The `read timeout=5` is the probe's own budget and may simply be too tight on a host this loaded, which would make this a false alarm rather than an outage — **that is a hypothesis, not a diagnosis.** Note CI's smoke test got LiteLLM healthy in 19s on a clean runner, so the image itself is fine. Needs a look at LiteLLM's log on the host.
+
+**Not verified: the Step 1 fix on the running service.** Calling `/api/auth/status` **twice** and confirming `auth_error` is identical is the shell-visible version of the regression test, and it has not been run against the live host. The earlier check reported two empty files as "identical", which was a false pass — the port was not serving yet.
+
+**Remote access is now off-limits.** `AGENTS.md` forbids `ssh` into any host, `mobydisk` explicitly, enforced as a hard deny in `opencode.jsonc`. The two items above were captured immediately before that landed and cannot be finished from here. **To close them out, run this yourself on the host:**
+
+```bash
+curl -s http://127.0.0.1:8282/api/health/litellm | python3 -m json.tool
+podman logs claw-bedrock 2>&1 | tail -40     # is LiteLLM on :4000 at all?
+
+curl -s http://127.0.0.1:8282/api/auth/status > /tmp/a1.json
+sleep 2
+curl -s http://127.0.0.1:8282/api/auth/status > /tmp/a2.json
+diff /tmp/a1.json /tmp/a2.json && echo "auth_error stable"
+```
+
+Guard against the false pass: check `wc -c` on both files is non-zero before trusting `diff`. If `warnings` contains `env_credentials_shadowed_by_profile`, that is live confirmation of the botocore `disable_env_vars` behavior; an empty list leaves that path untested until Step 2.
 
 **The `lint.sh` blocker is resolved, and it was never a repo problem.** `djlint` was failing intermittently with `Path 'templates/' is not readable`, which reads like a permissions bug and is not one. The message is emitted by **click**, not djlint — `click/types.py:1193`, from `os.access(rv, os.R_OK)` returning `False` — against the `SRC` argument djlint declares at `djlint/__init__.py:145-155` as `click.Path(exists=True, readable=True, ...)`. So djlint aborted on a `stat`/`access` syscall against the directory, before opening a single `.html` file. That is why the earlier evidence all pointed at nothing: `ls` and `stat` agreeing with each other, and `os.access` returning `True` on every call from a fresh process, are all consistent with the *path being fine* and the *syscall being denied intermittently*. A path that `stat` can read but `access()` sometimes refuses is the macOS TCC layer, not the filesystem — this repo sits in `~/Documents` and carries ~31k `com.apple.*` xattrs, and the unrelated `git stash` failure on `.git/config` was the same layer.
 
@@ -325,17 +383,7 @@ It could not be reproduced: ~100 `djlint` runs, 5 full `lint.sh` runs, 40 concur
 
 Note that the pending change touches **zero** templates or `.html` files, so the flake was never gating this work in the first place.
 
-**To finish, now that lint is green:** push `develop` (CI builds and smoke-tests `:develop`), then tag and push `v0.1.2`. The `latest` tag is gated on `startsWith(github.ref, 'refs/tags/v')`, which is correct as written, so tagging a `v*` release does move `latest` — currently frozen at `v0.1.1` from June simply because no newer tag has been pushed. Tagging publishes everything since that release, a history not yet audited. Then on the host:
-
-```bash
-podman pull ghcr.io/jeshii/claw-bedrock:develop
-systemctl --user restart claw-bedrock
-sleep 15
-podman exec claw-bedrock ls /app | grep settings_resolver
-curl -s http://127.0.0.1:8282/api/health/litellm | python3 -m json.tool
-```
-
-Then confirm the Step 1 fix by calling `/api/auth/status` **twice** — `auth_error` must be identical both times, which is the shell-visible version of the regression test. If `warnings` contains `env_credentials_shadowed_by_profile`, that is live confirmation of the botocore `disable_env_vars` behavior; an empty list leaves that path untested against reality until Step 2.
+**`v0.1.2` is not tagged, deliberately.** It stays untagged until the two open items above are closed by hand. `latest` is frozen at `v0.1.1` from June because no newer tag has been pushed, and tagging moves it — the workflow gates `latest` on `startsWith(github.ref, 'refs/tags/v')`, which is correct as written. Tagging would publish all 62 commits since that release, a history still not audited.
 
 ### Step 2 — GUI Bedrock Auth Configuration
 
