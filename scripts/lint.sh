@@ -23,11 +23,15 @@ fi
 
 # Fail loudly and specifically if a tool is absent, rather than letting the
 # shell report "command not found" from inside a step() several lines later.
-for tool in ruff djlint biome; do
+# node is only needed for the Playground Audio Mode unit tests, which cover the
+# two pure functions that carry a feature which otherwise cannot be exercised
+# headlessly. It ships with the runners, so this costs CI nothing.
+for tool in ruff djlint biome node; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "lint.sh: '$tool' not found." >&2
         case "$tool" in
             biome) echo "  npm install -g @biomejs/biome@2.5.14" >&2 ;;
+            node)  echo "  brew install node  (or any Node 20+)" >&2 ;;
             *)     echo "  .venv/bin/pip install -r requirements-dev.txt" >&2 ;;
         esac
         exit 127
@@ -51,6 +55,11 @@ step "ruff format"   ruff format --check
 step "biome"         biome ci . --reporter=summary
 step "djlint lint"   djlint templates/
 step "djlint format" djlint templates/ --check
+
+# No test runner for JS otherwise, and no dependencies to install: node ships
+# its own. These cover the sentence chunker and the silence timer, which are the
+# parts of audio mode that can be tested without a microphone.
+step "node --test"   node --test tests/
 
 # Guards the failure mode the build-deps skill documents: a hand-edited or
 # badly-merged lock carries duplicate pins and only surfaces as

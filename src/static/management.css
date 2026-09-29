@@ -1597,6 +1597,87 @@ dialog::backdrop {
 	padding: 8px 20px;
 	white-space: nowrap;
 }
+/* Audio mode. Colours come from the token layer, so light and dark both come
+   from the same declarations. */
+.playground-audio-bar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 14px;
+	border-top: 1px solid var(--border);
+	background: var(--bg-surface);
+	flex-shrink: 0;
+	min-height: 36px;
+}
+.playground-audio-transcript {
+	flex: 1;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.playground-audio-transcript:empty {
+	display: none;
+}
+.audio-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--text-faint);
+	flex-shrink: 0;
+}
+.status-chip.audio-listening {
+	background: var(--success-subtle);
+	color: var(--success-strong);
+	border-color: var(--success-strong);
+}
+.status-chip.audio-listening .audio-dot {
+	background: var(--success-strong);
+	animation: audioPulse 1.4s ease-in-out infinite;
+}
+.status-chip.audio-pending {
+	background: var(--warn-subtle-3);
+	color: var(--warn-text);
+	border-color: var(--warn-text);
+}
+.status-chip.audio-pending .audio-dot {
+	background: var(--warn-text);
+	animation: audioPulse 0.7s ease-in-out infinite;
+}
+.status-chip.audio-streaming,
+.status-chip.audio-speaking {
+	background: var(--accent-subtle);
+	color: var(--accent-text);
+	border-color: var(--accent-text);
+}
+.status-chip.audio-streaming .audio-dot,
+.status-chip.audio-speaking .audio-dot {
+	background: var(--accent-text);
+	animation: audioPulse 1s ease-in-out infinite;
+}
+/* Only while armed. An unpressed mic that is still visibly lit would be a lie
+   about whether the browser has the microphone. */
+#playground-mic-btn.active {
+	background: var(--accent-fill);
+	color: var(--text-on-accent);
+	border-color: var(--accent-fill);
+}
+#playground-mic-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+@keyframes audioPulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.25;
+	}
+}
+
 .streaming-indicator {
 	align-self: flex-start;
 	display: flex;
@@ -1838,5 +1919,18 @@ dialog::backdrop {
 	}
 	.playground-input-area button {
 		width: 100%;
+	}
+	/* The mic toggle has no text label, so it keeps its own width rather than
+	   stretching with the Send and Stop buttons above it. */
+	.playground-input-area #playground-mic-btn {
+		width: auto;
+		min-width: 48px;
+		padding: 8px 14px;
+	}
+	.playground-audio-bar {
+		flex-wrap: wrap;
+	}
+	.playground-audio-transcript {
+		flex-basis: 100%;
 	}
 }

@@ -57,6 +57,13 @@ function activatePage(pageId) {
 		restoreAutoRefresh();
 	}
 	if (pageId === "auth") loadAuth();
+	// Nothing unmounts when you navigate, so an armed mic would stay open on
+	// another page. This is here rather than in showPage() because that can
+	// return early via the reload-warning modal and only reach activatePage()
+	// later, from dismissReloadWarning().
+	if (pageId !== "playground" && window.PlaygroundAudio) {
+		window.PlaygroundAudio.disarm();
+	}
 }
 
 function dismissReloadWarning(doReload) {

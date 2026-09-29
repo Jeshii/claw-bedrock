@@ -104,6 +104,8 @@ function resetConversation() {
 	if (stopBtn) stopBtn.classList.add("hidden");
 	if (input) input.disabled = false;
 	playgroundAbortController = null;
+	// New Chat is a reset of the whole session, so the mic goes with it.
+	if (window.PlaygroundAudio) window.PlaygroundAudio.disarm();
 }
 
 function appendUserMessage(content) {
@@ -183,6 +185,11 @@ async function sendPlaygroundMessage() {
 	stopBtn.classList.remove("hidden");
 
 	playgroundAbortController = new AbortController();
+
+	// Close the mic before the model starts talking, whoever sent the message.
+	// Armed and then hitting Enter on the keyboard has to behave exactly like
+	// the audio path, or the mic hears the reply and the model answers itself.
+	if (window.PlaygroundAudio) window.PlaygroundAudio.onSend();
 
 	try {
 		const resp = await fetch("/api/chat/completions", {
@@ -271,6 +278,8 @@ async function sendPlaygroundMessage() {
 						reasoning;
 				}
 				messageTextEl.textContent = fullContent;
+				// Cumulative, and content-only — reasoning deltas are not spoken.
+				if (window.PlaygroundAudio) window.PlaygroundAudio.onDelta(fullContent);
 				const container = document.getElementById("playground-messages");
 				if (container) container.scrollTop = container.scrollHeight;
 			}
@@ -292,6 +301,12 @@ async function sendPlaygroundMessage() {
 			commitAssistantMessage(fullContent);
 			// reasoning intentionally excluded from messages[] — streaming metadata only
 		}
+
+		// Last of the text, so anything still queued for speech can be handed
+		// over. onDelta only takes one sentence per call, which keeps speech in
+		// step with the stream but would otherwise leave the tail unspoken.
+		if (window.PlaygroundAudio)
+			window.PlaygroundAudio.onStreamComplete(fullContent);
 	} catch (e) {
 		if (e.name === "AbortError") {
 			const container = document.getElementById("playground-messages");
@@ -308,6 +323,10 @@ async function sendPlaygroundMessage() {
 		isStreaming = false;
 		sendBtn.classList.remove("hidden");
 		stopBtn.classList.add("hidden");
+		// Every exit path lands here: success, HTTP error, abort, parse failure.
+		// Speech outlives the stream, so this only records that the stream is
+		// done — the adapter holds the mic shut until the last sentence ends.
+		if (window.PlaygroundAudio) window.PlaygroundAudio.onStreamEnd();
 	}
 }
 
@@ -316,4 +335,7 @@ function stopPlaygroundStream() {
 		playgroundAbortController.abort();
 		playgroundAbortController = null;
 	}
+	// Stop ends the turn, it does not disarm. A hands-free session stays armed
+	// so the next turn does not need a click.
+	if (window.PlaygroundAudio) window.PlaygroundAudio.cancelSpeech();
 }

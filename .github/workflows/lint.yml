@@ -34,6 +34,13 @@ jobs:
       - name: Set up Biome
         uses: biomejs/setup-biome@v2
 
+      # For `node --test` in lint.sh — the Playground Audio Mode unit tests.
+      # No npm install: node's built-in runner needs no dependencies.
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
       - name: Lint
         run: ./scripts/lint.sh
 

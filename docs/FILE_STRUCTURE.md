@@ -26,10 +26,14 @@ claw-bedrock/
 │   │   └── js/
 │   │       ├── auth.js
 │   │       ├── backup.js
+│   │       ├── groups.js
 │   │       ├── init.js
 │   │       ├── logs.js
+│   │       ├── markdown.js
 │   │       ├── models.js
 │   │       ├── navigation.js
+│   │       ├── playground.js
+│   │       ├── playground_audio.js
 │   │       ├── providers.js
 │   │       ├── security.js
 │   │       ├── tags.js
@@ -37,7 +41,6 @@ claw-bedrock/
 │   │       └── utils.js
 │   └── token_refresher.py
 ├── config/
-│   ├── policy.json
 │   └── policy.json
 ├── deploy/
 │   ├── .env.example
@@ -45,7 +48,8 @@ claw-bedrock/
 │   ├── docker-compose.yml
 │   └── start_container.sh
 ├── scripts/
-│   └── lint.sh
+│   ├── lint.sh
+│   └── smoke.sh
 ├── skills/
 │   ├── aws-login-remote/
 │   │   └── SKILL.md
@@ -58,13 +62,20 @@ claw-bedrock/
 │       ├── page_auth.html
 │       ├── page_backup.html
 │       ├── page_dashboard.html
+│       ├── page_groups.html
 │       ├── page_help.html
 │       ├── page_logs.html
 │       ├── page_models.html
+│       ├── page_playground.html
 │       ├── page_providers.html
 │       ├── page_security.html
-│       ├── page_tags.html
+│       └── page_tags.html
+├── tests/
+│   ├── test_*.py — pytest suite
+│   ├── playground_audio.test.mjs — node --test suite for audio mode
+│   └── markdown-renderer-test.html — hand-run browser harness
 ├── docs/
+│   ├── BUGS.md
 │   ├── CHANGELOG.md
 │   ├── FILE_STRUCTURE.md
 │   └── ROADMAP.md
@@ -93,7 +104,13 @@ Contains all Python source files and static assets for the application:
 - `static/` — Static assets for the management UI:
   - `management.css` — All CSS styles
   - `unofficial-b52s-Regular.ttf` — Font file
-  - `js/` — JavaScript modules (utils, theme, navigation, auth, security, models, tags, logs, providers, backup, init)
+  - `js/` — Classic non-module scripts sharing globals, loaded with `defer` in
+    document order (utils, theme, navigation, auth, security, models, tags, logs,
+    providers, backup, markdown, playground_audio, playground, groups, init).
+    They are deliberately not ES modules: they share globals with inline
+    `onclick` handlers in the templates, which is also why biome's
+    `noUnusedVariables` is disabled for this directory. `playground_audio.js`
+    must load before `playground.js`, which calls into it.
 - `token_refresher.py` — AWS SSO token refresh logic, imported at startup
 
 ### `config/`
@@ -110,7 +127,11 @@ Deployment and container-related files:
 ### `scripts/`
 Developer tooling:
 - `lint.sh` — Single source of truth for the lint checks; run before committing, and run
-  by CI in `.github/workflows/lint.yml`
+  by CI in `.github/workflows/lint.yml`. Covers `ruff check`, `ruff format --check`,
+  `biome ci`, djlint in lint and format modes, a duplicate-pin check on
+  `requirements.lock`, and `node --test tests/` for the audio-mode unit tests.
+  Accumulates findings rather than failing fast, and exits 127 with an install
+  hint if a tool is missing, so a version drift cannot read as a pass
 - `smoke.sh` — Builds the image and boots it, asserting the app imports and LiteLLM
   reaches `status: ok` / `litellm_status: 200`. Called by CI between build and push,
   since `docker build` never runs `ENTRYPOINT` and cannot detect an unbootable image.
@@ -141,10 +162,22 @@ Self-contained skills with their own dependencies when possible:
 HTML templates for the management UI:
 - `login.html` — Password login form
 - `management.html` — Shell template with sidebar, nav, and partial includes
-- `partials/` — Page fragments included by management.html (dashboard, auth, security, models, backup, providers, tags, logs, help)
+- `partials/` — Page fragments included by management.html (dashboard, auth, security, providers, models, playground, groups, tags, backup, logs, help)
+
+### `tests/`
+Test suites. Two runners, deliberately:
+- `test_*.py` — pytest, run from the project root with `PYTHONPATH=src` and a
+  `CONFIG_DIR`/`ENCRYPTION_KEY` pair. No `conftest.py`; each file that reloads
+  app modules purges `sys.modules` itself.
+- `playground_audio.test.mjs` — `node --test`, no dependencies. Audio APIs cannot
+  run headlessly, so this covers the pure functions that carry the feature: the
+  sentence chunker, the silence timer and its grace window, the restart gate,
+  voice resolution and transcript accumulation. `scripts/lint.sh` runs it.
+- `markdown-renderer-test.html` — hand-run browser harness, not in CI.
 
 ### `docs/`
 Project documentation:
+- `BUGS.md` — Numbered diagnosis notes, including the traps in AGENTS.md
 - `CHANGELOG.md` — Version history and feature changelog
 - `FILE_STRUCTURE.md` — This file, directory structure reference
 - `ROADMAP.md` — Full development roadmap with all planned phases

@@ -32,11 +32,28 @@
                 <p>Select a model and send a message to start.</p>
             </div>
         </div>
+        <div id="playground-audio-bar" class="playground-audio-bar hidden">
+            <span id="playground-audio-status"
+                  class="status-chip audio-off"
+                  role="status">
+                <span id="playground-audio-dot" class="audio-dot" aria-hidden="true"></span>
+                <span id="playground-audio-status-text">Mic off</span>
+            </span>
+            <span id="playground-audio-transcript"
+                  class="playground-audio-transcript"
+                  aria-live="polite"></span>
+        </div>
         <div class="playground-input-area">
             <textarea id="playground-input"
                       placeholder="Type a message…"
                       rows="2"
                       onkeydown="handlePlaygroundKeydown(event)"></textarea>
+            <button type="button"
+                    id="playground-mic-btn"
+                    class="btn-secondary"
+                    aria-pressed="false"
+                    aria-label="Toggle hands-free audio mode"
+                    title="Hands-free: listen, then read the reply aloud">🎤</button>
             <button type="button"
                     id="playground-send-btn"
                     onclick="sendPlaygroundMessage()"

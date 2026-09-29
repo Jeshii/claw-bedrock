@@ -49,6 +49,10 @@
         <script defer src="/static/js/backup.js"></script>
         <!-- markdown.js must load before playground.js (MarkdownRenderer dependency) -->
         <script defer src="/static/js/markdown.js"></script>
+        <!-- playground_audio.js must load before playground.js, which calls into
+             window.PlaygroundAudio on send and on every stream delta. Both are
+             defer, so document order is execution order. -->
+        <script defer src="/static/js/playground_audio.js"></script>
         <script defer src="/static/js/playground.js"></script>
         <script defer src="/static/js/groups.js"></script>
         <script defer src="/static/js/init.js"></script>
