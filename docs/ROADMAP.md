@@ -1,6 +1,6 @@
 # Claw-Bedrock Development Roadmap
 
-_Model Groups • Playground • Groups Dashboard • Cost Awareness • Bedrock Auth • Skills Library • MCP Integration_
+_Model Groups • Playground • Audio Mode • Groups Dashboard • Cost Awareness • Bedrock Auth • Skills Library • MCP Integration_
 
 ---
 
@@ -17,17 +17,26 @@ been dishonest. This list is the ordering.
 | 2 | Playground V1 (Session-Scoped Chat) | Complete | — |
 | 3 | Groups Dashboard | Complete | Core Model Grouping |
 | 4 | Cost Awareness | Complete | Core Model Grouping |
-| 5 | **Bedrock Auth Configuration** | **In progress** — steps 1 and 2 shipped, step 3 next | — |
+| 5 | **Bedrock Auth Configuration** | **Paused at Step 3** — steps 1 and 2 shipped; preempted by row 10 | — |
 | 6 | Skills Library V1 (Browse / Manage) | Planned | — |
 | 7 | Playground V2 (Persistent Conversations) | Planned | Playground V1 |
 | 8 | Skills Library V2 (MCP Integration) | Planned | Skills Library V1 |
 | 9 | Polish & Everything Else | Planned | varies — see table |
+| 10 | Playground Audio Mode (Hands-Free) | **Urgent — active workstream** | Playground V1 |
 
-**Bedrock Auth Configuration is the active workstream.** It is independent of
-the skills-library and playground-conversation threads, and it addresses a live
+**Playground Audio Mode is the active workstream, and it jumps the queue.** It
+is appended as row 10 rather than renumbered into position 5, because the
+numbering is an ordering rather than an identity and renumbering would rewrite
+five shipped rows to express a scheduling decision. It is taken out of turn
+ahead of the work in progress, and it is the one item here that is *blocked*
+rather than merely unstarted — the application currently denies the microphone
+outright, so nothing about hands-free can be built on top of the present state.
+
+**Bedrock Auth Configuration is paused at Step 3, not abandoned.** It remains
+the next workstream once audio mode lands. It is independent of the
+skills-library and playground-conversation threads, and it addresses a live
 problem: the Bedrock auth surface collects configuration that does nothing and
-reported status that was not accurate. Everything below it is unaffected by
-finishing it first.
+reported status that was not accurate.
 
 Resume at **Step 3 — Mantle Model Discovery**. Steps 1 and 2 are shipped. The
 two items left open by Step 1 were run by hand and are now closed; both came
@@ -46,6 +55,10 @@ The database tier grows alongside the features. TinyDB stays for config-scale da
 | Models, Providers, Tags, Settings | Existing | TinyDB | Config-scale, few hundred records, CRUD only — already working |
 | Skills | Skills Library V1 | TinyDB | Same profile as models — dozens to low hundreds, CRUD only |
 | Conversations, Messages | Playground V2 | SQLite | Thousands of records, needs full-text search (FTS5), concurrent reads from watchdog + UI |
+
+Audio mode adds no store. A spoken message is an ordinary message: text in,
+text out. Nothing in the audio path is persisted, and Phase B's synthesis
+output is a stream consumed by the browser, not a file.
 
 SQLite is ideal here: stdlib (no new deps), single file (`conversations.db` alongside `clawbedrock.db.json`), supports FTS5, WAL mode for concurrent reads, and is a clear stepping-stone to PostgreSQL if multi-user is ever needed.
 
@@ -116,6 +129,89 @@ async def chat_completion(body: dict):
         headers={"X-Accel-Buffering": "no"},
     )
 ```
+
+---
+
+## Playground Audio Mode (Hands-Free)
+
+**Status:** Urgent. Active workstream — preempts Bedrock Auth Step 3.
+
+**Goal:** Talk to a model and hear it back without touching the keyboard. Turn-based and button-free: arming the mic starts recognition, a trailing silence sends the message, and the reply is spoken as it streams. The text chat is never removed or degraded — audio is a second way in, not a replacement.
+
+This is two phases. Phase A is browser-native and unblocks hands-free with no backend. Phase B moves the same feature onto Bedrock speech models behind an identical interface. Phase A is designed so that Phase B is a provider swap rather than a rewrite.
+
+### Blockers, in the order they bite
+
+**1. The application denies the microphone today.** `security_headers_middleware` in `src/management_app.py` sends:
+
+```python
+response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+```
+
+A browser enforcing that policy refuses `SpeechRecognition` and `getUserMedia` before any feature code runs. It becomes `microphone=(self)` — same-origin only, which is the correct scope for a single-user management UI. `camera=(), geolocation=()` stay as they are; there is no reason to widen them.
+
+This is a deliberate security control being relaxed, so it is worth doing on purpose rather than discovering it. It is also the reason this workstream cannot begin as a pure frontend addition.
+
+**2. Secure context — a requirement, not new work.** TLS already terminates at the reverse proxy in front of port 8282, so no TLS work belongs in this workstream. But the requirement must be written down, because the failure mode is misleading: reached over `http://<lan-ip>:8282` the mic is refused with a permissions error that reads as an application bug rather than a missing secure context. `localhost` counts as secure, so development on the host is unaffected.
+
+**3. SSE buffering.** The chat stream already sends `X-Accel-Buffering: no`, which covers nginx-style proxies but not every proxy. A stalled stream is invisible in a text UI and audible as silence in audio mode, so this is worth verifying against the actual proxy in front of the deployment.
+
+### Key design decisions
+
+**One adapter, two providers.** All speech input and output goes through a single object in `playground_audio.js` — recognition lifecycle, a send trigger, and a speak function — with a `setAudioProvider()` switch between `browser` and `bedrock`. `playground.js` streams a reply the same way regardless of which provider is active, and never learns which one it is. This is what makes Phase B a swap.
+
+**The echo loop is the constraint the design is built around.** Text-to-speech plays through the speakers, the microphone hears it, and the model transcribes its own reply and answers itself — indefinitely. Recognition is therefore stopped before the first utterance is spoken and restarted when the last one ends: half-duplex by construction. This is precisely why V1 is turn-based rather than full duplex, and why barge-in is deferred to Polish.
+
+**There is no VAD in the Web Speech API.** `onspeechend` is non-standard and unreliable. Send-on-silence is a trailing timer, reset on every `onresult`, that fires at roughly 1.3s with no new interim or final text. Because the timer is the whole mechanism, it is a pure state machine and is unit-testable — which matters more than usual here, since none of this can be exercised headlessly.
+
+**The transcript goes into the input box, then through the existing send path.** `sendPlaygroundMessage()` already reads the textarea, so audio mode fills it and calls the same function. The message-state contract, SSE streaming, and the Stop `AbortController` are all shared with Playground V1, and Playground V2's SQLite persistence needs no audio-specific change — a spoken message is an ordinary message row.
+
+**Speech is spoken as it streams.** `speechSynthesis` cannot stream, so accumulated deltas flush on sentence boundaries and the first sentence starts talking while the rest is still arriving. This also sidesteps Chrome's long-utterance cutoff, which silently truncates a paragraph-sized reply partway through.
+
+**The text path is never removed.** A misheard transcript is wrong often enough that correcting it before send has to stay possible, and the keyboard is the only path on a machine with no microphone. Interim transcript is announced via `aria-live`, and `Esc` disarms.
+
+**No audio is persisted.** Transcripts become ordinary message text. No audio blobs, and no copy of conversation content in `localStorage` — audio mode is not a new store and does not touch the database tier.
+
+**Voices load asynchronously.** `getVoices()` returns empty until `voiceschanged` fires, so voice selection is deferred and a fast reply does not get read in whatever default voice happened to be set.
+
+### Support matrix
+
+`SpeechRecognition` is a Chromium and Safari API; Firefox does not implement it. Audio mode is expected to be Chrome and Safari only, and the UI states this rather than failing silently on a button that does nothing. Phase B is not obviously constrained the same way, which is one of its arguments.
+
+### Files created
+
+| File | Purpose |
+|---|---|
+| `src/static/js/playground_audio.js` | The speech adapter — arm/disarm, recognition restart loop, silence timer, sentence chunker, speak queue, provider switch |
+
+### Files modified
+
+| File | Change |
+|---|---|
+| `src/management_app.py` | `Permissions-Policy` — `microphone=()` becomes `microphone=(self)` |
+| `templates/management.html` | Add `<script defer src="/static/js/playground_audio.js">` ahead of `playground.js` |
+| `templates/partials/page_playground.html` | Mic toggle, provider select, armed/listening/speaking state, interim transcript readout |
+| `src/static/js/playground.js` | Fill the input from the transcript and reuse `sendPlaygroundMessage()`; feed streamed deltas to the speak queue; cancel speech on Stop and New Chat |
+| `src/static/management.css` | Audio control states using the design-token layer, both light and dark |
+
+> `playground_audio.js` is a classic non-module script like its neighbours,
+> sharing globals with inline `onclick` — which is why `noUnusedVariables` is
+> disabled for `src/static/js/**`. Running `biome check --write` with that rule
+> enabled renames the globals and breaks the UI. See AGENTS.md.
+
+### Phase B — Bedrock-native speech
+
+Phase A's provider is the browser's. Phase B replaces it with Bedrock speech models — Whisper for recognition, Polly for synthesis — behind the same interface.
+
+**Polly is not an OpenAI-compatible endpoint**, so it cannot be proxied through LiteLLM the way chat is. It is a raw `bedrock-runtime` `InvokeModel` call, using credentials the Bedrock Auth workstream already provisions. That workstream being mid-flight is a reason to sequence Phase B after it, not a reason to avoid Phase A.
+
+**Region availability is the open risk, and it may be disqualifying.** Bedrock speech models are region-limited — Whisper to a short list of regions, Nova Sonic to `us-east-1` — while this deployment signs into `ap-northeast-1`. If no speech model is available there, Phase B is a region decision rather than a port. Verify before committing to it. This is the strongest argument for landing Phase A first: Phase A is worth having on its own merits and is not contingent on the answer.
+
+**Polly is billed per character**, so the cost-awareness surface has to learn these prices. An unpriced model does not read as unknown to the router — it reads as one of the most expensive things available, which is the same `$5/$5` fallback the Groups page already flags for unpriced members.
+
+### Testing
+
+Audio APIs cannot run headlessly, so coverage splits. The two pieces of real logic — the sentence chunker and the silence timer — are pure functions and get unit tests. Everything else is a manual matrix: Chrome and Safari for support, a denied-permission path, a no-microphone machine, and the visual light/dark check, which the Playground has needed once already after shipping past the dark-mode pass.
 
 ---
 
@@ -731,6 +827,8 @@ mcp_settings:
 | FTS5 full-text search for conversations | Small | Playground V2 |
 | Skills sandboxing (subprocess resource limits, read-only FS) | Medium | Skills Library V2 |
 | Conversation light/dark theme toggle for chat bubbles | Small | Playground V1 |
+| Full-duplex barge-in (interrupt playback, speak over the reply) | Medium | Audio Mode — needs real VAD, which the Web Speech API does not provide |
+| Nova Sonic speech-to-speech (true duplex, one bidirectional stream) | Large | Audio Mode Phase B — `us-east-1` only, region may rule it out |
 | Migration scripts (if TinyDB skills → SQLite) | Medium | Skills Library V1+ |
 | Fix `_reload_litellm_config` treating any status < 500 as success | Small | — |
 | Investigate the unexplained 5xx on `POST /config/update` | Medium | — |
@@ -746,6 +844,7 @@ Groups Dashboard:... Models | Playground | Groups | Tags ...
 Cost Awareness:  ... Models | Playground | Groups | Tags ...   (no nav change)
 Bedrock Auth:    ... Models | Playground | Groups | Tags ...   (no nav change)
 Skills Library V1:... Models | Playground | Groups | Skills | Tags ...
+Audio Mode:      ... Models | Playground | Groups | Tags ...   (no nav change)
 ```
 
 Final nav order: `Dashboard | Auth | Security | Providers | Models | Playground | Groups | Skills | Tags | Backup | Logs | Help`
@@ -761,7 +860,9 @@ Core Model Grouping
   └── Polish: group filter, drag-to-reorder (depends on model_group existing)
 
 Playground V1
-  └── Playground V2 (depends on chat proxy existing)
+  ├── Playground V2 (depends on chat proxy existing)
+  └── Playground Audio Mode (depends on the same chat proxy; no new backend
+      in Phase A, so it can be built without waiting for V2)
 
 Skills Library V1
   └── Skills Library V2 (MCP) (depends on skills DB existing)
@@ -783,27 +884,28 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Skills Library V1 | planned | `page_skills.html`, `skills.js` |
 | Playground V2 | planned | `conversations_db.py` |
 | Skills Library V2 | planned | `mcp_skills_server.py` |
+| Playground Audio Mode | planned | `playground_audio.js` |
 
 ### Files to modify (cumulative, all workstreams)
 
 | File | Workstreams |
 |---|---|
 | `src/db.py` | Core Grouping, Cost Awareness, Bedrock Auth, Skills Library V1, Skills Library V2 |
-| `src/management_app.py` | Core Grouping, Playground V1, Groups Dashboard, Cost Awareness, Bedrock Auth, Skills Library V1, Playground V2, Skills Library V2 |
+| `src/management_app.py` | Core Grouping, Playground V1, Groups Dashboard, Cost Awareness, Bedrock Auth, Skills Library V1, Playground V2, Skills Library V2, Audio Mode |
 | `src/token_refresher.py` | Bedrock Auth |
 | `src/static/js/models.js` | Core Grouping, Cost Awareness, Bedrock Auth |
-| `src/static/js/playground.js` | Playground V1, Playground V2 |
+| `src/static/js/playground.js` | Playground V1, Playground V2, Audio Mode |
 | `src/static/js/groups.js` | Groups Dashboard, Cost Awareness |
 | `src/static/js/auth.js` | Bedrock Auth |
 | `src/static/js/providers.js` | Bedrock Auth |
 | `src/static/js/init.js` | Core Grouping, Playground V1, Groups Dashboard, Skills Library V1 |
 | `src/static/js/navigation.js` | Groups Dashboard (and any workstream adding a nav item) |
 | `src/static/js/utils.js` | Groups Dashboard, Cost Awareness (shared formatting helpers) |
-| `src/static/management.css` | Core Grouping, Playground V1, Groups Dashboard, Cost Awareness, Bedrock Auth, Skills Library V1, Playground V2, Skills Library V2 |
-| `templates/management.html` | Playground V1, Groups Dashboard, Skills Library V1 |
+| `src/static/management.css` | Core Grouping, Playground V1, Groups Dashboard, Cost Awareness, Bedrock Auth, Skills Library V1, Playground V2, Skills Library V2, Audio Mode |
+| `templates/management.html` | Playground V1, Groups Dashboard, Skills Library V1, Audio Mode |
 | `templates/partials/page_auth.html` | Bedrock Auth |
 | `templates/partials/page_models.html` | Core Grouping |
-| `templates/partials/page_playground.html` | Playground V1, Playground V2 |
+| `templates/partials/page_playground.html` | Playground V1, Playground V2, Audio Mode |
 | `templates/partials/page_providers.html` | Bedrock Auth |
 | `templates/partials/page_groups.html` | Cost Awareness (router strategy literals) |
 | `templates/partials/page_skills.html` | Skills Library V2 (tool call rendering) |
@@ -830,4 +932,6 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Skills Library V1 (Browse / Manage) | TinyDB (skills table) | 2 | 2-3 days | planned |
 | Playground V2 (Persistent Conversations) | SQLite (conversations.db) | — | 3-4 days | planned |
 | Skills Library V2 (MCP Integration) | — | — | 3-4 days | planned |
+| Playground Audio Mode — Phase A (browser Web Speech) | — | 1 | 1-2 days | next |
+| Playground Audio Mode — Phase B (Bedrock-native) | — | — | 2-3 days | planned — blocked on region availability |
 | Polish & Everything Else | — | — | 2-3 days | planned |
