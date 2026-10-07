@@ -60,6 +60,7 @@ function evaluate(fakeWindow) {
 			SILENCE_MS,
 			GRACE_MS,
 			SPEECH_MAX_CHARS,
+			RESTART_DELAY_MS,
 		};`,
 	)(
 		fakeWindow,
@@ -344,7 +345,7 @@ test("a result that finalises after being interim still reaches the transcript",
 
 	// First event: interim only. Nothing can be committed yet.
 	assert.equal(
-		accumulateResult(session, { results, resultIndex: 0 }),
+		accumulateResult(session, { results, resultIndex: 0 }).text,
 		"what is",
 		"the interim text is shown while it is still provisional",
 	);
@@ -358,7 +359,7 @@ test("a result that finalises after being interim still reaches the transcript",
 	results[0].isFinal = true;
 	results[0][0].transcript = "what is two plus two";
 	assert.equal(
-		accumulateResult(session, { results, resultIndex: 0 }),
+		accumulateResult(session, { results, resultIndex: 0 }).text,
 		"what is two plus two",
 	);
 	assert.equal(
@@ -376,13 +377,19 @@ test("a re-fired result event does not double the transcript", () => {
 	const session = newSession();
 	const results = resultList(["hello", true]);
 
-	assert.equal(accumulateResult(session, { results, resultIndex: 0 }), "hello");
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }).text,
+		"hello",
+	);
 	// The same event again — must not append.
-	assert.equal(accumulateResult(session, { results, resultIndex: 0 }), "hello");
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }).text,
+		"hello",
+	);
 	// A genuinely new result appends, spaced even though the browser omitted it.
 	results.push(resultList(["world", true])[0]);
 	assert.equal(
-		accumulateResult(session, { results, resultIndex: 1 }),
+		accumulateResult(session, { results, resultIndex: 1 }).text,
 		"hello world",
 	);
 	// A session restart resets the pointer, so the same text is heard again.
@@ -390,7 +397,7 @@ test("a re-fired result event does not double the transcript", () => {
 	session.finalTranscript = "";
 	session.interimTranscript = "";
 	assert.equal(
-		accumulateResult(session, { results, resultIndex: 0 }),
+		accumulateResult(session, { results, resultIndex: 0 }).text,
 		"hello world",
 	);
 });
@@ -414,14 +421,14 @@ test("two results finalising together are appended in order, once each", () => {
 	results[0].isFinal = true;
 	results.push(resultList(["Second part.", true])[0]);
 	assert.equal(
-		accumulateResult(session, { results, resultIndex: 0 }),
+		accumulateResult(session, { results, resultIndex: 0 }).text,
 		"First part. Second part.",
 	);
 	assert.equal(session.finalIndex, 2, "both entries accounted for");
 
 	// Re-firing must not duplicate either.
 	assert.equal(
-		accumulateResult(session, { results, resultIndex: 0 }),
+		accumulateResult(session, { results, resultIndex: 0 }).text,
 		"First part. Second part.",
 	);
 });
@@ -442,6 +449,128 @@ test("adjacent final results are spaced even when the browser omits whitespace",
 		session.finalTranscript,
 		"What is two plus two.",
 		"one commit, one space between — not 'What istwo plustwo.'",
+	);
+});
+
+// --- what counts as new speech ----------------------------------------------
+
+test("a re-delivered result reports no change, so it is not treated as speech", () => {
+	// The contract that fixes the countdown restart. Once an entry has
+	// finalised, `session.finalTranscript` is non-empty forever, so "is there
+	// text to show" cannot answer "is the user still talking". A browser in
+	// continuous mode re-delivers the same settled event repeatedly, and
+	// re-arming the silence timer on those is what made the grace countdown
+	// restart (3, 2, 3, 2, 1) and delayed the send indefinitely.
+	const { accumulateResult } = load();
+	const session = newSession();
+	const results = resultList(["hello world", true]);
+
+	const first = accumulateResult(session, { results, resultIndex: 0 });
+	assert.equal(first.text, "hello world");
+	assert.equal(first.changed, true, "a newly finalised entry is real speech");
+
+	for (let i = 0; i < 3; i++) {
+		const again = accumulateResult(session, { results, resultIndex: 0 });
+		assert.equal(again.text, "hello world", "the transcript is still shown");
+		assert.equal(
+			again.changed,
+			false,
+			`re-delivery ${i + 1} carried no new text and must not count as activity`,
+		);
+	}
+});
+
+test("each interim update reports change while the utterance is still growing", () => {
+	const { accumulateResult } = load();
+	const session = newSession();
+	const results = resultList(["what is", false]);
+
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }).changed,
+		true,
+		"first interim text",
+	);
+
+	results[0][0].transcript = "what is two";
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }).changed,
+		true,
+		"a growing interim transcript is real speech and must keep pushing the deadline out",
+	);
+
+	// Finalising commits the text, which is a change in its own right.
+	results[0].isFinal = true;
+	results[0][0].transcript = "what is two plus two";
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }).changed,
+		true,
+	);
+	assert.equal(session.finalTranscript, "what is two plus two");
+
+	assert.equal(
+		accumulateResult(session, { results, resultIndex: 0 }).changed,
+		false,
+		"and once final, re-delivery is no longer activity",
+	);
+});
+
+test("re-fired results do not restart the grace countdown", () => {
+	// The end-to-end consequence, wired the way handleResult wires it. (It
+	// mirrors that function rather than calling it: handleResult reaches module
+	// state set by arm() and the DOM, neither of which exist here. The
+	// accumulateResult contract above is what actually pins the source.)
+	const { accumulateResult, createSilenceTimer } = load();
+	const session = newSession();
+	const results = resultList(["hello world", true]);
+	const clock = fakeClock();
+	const events = [];
+
+	const timer = createSilenceTimer({
+		silenceMs: 100,
+		graceMs: 1000,
+		onPending: () => events.push("pending"),
+		onSend: () => events.push("send"),
+		setTimeout: clock.setTimeout,
+		clearTimeout: clock.clearTimeout,
+	});
+
+	const deliver = (event) => {
+		const { text, changed } = accumulateResult(session, event);
+		if (!text) return;
+		if (changed) timer.noteActivity();
+	};
+
+	// The utterance is recognised and finalises.
+	deliver({ results, resultIndex: 0 });
+	assert.equal(session.finalTranscript, "hello world");
+	assert.equal(timer.state, "waiting");
+
+	clock.advance(100);
+	assert.deepEqual(events, ["pending"], "silence elapsed, grace is open");
+
+	// Now the browser re-delivers that same settled event over and over, with
+	// nobody speaking at all.
+	for (let i = 0; i < 6; i++) {
+		clock.advance(100);
+		deliver({ results, resultIndex: 0 });
+	}
+
+	assert.equal(
+		events.filter((e) => e === "pending").length,
+		1,
+		"a re-delivered result must not open a second grace window",
+	);
+	assert.equal(
+		events.includes("send"),
+		false,
+		"the first grace is still counting",
+	);
+
+	clock.advance(1000);
+	assert.deepEqual(
+		events,
+		["pending", "send"],
+		"the send lands on the original grace, not on a later one",
 	);
 });
 
@@ -565,12 +694,16 @@ test("cancel drops a pending send", () => {
 });
 
 test("silence timer defaults match the shipped constants", () => {
-	const { createSilenceTimer, SILENCE_MS, GRACE_MS } = load();
+	const { createSilenceTimer, SILENCE_MS, GRACE_MS, RESTART_DELAY_MS } = load();
 	assert.equal(SILENCE_MS, 1300);
 	assert.equal(
 		GRACE_MS,
 		2600,
 		"the grace window is what makes a misheard word cheap",
+	);
+	assert.ok(
+		RESTART_DELAY_MS > 0 && RESTART_DELAY_MS <= 250,
+		`restart delay is ${RESTART_DELAY_MS}ms; it is the half of the mic-reopen gap we control, and raising it clips the first word back`,
 	);
 
 	// Constructed with no timing options at all, the defaults must still apply.

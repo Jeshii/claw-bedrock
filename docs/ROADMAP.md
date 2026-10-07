@@ -22,9 +22,10 @@ been dishonest. This list is the ordering.
 | 7 | Playground V2 (Persistent Conversations) | Planned | Playground V1 |
 | 8 | Skills Library V2 (MCP Integration) | Planned | Skills Library V1 |
 | 9 | Polish & Everything Else | Planned | varies — see table |
-| 10 | Playground Audio Mode (Hands-Free) | **Phase A complete** — Phase B not started | Playground V1 |
+| 10 | Playground Audio Mode (Hands-Free) | **Phase A complete and browser-verified** — Phase B not started | Playground V1 |
 
-**Playground Audio Mode jumped the queue, and Phase A has now landed.** It is
+**Playground Audio Mode jumped the queue, and Phase A has now landed and been
+run in a browser.** It is
 appended as row 10 rather than renumbered into position 5, because the numbering
 is an ordering rather than an identity and renumbering would rewrite five shipped
 rows to express a scheduling decision. It was the one item here that was
@@ -134,7 +135,8 @@ async def chat_completion(body: dict):
 
 ## Playground Audio Mode (Hands-Free)
 
-**Status:** Phase A complete. Phase B (Bedrock-native speech) not started.
+**Status:** Phase A complete and verified in a browser, after three bugs that
+only a real microphone could find. Phase B (Bedrock-native speech) not started.
 
 **Goal:** Talk to a model and hear it back without touching the keyboard. Turn-based and button-free: arming the mic starts recognition, a trailing silence sends the message, and the reply is spoken as it streams. The text chat is never removed or degraded — audio is a second way in, not a replacement.
 
@@ -183,7 +185,7 @@ This is a deliberate security control being relaxed, so it is worth doing on pur
 | File | Purpose |
 |---|---|
 | `src/static/js/playground_audio.js` | The speech adapter — arm/disarm, recognition restart loop, silence timer, sentence chunker, speak queue, provider seam |
-| `tests/playground_audio.test.mjs` | 28 unit tests for the pure functions, run by `node --test` from `scripts/lint.sh` |
+| `tests/playground_audio.test.mjs` | 36 unit tests for the pure functions, run by `node --test tests/*.test.mjs` from `scripts/lint.sh` |
 | `tests/test_security_headers.py` | Pins the `Permissions-Policy` value, which nothing asserted before |
 
 ### Files modified
@@ -196,7 +198,7 @@ This is a deliberate security control being relaxed, so it is worth doing on pur
 | `src/static/js/playground.js` | `onSend` / `onDelta` / `onStreamComplete` / `onStreamEnd` hooks; cancel speech on Stop, disarm on New Chat |
 | `src/static/js/navigation.js` | Disarm on leaving the Playground page |
 | `src/static/management.css` | Audio control states using the design-token layer, both light and dark |
-| `scripts/lint.sh` | A `node --test tests/` step, and `node` in the required-tools list |
+| `scripts/lint.sh` | A `node --test tests/*.test.mjs` step, and `node` in the required-tools list |
 | `.github/workflows/lint.yml` | `actions/setup-node` for that step |
 
 > `playground_audio.js` is a classic non-module script like its neighbours,
@@ -239,6 +241,16 @@ room to hand over. Without the drain they are silently lost.
 window, which would double the transcript. The accumulation is factored into
 `accumulateResult` and unit-tested.
 
+**`accumulateResult` reports change, not just text.** "Is there a transcript to
+show" and "is the user still talking" are different questions, and only the
+first is answerable from the accumulated text: once an entry finalises, the
+transcript is non-empty forever. Handling the result event on "there is text"
+meant a browser's repeated re-delivery of a settled event counted as speech,
+re-armed the silence timer and opened a fresh grace window each time. It now
+returns `{ text, changed }`, where `changed` means a final entry was committed
+or the interim string actually differs — so a growing interim transcript still
+pushes the deadline out, and a re-delivery does not.
+
 **`spokenConsumed` resets on every send.** The offset indexes into one reply's
 text, so carrying it into the next reply would run it past the end and leave
 that reply silent.
@@ -258,22 +270,26 @@ Phase A's provider is the browser's. Phase B replaces it with Bedrock speech mod
 Audio APIs cannot run headlessly, so coverage splits. The logic that can be
 tested without a microphone is tested; everything else is a manual matrix.
 
-**Automated** — 28 tests in `tests/playground_audio.test.mjs`, run by
-`node --test tests/` from `scripts/lint.sh` and so by CI. No dependencies: the
-file is a classic script, loaded with `new Function` and its DOM and Web Speech
-globals supplied as parameters. Covers the sentence chunker (sentence
-boundaries, decimals, abbreviations, initials, code fences, the max-length
-backstop, markdown stripping), the silence timer and the grace window against an
-injected clock, the restart gate, voice resolution, and transcript accumulation.
+**Automated** — 36 tests in `tests/playground_audio.test.mjs`, run by
+`node --test tests/*.test.mjs` from `scripts/lint.sh` and so by CI. The glob
+matters: Node 22, which CI pins, reads a bare directory as a module path. No
+dependencies — the file is a classic script, loaded with `new Function` and its
+DOM and Web Speech globals supplied as parameters. Covers the sentence chunker
+(sentence boundaries, decimals, abbreviations, initials, code fences, the
+max-length backstop, markdown stripping), the silence timer and the grace window
+against an injected clock, the restart gate, voice resolution, and transcript
+accumulation including what does and does not count as new speech.
 
-**Manual** — not yet run, and this is the honest gap. Chrome and Safari for
-support, a denied-permission path, a no-microphone machine, and the visual
-light/dark check, which the Playground has needed once already after shipping
-past the dark-mode pass. The one piece of state that cannot be verified without a
-real browser is whether the half-duplex handoff feels right in practice — the
-gap between the last sentence finishing and the mic reopening is `RESTART_DELAY_MS`
-plus however long the browser takes to fire `onend`, and that is a judgement
-call rather than a number to assert.
+**Manual** — run in a browser, and it earned its keep: it is what surfaced the
+three bugs recorded above, none of which the tests could see. Verified: arm →
+speak → stop produces a correct transcript and sends; the grace window cancels;
+`Esc`, New Chat and page-leave all disarm. The half-duplex handoff was judged to
+clip the first word of an immediate reply, which is what moved
+`RESTART_DELAY_MS` to 150ms. **Still open:** iOS Safari's `speechSynthesis`,
+which often refuses to `speak()` outside a user gesture and would leave the reply
+silent where Chrome works — the one item that could still make Phase A
+browser-limited rather than universally usable — and a machine with no
+microphone at all.
 
 ---
 
@@ -994,6 +1010,6 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Skills Library V1 (Browse / Manage) | TinyDB (skills table) | 2 | 2-3 days | planned |
 | Playground V2 (Persistent Conversations) | SQLite (conversations.db) | — | 3-4 days | planned |
 | Skills Library V2 (MCP Integration) | — | — | 3-4 days | planned |
-| Playground Audio Mode — Phase A (browser Web Speech) | — | 1 | 1-2 days | next |
+| Playground Audio Mode — Phase A (browser Web Speech) | — | 1 | 1-2 days | done |
 | Playground Audio Mode — Phase B (Bedrock-native) | — | — | 2-3 days | planned — blocked on region availability |
 | Polish & Everything Else | — | — | 2-3 days | planned |

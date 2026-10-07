@@ -32,8 +32,19 @@ const SILENCE_MS = 1300;
  */
 const GRACE_MS = 2600;
 
-/** Beat between recognition ending and being asked to start again. */
-const RESTART_DELAY_MS = 250;
+/**
+ * Beat between recognition ending and being asked to start again.
+ *
+ * The other term in that gap is however long the browser takes to fire `onend`,
+ * which is not ours to control. Lowering this increases the chance of calling
+ * start() while the previous session is still tearing down, which throws — see
+ * startRecognition, where that is now retried rather than left to strand the
+ * mic.
+ */
+const RESTART_DELAY_MS = 150;
+
+/** Consecutive start() failures tolerated before giving up. See startRecognition. */
+const START_RETRY_LIMIT = 3;
 
 const SPEECH_LANG = "en-US";
 
@@ -338,6 +349,8 @@ const resultSession = {
 let cachedVoice = null;
 let restartHandle = null;
 let countdownHandle = null;
+/** Consecutive start() failures, so the retry in startRecognition can give up. */
+let startAttempts = 0;
 
 function support() {
 	return window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -530,11 +543,17 @@ function afterSpeechChange() {
  *
  * Split out from handleResult so the accumulation is testable without a
  * browser: it is the fiddly part, and the part that has been wrong.
+ *
+ * Reports whether anything actually *changed*, which is not the same question
+ * as whether there is text to show. A browser in continuous mode re-fires the
+ * same result event repeatedly, and once an entry has finalised the transcript
+ * is non-empty forever after — so "is there text" is true on every re-delivery
+ * and cannot be used to decide that the user is still talking. See handleResult.
  */
 function accumulateResult(session, event) {
 	// Interim text is provisional by design — it is meant to be re-read and
 	// replaced on every event — so it is taken fresh from resultIndex each time
-	// and needs no bookkeeping at all.
+	// and needs no bookkeeping of its own.
 	let interim = "";
 	for (let i = event.resultIndex; i < event.results.length; i++) {
 		if (!event.results[i].isFinal) interim += event.results[i][0].transcript;
@@ -550,16 +569,23 @@ function accumulateResult(session, event) {
 	//
 	// Stopping at the first non-final rather than skipping ahead to any later
 	// final keeps the transcript in utterance order.
+	let changed = false;
 	while (
 		session.finalIndex < event.results.length &&
 		event.results[session.finalIndex].isFinal
 	) {
 		appendFinal(session, event.results[session.finalIndex][0].transcript);
 		session.finalIndex++;
+		changed = true;
 	}
 
+	// A growing interim transcript is real speech. An identical one is the same
+	// word counted twice, and treating it as activity is what made the grace
+	// countdown restart over and over.
+	if (interim !== session.interimTranscript) changed = true;
 	session.interimTranscript = interim;
-	return joinTranscript(session.finalTranscript, interim);
+
+	return { text: joinTranscript(session.finalTranscript, interim), changed };
 }
 
 /**
@@ -576,12 +602,18 @@ function appendFinal(session, text) {
 }
 
 function handleResult(event) {
-	const shown = accumulateResult(resultSession, event);
-	if (!shown) return;
+	const { text, changed } = accumulateResult(resultSession, event);
+	if (!text) return;
 
-	showInterim(shown);
-	// Any new text during the grace window abandons the pending send.
-	silenceTimer.noteActivity();
+	showInterim(text);
+	// Only genuinely new text is activity. Re-arm on every delivered event and
+	// a continuous-mode browser's repeated re-firing of the same result resets
+	// the grace window each time — the countdown visibly restarts (3, 2, 3, 2,
+	// 1) and the send is delayed by as long as the engine keeps firing.
+	//
+	// silenceTimer is null once disarmed, and a result already in flight can
+	// land after that, so this cannot assume it exists.
+	if (changed && silenceTimer) silenceTimer.noteActivity();
 }
 
 /**
@@ -633,11 +665,17 @@ function startRecognition() {
 	try {
 		recognition.start();
 		state.recognitionActive = true;
+		startAttempts = 0;
 		setState("listening");
 	} catch {
 		// start() throws if the previous session has not finished tearing down.
-		// onend will call maybeRestart() and try again.
+		// stopRecognition() clears recognitionActive optimistically, so this can
+		// be reached while the old session is still shutting down — and because
+		// nothing started, no onend is coming to put us back together. Retry
+		// here or the mic stays shut until the next turn.
 		state.recognitionActive = false;
+		// Bounded, so a start() that keeps failing is not a hot loop.
+		if (++startAttempts <= START_RETRY_LIMIT) maybeRestart();
 	}
 }
 
@@ -704,6 +742,9 @@ function arm() {
 	state.armed = true;
 	state.streamDone = true;
 	state.speechDone = true;
+	// Clear any exhausted start() retry budget left over from a previous arming,
+	// so a teardown race on this turn gets its retries rather than none.
+	startAttempts = 0;
 	resetTranscript();
 
 	silenceTimer = createSilenceTimer({
