@@ -22,7 +22,7 @@
         </p>
     </div>
     <div class="section help-section">
-        <h2>Usage</h2>
+        <h2>Client Integrations</h2>
         <p>Point your OpenAI-compatible client at the proxy:</p>
         <pre class="code-block">curl <span id="help-curl-base">detecting...</span>/chat/completions \
   -H "Authorization: Bearer sk-claw-xxxx" \
@@ -39,9 +39,15 @@ client = OpenAI(
             Set <code>baseURL</code> in <code>~/.config/opencode/opencode.json</code>:
         </p>
         <pre class="code-block">{
-  "options": {
-    "baseURL": "<span id="opencode-url">detecting...</span>",
-    "apiKey": "sk-claw-xxxx"
+  "provider": {
+    "claw-bedrock": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Claw Bedrock",
+      "options": {
+        "baseURL": "<span id="opencode-url">detecting...</span>",
+        "apiKey": "sk-claw-xxxx"
+      }
+    }
   }
 }</pre>
         <p>
@@ -63,6 +69,9 @@ OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</pre>
                 }
             })();
         </script>
+        <p class="muted" style="font-size:12px; margin-top:8px;">
+            Model names are usually prefixed with <code>claw-bedrock/</code> unless the prefix toggle on the Models page is off.
+        </p>
     </div>
     <div class="section help-section">
         <h2>Adding Models</h2>
@@ -70,19 +79,22 @@ OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</pre>
             Use the Models page to add from Bedrock, OpenRouter, Ollama, or manually. Changes auto-restart LiteLLM to pick up new config.
         </p>
         <p>
-            <strong>Required Environment Variables:</strong>
+            <strong>Required/Optional Environment Variables:</strong>
         </p>
         <ul>
             <li>
-                OpenRouter: <code>OPENROUTER_API_KEY</code>
+                OpenRouter: <code>OPENROUTER_API_KEY</code> (optional but recommended for rate limits)
             </li>
             <li>
                 Ollama: <code>OLLAMA_API_BASE</code> (default: <code>http://localhost:11434</code>)
             </li>
             <li>
-                Bedrock: <code>AWS_PROFILE</code>, <code>AWS_REGION</code>, <code>BEDROCK_MANTLE_API_BASE</code>
+                Bedrock: <code>AWS_PROFILE</code>, <code>AWS_REGION</code> (region is also settable in the UI). Optional static keys: <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code>. Leave <code>BEDROCK_MANTLE_API_BASE</code> unset unless you use a private/VPC/GovCloud endpoint.
             </li>
         </ul>
+        <p class="muted" style="font-size:12px;">
+            Bedrock credentials can also be entered in the UI (Providers → Bedrock Authentication); environment variables take precedence. OpenRouter prices are auto-filled when you pick a model from its catalog.
+        </p>
     </div>
     <div class="section help-section">
         <h2>Managing Models</h2>
@@ -90,23 +102,50 @@ OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</pre>
             <li>Click a model to expand details and manage it</li>
             <li>Rename makes the name editable; click Confirm to save</li>
             <li>Click Delete for confirmation flow (line turns red, wait 1s, then confirm)</li>
+            <li>Edit <strong>In/Out $/1M</strong> costs for cost-based routing; a model without a cost is skipped</li>
+            <li>Set <strong>Reasoning</strong> level (low/medium/high) or a thinking budget where supported</li>
+            <li>Assign a <strong>Group</strong> to enable failover between models sharing a name</li>
+            <li>Add/remove <strong>Tags</strong> via the tag input; drag tag chips between models to copy</li>
             <li>Models auto-restart LiteLLM to pick up changes</li>
+        </ul>
+        <p class="muted" style="font-size:12px; margin-top:8px;">
+            The <strong>Add claw-bedrock/ prefix to model names</strong> toggle on the Models page controls whether served model names are prefixed. Keep it consistent with what your client expects.
+        </p>
+    </div>
+    <div class="section help-section">
+        <h2>Providers</h2>
+        <p>
+            Providers are reusable backend definitions (Bedrock, OpenAI-compatible, or custom). Create and edit them on the Providers page; their color and notes are for your reference.
+        </p>
+        <ul>
+            <li><strong>Bedrock Authentication:</strong> region, AWS profile, and an optional static IAM key pair are configured once for all Bedrock models. Values show a source badge when an environment variable is overriding what you typed.</li>
+            <li><strong>Static keys</strong> are encrypted at rest and never shown again after saving; a half-configured key pair falls back to the profile.</li>
+            <li>OpenAI-compatible providers need an <strong>API base URL</strong> and optional API key; models added from them propagate endpoint and credentials automatically.</li>
+            <li>Renaming a provider updates all model references.</li>
         </ul>
     </div>
     <div class="section help-section">
-        <h2>Login</h2>
+        <h2>Groups</h2>
         <p>
-            The management UI is password-protected. Set the <code>MANAGEMENT_UI_PASSWORD</code> environment variable to enable it.
+            Models sharing a group name are served under a single LiteLLM model name, giving automatic failover between members. Status reflects what is written to the generated config, not live provider reachability.
         </p>
         <ul>
-            <li>Navigate to the management UI — you will be prompted to enter the password.</li>
-            <li>After logging in, a session cookie is set that lasts 24 hours.</li>
-            <li>
-                Click <strong>Logout</strong> in the sidebar to end the session immediately.
-            </li>
-            <li>
-                If <code>MANAGEMENT_UI_PASSWORD</code> is not set, no login is required.
-            </li>
+            <li><strong>Router Settings:</strong> routing strategy (shuffle, latency, usage, or cost-based), allowed fails before deactivation, and retries within the group.</li>
+            <li><strong>Rename</strong> a group (clients calling the old name stop working) or <strong>Unassign</strong> to split members back to individual names.</li>
+            <li><strong>Add member:</strong> pick an ungrouped model from the dropdown.</li>
+            <li>Member status chips: Ready, Check config, Not in config. Group headers show active vs total member counts.</li>
+            <li>Under cost-based routing, members without a cost show a <strong>no cost</strong> warning and are skipped.</li>
+        </ul>
+    </div>
+    <div class="section help-section">
+        <h2>Playground</h2>
+        <p>
+            Session-scoped chat with multi-turn in-memory context; responses stream in real time. Pick a model, add an optional system prompt, and send.
+        </p>
+        <ul>
+            <li><strong>Hands-free audio mode</strong> (Chrome/Safari): toggle the mic, speak, pause, and the transcript is sent after a short grace window; the reply is read aloud as it streams.</li>
+            <li>Press <strong>Esc</strong>, start a new chat, or leave the page to disarm the mic.</li>
+            <li>Use the refresh button to reload the model list.</li>
         </ul>
     </div>
     <div class="section help-section">
@@ -140,5 +179,47 @@ OPENAI_BASE_URL="<span id="clawcode-url">detecting...</span>"</pre>
                 <strong>Delete a tag:</strong> Click <strong>Delete</strong> on the Tags page to remove a tag entirely.
             </li>
         </ul>
+    </div>
+    <div class="section help-section">
+        <h2>Login</h2>
+        <p>
+            The management UI is password-protected. Set the <code>MANAGEMENT_UI_PASSWORD</code> environment variable to enable it.
+        </p>
+        <ul>
+            <li>Navigate to the management UI — you will be prompted to enter the password.</li>
+            <li>After logging in, a session cookie is set that lasts 24 hours.</li>
+            <li>
+                Click <strong>Logout</strong> in the sidebar to end the session immediately.
+            </li>
+            <li>
+                If <code>MANAGEMENT_UI_PASSWORD</code> is not set, no login is required.
+            </li>
+        </ul>
+    </div>
+    <div class="section help-section">
+        <h2>Security</h2>
+        <p>
+            The Security page manages the LiteLLM master API key. When a key is set, all proxy requests must include <code>Authorization: Bearer &lt;key&gt;</code>.
+        </p>
+        <ul>
+            <li><strong>Generate New Key</strong> creates a key; copy it immediately — it is shown once.</li>
+            <li><strong>Revoke Key</strong> disables authentication on the next reload.</li>
+            <li>Provider API keys and Bedrock static keys are encrypted at rest using <code>ENCRYPTION_KEY</code> or <code>ENCRYPTION_PASSWORD</code>. Using the built-in development key triggers a warning banner.</li>
+        </ul>
+    </div>
+    <div class="section help-section">
+        <h2>Backup</h2>
+        <p>
+            Export downloads a complete snapshot (models, tags, providers, settings) as JSON. Import restores from a file: <strong>Replace</strong> overwrites all current data, <strong>Merge</strong> adds records without removing existing ones. A preview is shown before applying.
+        </p>
+        <p class="muted" style="font-size:12px;">
+            Backups contain plaintext API keys; keep them safe. Restoring under a different encryption key may require regenerating the master key.
+        </p>
+    </div>
+    <div class="section help-section">
+        <h2>Logs</h2>
+        <p>
+            Three log streams are available: LiteLLM, TokenRefresher, and container stdout/stderr. Use Refresh or enable auto-refresh at 2s/5s/10s. LiteLLM output is written to <code>litellm.log</code> in the config directory, not to container stdout.
+        </p>
     </div>
 </div>

@@ -60,7 +60,8 @@ PublishPort=8282:8282
 
 Environment=AWS_PROFILE=your-profile
 Environment=AWS_REGION=your-region
-Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
+# Leave BEDROCK_MANTLE_API_BASE unset unless you use a private/VPC/GovCloud endpoint:
+# Environment=BEDROCK_MANTLE_API_BASE=https://bedrock-mantle.<region>.api.aws/v1
 Environment=OPENROUTER_API_KEY=<your-key> 
 # Or you can use podman secrets: Secret=openrouter-api-key,type=env,target=OPENROUTER_API_KEY
 Environment=OLLAMA_API_BASE=http://your-ollama-host:11434
@@ -228,7 +229,7 @@ Model availability varies by region and supported access mode (on-demand, provis
 |----------|------------------|-------|
 | OpenRouter | `OPENROUTER_API_KEY` | Optional but recommended for rate limits |
 | Ollama | `OLLAMA_API_BASE` | Default: `http://localhost:11434` |
-| Bedrock | `AWS_PROFILE`, `AWS_REGION`, `BEDROCK_MANTLE_API_BASE` | Configured in `~/.aws/config` |
+| Bedrock | `AWS_PROFILE`, `AWS_REGION` (optional: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) | Configured in `~/.aws/config` or the UI; leave `BEDROCK_MANTLE_API_BASE` unset unless using a private endpoint |
 
 ## Using the API
 
