@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Playground mic turns on after a text message when it was off** — `onStreamEnd()` in `playground_audio.js` changed state to `"listening"` unconditionally, so a keyboard-sent message with `armed: false` reopened the microphone. It now returns early when not armed.
 - **Audio mode sent nothing at all** — two independent defects, both reported from iOS Safari as a status chip that counted down to "Sending in 1s" and stopped there.
   - **A finalised result was never committed.** A browser delivers a recognition result as interim first and then flips the *same entry* to `isFinal`. `accumulateResult` tracked how far it had *read* and set that to `results.length` unconditionally, so by the time the finalised text arrived the append window had already moved past that entry. Nothing reached `finalTranscript`, the send went out empty, and audio mode silently did nothing. The pointer now advances only while entries really are final.
   - **`window.PlaygroundAudio` was never assigned, so all eight hooks were dead code.** The adapter was declared `const PlaygroundAudio = {...}`, and a top-level `const` in a classic script is a global *lexical* binding, not a property of `window`. Every `if (window.PlaygroundAudio)` call site in `playground.js` and `navigation.js` skipped: the mic never closed on send — the echo loop the whole design is built to avoid — no reply was ever spoken, and leaving the page never disarmed. The guards are exactly why it was invisible.
