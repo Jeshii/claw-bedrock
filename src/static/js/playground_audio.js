@@ -871,7 +871,13 @@ window.PlaygroundAudio = {
 		state.streamDone = true;
 		// A reply can end with text still queued rather than being spoken.
 		flushSpeech();
-		if (!state.armed) return;
+		if (!state.armed) {
+			// Not armed: nothing to speak and no mic to reopen. Drop the
+			// "Thinking…" state so the chicklet stops pulsing once the
+			// reply has finished printing.
+			setState("off");
+			return;
+		}
 		// speechDone is only true here if there was nothing to say, in which case
 		// the mic never had to close and goes straight back.
 		if (state.speechDone) {
