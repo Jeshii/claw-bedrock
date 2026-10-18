@@ -1946,12 +1946,12 @@ dialog::backdrop {
 }
 .skills-list {
 	flex: 0 0 260px;
-	border: 1px solid var(--border, #ddd);
+	border: 1px solid var(--border-subtle);
 	border-radius: 6px;
 	padding: 8px;
 	max-height: 480px;
 	overflow-y: auto;
-	background: var(--panel-bg, #fff);
+	background: transparent;
 }
 .skill-row {
 	display: flex;
@@ -1961,12 +1961,14 @@ dialog::backdrop {
 	border-radius: 4px;
 	cursor: pointer;
 	gap: 8px;
+	color: var(--text);
 }
 .skill-row:hover {
-	background: var(--hover-bg, #f2f2f2);
+	background: var(--bg-hover-row);
 }
 .skill-row.selected {
-	background: var(--selected-bg, #e8f0fe);
+	background: var(--bg-hover-row);
+	border-left: 3px solid var(--accent, var(--text-primary));
 }
 .skill-row-name {
 	font-weight: 600;
@@ -1976,7 +1978,7 @@ dialog::backdrop {
 }
 .skill-row-type {
 	font-size: 11px;
-	color: var(--muted, #666);
+	color: var(--text-faint);
 	text-transform: uppercase;
 }
 .skill-detail {
