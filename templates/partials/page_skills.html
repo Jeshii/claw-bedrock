@@ -8,9 +8,9 @@
         <div class="inline-row" style="margin-bottom: 12px; gap: 8px;">
             <input id="skill-search"
                    placeholder="Search skills..."
-                   style="width: 240px;"
+                   style="width: 240px"
                    oninput="filterSkills()" />
-            <select id="skill-type-filter" style="width: 160px;" onchange="filterSkills()">
+            <select id="skill-type-filter" style="width: 160px" onchange="filterSkills()">
                 <option value="">All types</option>
                 <option value="python">Python</option>
                 <option value="shell">Shell</option>
@@ -26,7 +26,6 @@
         </div>
     </div>
 </div>
-
 <!-- Skill detail/edit template (rendered by JS) -->
 <template id="skill-detail-template">
     <div class="skill-detail-form">
@@ -36,7 +35,9 @@
         </div>
         <div class="inline-row" style="margin-bottom: 8px; gap: 8px;">
             <label style="min-width: 90px;">Description</label>
-            <input id="skill-description" style="width: 320px;" placeholder="What this skill does" />
+            <input id="skill-description"
+                   style="width: 320px"
+                   placeholder="What this skill does" />
         </div>
         <div class="inline-row" style="margin-bottom: 8px; gap: 8px;">
             <label style="min-width: 90px;">Type</label>
@@ -53,12 +54,21 @@
         </div>
         <div style="margin-bottom: 8px;">
             <label style="display: block; margin-bottom: 4px;">Content</label>
-            <textarea id="skill-content" class="skill-editor" rows="16" placeholder="Skill content..."></textarea>
+            <textarea id="skill-content"
+                      class="skill-editor"
+                      rows="16"
+                      placeholder="Skill content..."></textarea>
         </div>
-        <div id="skill-meta" class="muted" style="font-size: 12px; margin-bottom: 8px;"></div>
+        <div id="skill-meta"
+             class="muted"
+             style="font-size: 12px;
+                    margin-bottom: 8px"></div>
         <div class="inline-row" style="gap: 8px;">
             <button type="button" onclick="saveSkill()" id="skill-save-btn">Save</button>
-            <button type="button" onclick="deleteSkill()" id="skill-delete-btn" class="danger-btn">Delete</button>
+            <button type="button"
+                    onclick="deleteSkill()"
+                    id="skill-delete-btn"
+                    class="danger-btn">Delete</button>
         </div>
     </div>
 </template>
