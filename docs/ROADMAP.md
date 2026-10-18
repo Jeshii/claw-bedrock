@@ -17,8 +17,8 @@ been dishonest. This list is the ordering.
 | 2 | Playground V1 (Session-Scoped Chat) | Complete | — |
 | 3 | Groups Dashboard | Complete | Core Model Grouping |
 | 4 | Cost Awareness | Complete | Core Model Grouping |
-| 5 | **Bedrock Auth Configuration** | **Paused at Step 3** — steps 1 and 2 shipped; preempted by row 10 | — |
-| 6 | Skills Library V1 (Browse / Manage) | Planned | — |
+| 5 | **Bedrock Auth Configuration** | **Complete** (all three steps shipped) | — |
+| 6 | Skills Library V1 (Browse / Manage) | **Complete** | — |
 | 7 | Playground V2 (Persistent Conversations) | Planned | Playground V1 |
 | 8 | Skills Library V2 (MCP Integration) | Planned | Skills Library V1 |
 | 9 | Polish & Everything Else | Planned | varies — see table |
@@ -33,17 +33,17 @@ rows to express a scheduling decision. It was the one item here that was
 outright, so nothing about hands-free could be built on top of the present state.
 Phase B is unstarted and is the reason the workstream is not marked complete.
 
-**Bedrock Auth Configuration is paused at Step 3, not abandoned.** It remains
-the next workstream once audio mode lands. It is independent of the
-skills-library and playground-conversation threads, and it addresses a live
-problem: the Bedrock auth surface collects configuration that does nothing and
-reported status that was not accurate.
+**Bedrock Auth Configuration is complete.** All three steps shipped: Step 1
+(Auth Status Truth), Step 2 (GUI Bedrock Auth Configuration) and Step 3
+(Mantle Model Discovery). Step 2's own GUI surface still has no host
+verification — see "What Step 2 still needs from the host".
 
-Resume at **Step 3 — Mantle Model Discovery**. Steps 1 and 2 are shipped. The
-two items left open by Step 1 were run by hand and are now closed; both came
-back with a different answer than expected, and "Corrections after host
-verification" below records what they were. Step 2's own GUI surface still has
-no host verification — see "What Step 2 still needs from the host".
+**Current frontier.** With Skills Library V1 also shipped, the next unstarted
+workstream in implementation order is **Playground V2 (Persistent
+Conversations)**, followed by Skills Library V2 (MCP Integration), then
+Playground Audio Mode Phase B (blocked on region availability), and finally
+Polish. Bedrock Auth is no longer the next item — its "paused at Step 3"
+status was stale.
 
 ---
 
@@ -425,7 +425,7 @@ OpenRouter's model catalog already returned a `pricing` block (`prompt` / `compl
 
 ## Bedrock Auth Configuration
 
-**Status:** Steps 1 and 2 shipped. Step 3 not started.
+**Status:** All three steps shipped.
 
 > **Revised after host verification (Step 2).** Three claims in this section were
 > wrong and are corrected below: the "LiteLLM is not answering" diagnosis, the
@@ -761,6 +761,8 @@ family, so `BEDROCK_MANTLE_API_BASE` should stay unset.
 
 ## Skills Library V1 (Browse / Manage)
 
+**Status:** Complete.
+
 **Goal:** A managed repository of skills in TinyDB. Create, edit, delete, browse, search skills.
 
 ### Files created
@@ -961,7 +963,7 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Playground V1 | done | `page_playground.html`, `playground.js` |
 | Groups Dashboard | done | `page_groups.html`, `groups.js` |
 | Bedrock Auth Configuration | done | `settings_resolver.py` |
-| Skills Library V1 | planned | `page_skills.html`, `skills.js` |
+| Skills Library V1 | done | `page_skills.html`, `skills.js` |
 | Playground V2 | planned | `conversations_db.py` |
 | Skills Library V2 | planned | `mcp_skills_server.py` |
 | Playground Audio Mode | Phase A done | `playground_audio.js`, `tests/playground_audio.test.mjs`, `tests/test_security_headers.py` |
@@ -1009,7 +1011,7 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Bedrock Auth Configuration — Step 1 | — | — | 0.5 day | done |
 | Bedrock Auth Configuration — Step 2 | TinyDB (encrypted settings) | — | 1-2 days | done |
 | Bedrock Auth Configuration — Step 3 | — | — | 0.5-1 day | done |
-| Skills Library V1 (Browse / Manage) | TinyDB (skills table) | 2 | 2-3 days | planned |
+| Skills Library V1 (Browse / Manage) | TinyDB (skills table) | 2 | 2-3 days | done |
 | Playground V2 (Persistent Conversations) | SQLite (conversations.db) | — | 3-4 days | planned |
 | Skills Library V2 (MCP Integration) | — | — | 3-4 days | planned |
 | Playground Audio Mode — Phase A (browser Web Speech) | — | 1 | 1-2 days | done |
