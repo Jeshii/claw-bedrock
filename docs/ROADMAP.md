@@ -731,7 +731,9 @@ resolver's precedence is working live. Step 2's settings card is the intended wa
 out of that state, and completing the SSO login in the browser remains the only
 thing that mints a real token.
 
-### Step 3 — Mantle Model Discovery
+### Step 3 — Mantle Model Discovery ✅
+
+**Status:** Complete. Implemented as specified.
 
 | File | Change |
 |---|---|
@@ -1006,7 +1008,7 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Cost Awareness | TinyDB (cost fields) | — | 1 day | done |
 | Bedrock Auth Configuration — Step 1 | — | — | 0.5 day | done |
 | Bedrock Auth Configuration — Step 2 | TinyDB (encrypted settings) | — | 1-2 days | done |
-| Bedrock Auth Configuration — Step 3 | — | — | 0.5-1 day | next |
+| Bedrock Auth Configuration — Step 3 | — | — | 0.5-1 day | done |
 | Skills Library V1 (Browse / Manage) | TinyDB (skills table) | 2 | 2-3 days | planned |
 | Playground V2 (Persistent Conversations) | SQLite (conversations.db) | — | 3-4 days | planned |
 | Skills Library V2 (MCP Integration) | — | — | 3-4 days | planned |

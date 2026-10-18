@@ -481,6 +481,9 @@ def _merge_provider_defaults(
         # provider record because there is one token refresher and one
         # BEDROCK_MANTLE_API_KEY; a per-provider region would present a token
         # minted for one region to a model configured for another.
+        # api_base is deliberately NOT copied here: a provider-level api_base
+        # would become an all-or-nothing override of the Mantle endpoint in
+        # litellm_params and break Bedrock routing.
         region = _resolved_bedrock_region()
         if region:
             lp["aws_region_name"] = region
@@ -649,15 +652,17 @@ def migrate_dead_bedrock_fields():
 def seed_default_providers():
     if providers_table.all():
         return
-    providers_table.insert(
-        {
-            "name": "bedrock",
-            "display_name": "Bedrock (Mantle)",
-            "type": "bedrock",
-            "color": "#FF9900",
-            "notes": "AWS Bedrock via Mantle — pre-configured on startup",
-        }
-    )
+    provider = {
+        "name": "bedrock",
+        "display_name": "Bedrock (Mantle)",
+        "type": "bedrock",
+        "color": "#FF9900",
+        "notes": "AWS Bedrock via Mantle — pre-configured on startup",
+    }
+    region = _resolved_bedrock_region()
+    if region:
+        provider["api_base"] = f"https://bedrock-mantle.{region}.api.aws"
+    providers_table.insert(provider)
 
 
 def _is_sensitive_field(field_name: str) -> bool:
@@ -763,6 +768,15 @@ def upsert_provider(provider: dict):
     # Stripped on write as well as on read, so a POST body replaying a retired
     # field (or a restored backup) cannot reintroduce it.
     cleaned = _without_dead_bedrock_fields(provider)
+    # Seed a Bedrock provider's api_base from the global region so model
+    # discovery works without a manual entry. Provider record only: this value
+    # is never merged into litellm_params, where an api_base would override
+    # the Mantle endpoint entirely.
+    if cleaned.get("type") == "bedrock" and not cleaned.get("api_base"):
+        region = _resolved_bedrock_region()
+        if region:
+            cleaned = dict(cleaned)
+            cleaned["api_base"] = f"https://bedrock-mantle.{region}.api.aws"
     changed_fields = [k for k in cleaned if k not in ("name", "api_key")]
     try:
         encrypted = _encrypt_sensitive_fields(cleaned)

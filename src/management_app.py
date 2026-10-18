@@ -1006,6 +1006,77 @@ def fetch_provider_models(name: str):
     provider = db.get_provider(name)
     if not provider:
         raise HTTPException(404, f"Provider '{name}' not found")
+
+    # Bedrock Mantle discovery uses the in-process token minted by the
+    # refresher rather than a stored provider key, and derives its endpoint
+    # from the global region when the provider record has no api_base.
+    if provider.get("type") == "bedrock":
+        refresher = getattr(token_refresher, "token_refresher", None)
+
+        region = None
+        try:
+            region = settings_resolver.resolve(
+                "AWS_REGION",
+                config_key=db.BEDROCK_REGION_SETTING,
+                default=getattr(refresher, "_region", None),
+            ).value
+        except Exception:  # noqa: BLE001 - discovery must not crash on resolver failure
+            region = getattr(refresher, "_region", None)
+        if not region:
+            region = os.environ.get("AWS_REGION", "ap-northeast-1")
+
+        api_base = provider.get("api_base")
+        if not api_base:
+            api_base = f"https://bedrock-mantle.{region}.api.aws"
+            provider = dict(provider)
+            provider["api_base"] = api_base
+
+        api_key = provider.get("api_key")
+        if not api_key:
+            api_key = os.environ.get("BEDROCK_MANTLE_API_KEY")
+        if not api_key and refresher is not None and hasattr(refresher, "_refresh"):
+            try:
+                refresher._refresh()
+            except Exception:  # noqa: BLE001, S110 - best-effort refresh before discovery
+                pass
+            api_key = os.environ.get("BEDROCK_MANTLE_API_KEY")
+
+        if not api_key:
+            needs_login = False
+            auth_error = None
+            if refresher is not None:
+                payload_fn = getattr(refresher, "auth_status_payload", None)
+                if callable(payload_fn):
+                    try:
+                        needs_login = bool(payload_fn().get("needs_login"))
+                    except Exception:  # noqa: BLE001 - best-effort
+                        needs_login = bool(getattr(refresher, "_needs_login", False))
+                else:
+                    needs_login = bool(getattr(refresher, "_needs_login", False))
+                peek = getattr(refresher, "peek_auth_error", None)
+                if callable(peek):
+                    try:
+                        auth_error = peek()
+                    except Exception:  # noqa: BLE001 - best-effort
+                        auth_error = getattr(refresher, "_auth_error", None)
+                else:
+                    auth_error = getattr(refresher, "_auth_error", None)
+            if needs_login:
+                raise HTTPException(
+                    401,
+                    "Bedrock login required. Complete SSO login in the Auth page first.",
+                )
+            if auth_error:
+                raise HTTPException(401, f"Bedrock authentication failed: {auth_error}")
+            raise HTTPException(
+                401,
+                "Bedrock authentication required: no BEDROCK_MANTLE_API_KEY available. "
+                "Complete login in the Auth page.",
+            )
+
+        provider = dict(provider)
+        provider["api_key"] = api_key
+
     api_base = provider.get("api_base")
     if not api_base:
         raise HTTPException(

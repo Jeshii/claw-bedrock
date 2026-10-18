@@ -937,6 +937,50 @@ function onOllamaSelect() {
 	}
 }
 
+async function fetchBedrockModels() {
+	const select = document.getElementById("bedrock-model-select");
+	select.innerHTML = '<option value="">Loading...</option>';
+	select.style.display = "";
+	try {
+		const res = await fetch("/api/providers/bedrock/models");
+		if (res.ok) {
+			const data = await res.json();
+			const models = data.models || [];
+			if (models.length === 0) {
+				select.innerHTML = '<option value="">No models found</option>';
+			} else {
+				select.innerHTML =
+					'<option value="">-- Select a model --</option>' +
+					models
+						.map((m) => {
+							const id = m.id || m.name;
+							return `<option value="${id}">${id}</option>`;
+						})
+						.join("");
+			}
+		} else {
+			const err = await res.json().catch(() => ({}));
+			select.innerHTML = `<option value="">Error: ${err.detail || "Failed to fetch"}</option>`;
+			setTimeout(() => {
+				select.style.display = "none";
+			}, 5000);
+		}
+	} catch (e) {
+		select.innerHTML = `<option value="">Error: ${e.message}</option>`;
+		setTimeout(() => {
+			select.style.display = "none";
+		}, 5000);
+	}
+}
+
+function onBedrockSelect() {
+	const select = document.getElementById("bedrock-model-select");
+	const nameInput = document.getElementById("bedrock-model-id");
+	if (select.value) {
+		nameInput.value = select.value;
+	}
+}
+
 function loadProviderUI(type) {
 	const ui = document.getElementById("provider-ui");
 	if (type === "openrouter") {
@@ -988,28 +1032,10 @@ function loadProviderUI(type) {
 	} else if (type === "bedrock") {
 		ui.innerHTML = `
             <h3>Add Bedrock Mantle Model</h3>
-            <p class="muted" style="font-size: 13px;">
-                Only models available through the
-                <a href="https://docs.litellm.ai/docs/providers/bedrock_mantle"
-                   target="_blank"
-                   rel="noopener noreferrer">Bedrock Mantle endpoint</a>
-                are supported. Bedrock model availability varies by region and
-                supported access/routing mode &mdash; an AWS-listed model is not
-                automatically Mantle-compatible.
-            </p>
-            <p style="font-size: 13px; margin-bottom: 12px;">
-                <a href="https://amazonbedrockmodels.github.io/"
-                   target="_blank"
-                   rel="noopener noreferrer">
-                    Browse Amazon Bedrock model IDs
-                </a>
-                &nbsp;|&nbsp;
-                <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/foundation-models-reference.html"
-                   target="_blank"
-                   rel="noopener noreferrer">
-                    AWS Bedrock model reference
-                </a>
-            </p>
+            <div class="inline-row" style="margin-bottom: 8px;">
+                <button type="button" onclick="fetchBedrockModels()">Fetch Models</button>
+            </div>
+            <select id="bedrock-model-select" style="width: 400px; padding: 5px; margin-bottom: 8px; display: none;" onchange="onBedrockSelect()"></select>
             <input id="bedrock-model-id"
                    placeholder="Model ID (e.g., deepseek.v3.2, inference-profile-id, or ARN)"
                    style="width: 400px;" />
@@ -1022,6 +1048,12 @@ function loadProviderUI(type) {
                    style="width: 400px; margin-top: 6px;" />
             <br><br>
             <button type="button" onclick="addBedrockModel()">Add Model</button>
+            <p class="muted" style="font-size: 12px; margin-top: 5px;">
+                Fetched list comes from the Bedrock Mantle <code>/v1/models</code> endpoint.
+                Families served only on <code>/openai/v1</code> (gpt-5.x, gpt-6-*, gemma-4-*, grok-4.*)
+                will not appear &mdash; enter those manually.
+                <a href="https://amazonbedrockmodels.github.io/" target="_blank" rel="noopener noreferrer">Browse model IDs</a>.
+            </p>
         `;
 	} else if (type === "manual") {
 		ui.innerHTML = `
