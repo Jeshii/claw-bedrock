@@ -1343,6 +1343,112 @@ def update_tag_color(tag_name: str, body: dict):
     return {"name": tag_name, "color": color}
 
 
+SKILL_TYPES = {"python", "shell", "prompt", "template"}
+
+
+def _skill_timestamp() -> str:
+    return datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+
+
+@app.get("/api/skills")
+def list_skills(search: str | None = None, type: str | None = None):
+    """List skills, optionally filtered by search text and type."""
+    skills = db.get_all_skills()
+    if type:
+        skills = [s for s in skills if s.get("type") == type]
+    if search:
+        q = search.lower()
+        skills = [
+            s
+            for s in skills
+            if q
+            in (
+                s.get("name", "")
+                + " "
+                + s.get("description", "")
+                + " "
+                + s.get("content", "")
+            ).lower()
+        ]
+    skills.sort(key=lambda s: s.get("name", "").lower())
+    return {"skills": skills}
+
+
+@app.post("/api/skills")
+def create_skill(body: dict):
+    """Create a new skill."""
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "Skill name is required")
+    skill_type = body.get("type") or "prompt"
+    if skill_type not in SKILL_TYPES:
+        raise HTTPException(400, f"Invalid skill type: {skill_type}")
+    if db.skill_name_exists(name):
+        raise HTTPException(409, f"Skill '{name}' already exists")
+    now = _skill_timestamp()
+    skill = {
+        "name": name,
+        "description": body.get("description") or "",
+        "content": body.get("content") or "",
+        "type": skill_type,
+        "tags": [t.strip() for t in (body.get("tags") or []) if str(t).strip()],
+        "created_at": now,
+        "updated_at": now,
+    }
+    db.add_skill(skill)
+    return skill
+
+
+@app.get("/api/skills/{skill_name:path}")
+def get_skill(skill_name: str):
+    """Get a single skill by name."""
+    skill = db.get_skill(skill_name)
+    if not skill:
+        raise HTTPException(404, f"Skill '{skill_name}' not found")
+    return skill
+
+
+@app.put("/api/skills/{skill_name:path}")
+def update_skill(skill_name: str, body: dict):
+    """Update a skill."""
+    existing = db.get_skill(skill_name)
+    if not existing:
+        raise HTTPException(404, f"Skill '{skill_name}' not found")
+    updates = {}
+    if "description" in body:
+        updates["description"] = body.get("description") or ""
+    if "content" in body:
+        updates["content"] = body.get("content") or ""
+    if "type" in body:
+        if body["type"] not in SKILL_TYPES:
+            raise HTTPException(400, f"Invalid skill type: {body['type']}")
+        updates["type"] = body["type"]
+    if "tags" in body:
+        updates["tags"] = [
+            t.strip() for t in (body.get("tags") or []) if str(t).strip()
+        ]
+    new_name = (body.get("name") or skill_name).strip()
+    if new_name and new_name != skill_name:
+        if db.skill_name_exists(new_name):
+            raise HTTPException(409, f"Skill '{new_name}' already exists")
+        updates["name"] = new_name
+    updates["updated_at"] = _skill_timestamp()
+    target = new_name if new_name and new_name != skill_name else skill_name
+    ok = db.update_skill(skill_name, updates)
+    if not ok:
+        raise HTTPException(404, f"Skill '{skill_name}' not found")
+    return db.get_skill(target)
+
+
+@app.delete("/api/skills/{skill_name:path}")
+def delete_skill(skill_name: str):
+    """Delete a skill."""
+    if not db.skill_name_exists(skill_name):
+        raise HTTPException(404, f"Skill '{skill_name}' not found")
+    db.delete_skill(skill_name)
+    return {"deleted": skill_name}
+
+
 @app.post("/api/models/{encoded_name:path}/tags")
 def add_model_tag(encoded_name: str, body: dict):
     """Add a tag to a model. Creates the tag if it doesn't exist."""

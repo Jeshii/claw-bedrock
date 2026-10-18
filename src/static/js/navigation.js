@@ -50,6 +50,7 @@ function activatePage(pageId) {
 	if (pageId === "playground") loadPlayground();
 	if (pageId === "groups") loadGroups();
 	if (pageId === "tags") loadTagsPage();
+	if (pageId === "skills") loadSkillsPage();
 	if (pageId === "logs") {
 		loadLogs();
 		loadDebugLogs();

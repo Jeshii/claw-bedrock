@@ -28,6 +28,7 @@ os.chmod(DB_PATH, 0o600)
 models_table = db.table("models")
 settings_table = db.table("settings")
 tags_table = db.table("tags")
+skills_table = db.table("skills")
 
 _DB_LOCK = threading.RLock()
 
@@ -582,6 +583,44 @@ def get_models_by_tag(tag_name):
     return models_table.search(q.tags.any(tag_name))
 
 
+@_serialized
+def get_all_skills() -> list[dict]:
+    """Get all skill definitions."""
+    return skills_table.all()
+
+
+@_serialized
+def get_skill(name: str) -> dict | None:
+    """Get a single skill definition by name."""
+    return skills_table.get(where("name") == name)
+
+
+@_serialized
+def skill_name_exists(name: str) -> bool:
+    """Return True if a skill with the given name exists."""
+    return skills_table.contains(where("name") == name)
+
+
+@_serialized
+def add_skill(skill: dict) -> int:
+    """Insert a new skill. Returns the inserted doc id."""
+    return skills_table.insert(skill)
+
+
+@_serialized
+def update_skill(name: str, updates: dict) -> bool:
+    """Patch fields on a skill. Returns True if updated."""
+    result = skills_table.update(updates, where("name") == name)
+    return len(result) > 0
+
+
+@_serialized
+def delete_skill(name: str) -> bool:
+    """Delete a skill by name. Returns True if deleted."""
+    result = skills_table.remove(where("name") == name)
+    return len(result) > 0
+
+
 providers_table = db.table("providers")
 
 # Fields the Bedrock provider form used to collect that no runtime code ever
@@ -842,6 +881,7 @@ def export_backup() -> dict:
         "data": {
             "models": [dict(m) for m in models_table.all()],
             "tags": [dict(t) for t in tags_table.all()],
+            "skills": [dict(s) for s in skills_table.all()],
             "settings": get_settings(),
             "providers": [
                 _decrypt_sensitive_fields(dict(p)) for p in providers_table.all()
@@ -862,12 +902,20 @@ def import_backup(backup: dict, mode: str = "replace") -> dict:
     """
     _validate_backup(backup)
     data = backup["data"]
-    summary = {"models": 0, "tags": 0, "settings": 0, "providers": 0, "skipped": 0}
+    summary = {
+        "models": 0,
+        "tags": 0,
+        "skills": 0,
+        "settings": 0,
+        "providers": 0,
+        "skipped": 0,
+    }
 
     if mode == "replace":
         _auto_backup_before_replace()
         models_table.truncate()
         tags_table.truncate()
+        skills_table.truncate()
         settings_table.truncate()
         providers_table.truncate()
 
@@ -890,6 +938,17 @@ def import_backup(backup: dict, mode: str = "replace") -> dict:
             continue
         upsert_tag(name, color)
         summary["tags"] += 1
+
+    for skill in data.get("skills", []):
+        name = skill.get("name")
+        if mode == "merge" and skills_table.contains(where("name") == name):
+            summary["skipped"] += 1
+            continue
+        if mode == "replace":
+            skills_table.insert(skill)
+        else:
+            skills_table.upsert(skill, where("name") == name)
+        summary["skills"] += 1
 
     for key, value in data.get("settings", {}).items():
         if mode == "merge" and settings_table.contains(where("key") == key):
@@ -931,6 +990,13 @@ def _validate_backup(backup: dict):
         raise ValueError("'data.models' must be a list")  # noqa: TRY004
     if not isinstance(data.get("tags", []), list):
         raise ValueError("'data.tags' must be a list")  # noqa: TRY004
+    if not isinstance(data.get("skills", []), list):
+        raise ValueError("'data.skills' must be a list")  # noqa: TRY004
+    for skill in data.get("skills", []):
+        if not isinstance(skill, dict) or not isinstance(skill.get("name"), str):
+            raise ValueError(  # noqa: TRY004
+                "'data.skills' entries must be objects with a string 'name'"
+            )
     if not isinstance(data.get("settings", {}), dict):
         raise ValueError("'data.settings' must be an object")  # noqa: TRY004
     if not isinstance(data.get("providers", []), list):

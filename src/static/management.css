@@ -1937,3 +1937,69 @@ dialog::backdrop {
 		flex-basis: 100%;
 	}
 }
+
+/* Skills Library */
+.skills-layout {
+	display: flex;
+	gap: 16px;
+	align-items: flex-start;
+}
+.skills-list {
+	flex: 0 0 260px;
+	border: 1px solid var(--border, #ddd);
+	border-radius: 6px;
+	padding: 8px;
+	max-height: 480px;
+	overflow-y: auto;
+	background: var(--panel-bg, #fff);
+}
+.skill-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 6px 8px;
+	border-radius: 4px;
+	cursor: pointer;
+	gap: 8px;
+}
+.skill-row:hover {
+	background: var(--hover-bg, #f2f2f2);
+}
+.skill-row.selected {
+	background: var(--selected-bg, #e8f0fe);
+}
+.skill-row-name {
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.skill-row-type {
+	font-size: 11px;
+	color: var(--muted, #666);
+	text-transform: uppercase;
+}
+.skill-detail {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.skill-detail-form label {
+	font-size: 13px;
+}
+.skill-editor {
+	width: 100%;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 13px;
+	padding: 8px;
+	border: 1px solid var(--border, #ddd);
+	border-radius: 6px;
+	resize: vertical;
+}
+.danger-btn {
+	background: var(--danger, #c0392b);
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	padding: 6px 12px;
+	cursor: pointer;
+}

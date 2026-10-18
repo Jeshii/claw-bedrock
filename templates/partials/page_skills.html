@@ -1,0 +1,64 @@
+<div id="page-skills" class="page">
+    <h1>Skills</h1>
+    <div class="section">
+        <div class="section-header-row">
+            <h2>Skills Library</h2>
+            <button type="button" onclick="newSkill()" id="new-skill-btn">New Skill</button>
+        </div>
+        <div class="inline-row" style="margin-bottom: 12px; gap: 8px;">
+            <input id="skill-search"
+                   placeholder="Search skills..."
+                   style="width: 240px;"
+                   oninput="filterSkills()" />
+            <select id="skill-type-filter" style="width: 160px;" onchange="filterSkills()">
+                <option value="">All types</option>
+                <option value="python">Python</option>
+                <option value="shell">Shell</option>
+                <option value="prompt">Prompt</option>
+                <option value="template">Template</option>
+            </select>
+        </div>
+        <div class="skills-layout">
+            <div class="skills-list" id="skills-list"></div>
+            <div class="skill-detail" id="skill-detail">
+                <p class="muted">Select a skill to view or edit, or create a new one.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Skill detail/edit template (rendered by JS) -->
+<template id="skill-detail-template">
+    <div class="skill-detail-form">
+        <div class="inline-row" style="margin-bottom: 8px; gap: 8px;">
+            <label style="min-width: 90px;">Name</label>
+            <input id="skill-name" style="width: 320px;" placeholder="skill-name" />
+        </div>
+        <div class="inline-row" style="margin-bottom: 8px; gap: 8px;">
+            <label style="min-width: 90px;">Description</label>
+            <input id="skill-description" style="width: 320px;" placeholder="What this skill does" />
+        </div>
+        <div class="inline-row" style="margin-bottom: 8px; gap: 8px;">
+            <label style="min-width: 90px;">Type</label>
+            <select id="skill-type" style="width: 160px;">
+                <option value="prompt">prompt</option>
+                <option value="template">template</option>
+                <option value="python">python</option>
+                <option value="shell">shell</option>
+            </select>
+        </div>
+        <div class="inline-row" style="margin-bottom: 8px; gap: 8px;">
+            <label style="min-width: 90px;">Tags</label>
+            <input id="skill-tags" style="width: 320px;" placeholder="comma-separated" />
+        </div>
+        <div style="margin-bottom: 8px;">
+            <label style="display: block; margin-bottom: 4px;">Content</label>
+            <textarea id="skill-content" class="skill-editor" rows="16" placeholder="Skill content..."></textarea>
+        </div>
+        <div id="skill-meta" class="muted" style="font-size: 12px; margin-bottom: 8px;"></div>
+        <div class="inline-row" style="gap: 8px;">
+            <button type="button" onclick="saveSkill()" id="skill-save-btn">Save</button>
+            <button type="button" onclick="deleteSkill()" id="skill-delete-btn" class="danger-btn">Delete</button>
+        </div>
+    </div>
+</template>

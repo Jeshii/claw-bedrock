@@ -44,6 +44,7 @@
         <script defer src="/static/js/security.js"></script>
         <script defer src="/static/js/models.js"></script>
         <script defer src="/static/js/tags.js"></script>
+<script defer src="/static/js/skills.js"></script>
         <script defer src="/static/js/logs.js"></script>
         <script defer src="/static/js/providers.js"></script>
         <script defer src="/static/js/backup.js"></script>
@@ -88,6 +89,9 @@
                 </li>
                 <li>
                     <a onclick="showPage('groups')">Groups</a>
+                </li>
+                <li>
+                    <a onclick="showPage('skills')">Skills</a>
                 </li>
                 <li>
                     <a onclick="showPage('tags')">Tags</a>
@@ -141,6 +145,7 @@
             {% include "partials/page_models.html" %}
             {% include "partials/page_playground.html" %}
             {% include "partials/page_groups.html" %}
+            {% include "partials/page_skills.html" %}
             {% include "partials/page_tags.html" %}
             {% include "partials/page_backup.html" %}
             {% include "partials/page_logs.html" %}
