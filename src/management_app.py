@@ -1,5 +1,7 @@
 import base64
+import contextlib
 import datetime
+import json
 import hmac
 import math
 import os
@@ -28,6 +30,7 @@ import db
 import encryption_utils
 import password_utils
 import settings_resolver
+import conversations_db
 import token_refresher
 
 
@@ -267,6 +270,7 @@ def startup_event():
     # Drops provider fields that no runtime code reads. Idempotent, and a no-op
     # on a database that never had them.
     db.migrate_dead_bedrock_fields()
+    conversations_db.init_db()
     merge_configs()
     print(f"[Startup] Merged configs on startup (CONFIG_DIR={CONFIG_DIR})")
     # Start watchdog in background thread
@@ -294,6 +298,7 @@ def litellm_watchdog():
 @app.on_event("shutdown")
 def shutdown_event():
     db.close_db()
+    conversations_db.close_db()
     print("[Shutdown] Database closed")
 
 
@@ -1986,6 +1991,194 @@ def health_litellm_liveliness():
         return {"status": "ok", "litellm_status": resp.status_code}
     except Exception as e:  # noqa: BLE001 - probe failure is returned as status
         return {"status": "error", "detail": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Conversations (Playground V2)
+# ---------------------------------------------------------------------------
+
+
+def _stream_reply(conv_id: str, model: str, messages: list[dict]):
+    """Proxy a chat completion to LiteLLM, teeing the SSE stream so the
+    assistant reply is persisted even on disconnect or error."""
+    key = db.get_master_key()
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    try:
+        resp = requests.post(
+            f"{LITELLM_BASE_URL}/v1/chat/completions",
+            json={"model": model, "messages": messages, "stream": True},
+            headers=headers,
+            stream=True,
+            timeout=(10, 300),
+        )
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        detail = "Unknown error"
+        try:
+            detail = e.response.json().get("error", {}).get("message", str(e))
+        except Exception:  # noqa: BLE001 - re-raised below as HTTPException
+            detail = str(e)
+        raise HTTPException(e.response.status_code, detail)
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(502, "Cannot connect to LiteLLM")
+    except requests.exceptions.Timeout:
+        raise HTTPException(504, "LiteLLM request timed out")
+
+    return StreamingResponse(
+        _sse_tee(resp, conv_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Conversation-ID": conv_id,
+        },
+    )
+
+
+def _sse_tee(resp, conv_id: str):
+    """Yield the upstream SSE bytes unchanged while accumulating the assistant
+    content; persist the assistant row in ``finally``."""
+    parts: list[str] = []
+    buffer = ""
+    try:
+        for raw in resp.iter_content(chunk_size=None):
+            if not raw:
+                continue
+            yield raw
+            text = raw.decode("utf-8", errors="replace")
+            buffer += text
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if not payload or payload == "[DONE]":
+                    continue
+                try:
+                    obj = json.loads(payload)
+                    delta = obj["choices"][0].get("delta", {}).get("content")
+                    if delta:
+                        parts.append(delta)
+                except (ValueError, KeyError, IndexError, TypeError):
+                    pass
+        # Flush any trailing partial line.
+        line = buffer.strip()
+        if line.startswith("data:"):
+            payload = line[5:].strip()
+            if payload and payload != "[DONE]":
+                try:
+                    obj = json.loads(payload)
+                    delta = obj["choices"][0].get("delta", {}).get("content")
+                    if delta:
+                        parts.append(delta)
+                except (ValueError, KeyError, IndexError, TypeError):
+                    pass
+    finally:
+        if parts:
+            with contextlib.suppress(Exception):
+                conversations_db.add_message(conv_id, "assistant", "".join(parts))
+        with contextlib.suppress(Exception):
+            resp.close()
+
+
+@app.get("/api/conversations")
+def list_conversations(search: str = "", page: int = 1, per_page: int = 50):
+    """List conversations, newest first, with optional search and pagination."""
+    if per_page < 1:
+        per_page = 50
+    if page < 1:
+        page = 1
+    items = conversations_db.list_conversations(
+        search=search, page=page, per_page=per_page
+    )
+    total = conversations_db.count_conversations(search=search)
+    return {
+        "conversations": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
+@app.post("/api/conversations")
+def create_conversation(body: dict):
+    """Create a conversation. With ``first_message``, stream the reply."""
+    title = body.get("title") or "New conversation"
+    model = body.get("model")
+    if not model:
+        raise HTTPException(400, "model is required")
+    first_message = body.get("first_message")
+
+    conv_id = conversations_db.create_conversation(title, model)
+
+    if not first_message:
+        return conversations_db.get_conversation(conv_id)
+
+    conversations_db.add_message(conv_id, "user", first_message)
+    messages = [{"role": "user", "content": first_message}]
+    return _stream_reply(conv_id, model, messages)
+
+
+@app.get("/api/conversations/{conversation_id}")
+def get_conversation(conversation_id: str):
+    conv = conversations_db.get_conversation(conversation_id)
+    if conv is None:
+        raise HTTPException(404, "Conversation not found")
+    messages = conversations_db.get_messages(conversation_id)
+    return {**conv, "conversation": conv, "messages": messages}
+
+
+@app.put("/api/conversations/{conversation_id}")
+def update_conversation(conversation_id: str, body: dict):
+    conv = conversations_db.get_conversation(conversation_id)
+    if conv is None:
+        raise HTTPException(404, "Conversation not found")
+    conversations_db.update_conversation(
+        conversation_id,
+        title=body.get("title"),
+        model=body.get("model"),
+    )
+    updated = conversations_db.get_conversation(conversation_id)
+    return updated if updated is not None else {"success": True}
+
+
+@app.delete("/api/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str):
+    if not conversations_db.delete_conversation(conversation_id):
+        raise HTTPException(404, "Conversation not found")
+    return {"success": True, "deleted": True}
+
+
+@app.post("/api/conversations/{conversation_id}/messages")
+def post_message(conversation_id: str, body: dict):
+    conv = conversations_db.get_conversation(conversation_id)
+    if conv is None:
+        raise HTTPException(404, "Conversation not found")
+
+    provided = body.get("messages")
+    user_content = None
+    if provided is not None:
+        messages = [dict(m) for m in provided]
+        if messages and messages[-1].get("role") == "user":
+            user_content = messages[-1].get("content")
+    else:
+        user_content = body.get("content") or body.get("message") or body.get("text")
+        messages = [
+            {"role": m["role"], "content": m["content"]}
+            for m in conversations_db.get_messages(conversation_id)
+        ]
+        if user_content is not None:
+            messages.append({"role": "user", "content": user_content})
+
+    if user_content is not None:
+        conversations_db.add_message(conversation_id, "user", user_content)
+
+    model = body.get("model") or conv["model"]
+    if body.get("model") and body["model"] != conv["model"]:
+        conversations_db.update_conversation(conversation_id, model=body["model"])
+
+    return _stream_reply(conversation_id, model, messages)
 
 
 @app.get("/")
