@@ -3,6 +3,45 @@ let messages = [];
 let activeModel = null;
 let isStreaming = false;
 
+let currentConversationId = null;
+let conversations = [];
+let conversationSearchQuery = "";
+let conversationSearchTimer = null;
+
+function escapeHtml(str) {
+	return String(str ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
+function escapeAttr(str) {
+	return String(str ?? "")
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
+function formatConversationDate(value) {
+	if (!value) return "";
+	try {
+		const d = new Date(value);
+		if (Number.isNaN(d.getTime())) return value;
+		return d.toLocaleString(undefined, {
+			month: "short",
+			day: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+		});
+	} catch {
+		return value;
+	}
+}
+
 async function loadPlayground() {
 	const modelSelect = document.getElementById("playground-model");
 	const placeholder = document.querySelector(".playground-placeholder");
@@ -39,6 +78,8 @@ async function loadPlayground() {
 		}
 		if (prevVal && models.includes(prevVal)) {
 			modelSelect.value = prevVal;
+		} else if (activeModel && models.includes(activeModel)) {
+			modelSelect.value = activeModel;
 		}
 
 		modelSelect.removeEventListener("change", handleModelChange);
@@ -58,7 +99,7 @@ function handleModelChange() {
 		messages.length > 0 &&
 		!confirm("Switching model will reset the conversation. Continue?")
 	) {
-		select.value = activeModel;
+		select.value = activeModel || "";
 		return;
 	}
 	resetConversation();
@@ -83,10 +124,25 @@ function clearChatDisplay() {
 	`;
 }
 
-function resetConversation() {
+function renderMessages() {
+	const container = document.getElementById("playground-messages");
+	if (!container) return;
+	container.innerHTML = "";
+	if (messages.length === 0) {
+		clearChatDisplay();
+		return;
+	}
+	for (const m of messages) {
+		if (m.role === "system") continue;
+		addMessageBubble(m.role, m.content);
+	}
+}
+
+function newConversation() {
 	if (isStreaming) {
 		stopPlaygroundStream();
 	}
+	currentConversationId = null;
 	messages = [];
 	const sysPrompt = document
 		.getElementById("playground-system-prompt")
@@ -104,8 +160,12 @@ function resetConversation() {
 	if (stopBtn) stopBtn.classList.add("hidden");
 	if (input) input.disabled = false;
 	playgroundAbortController = null;
-	// New Chat is a reset of the whole session, so the mic goes with it.
 	if (window.PlaygroundAudio) window.PlaygroundAudio.disarm();
+	renderConversationList();
+}
+
+function resetConversation() {
+	newConversation();
 }
 
 function appendUserMessage(content) {
@@ -118,7 +178,14 @@ function commitAssistantMessage(content) {
 }
 
 function getRequestMessages() {
-	return messages.map((m) => ({ ...m }));
+	const sysPrompt = document
+		.getElementById("playground-system-prompt")
+		?.value.trim();
+	const base = messages.map((m) => ({ ...m }));
+	if (sysPrompt && !base.some((m) => m.role === "system")) {
+		base.unshift({ role: "system", content: sysPrompt });
+	}
+	return base;
 }
 
 function handlePlaygroundKeydown(e) {
@@ -157,6 +224,157 @@ function hideStreamingIndicator() {
 	if (el) el.remove();
 }
 
+// ---------- Conversation sidebar ----------
+
+function handleConversationSearchInput() {
+	const input = document.getElementById("conversation-search");
+	conversationSearchQuery = input?.value || "";
+	if (conversationSearchTimer) clearTimeout(conversationSearchTimer);
+	conversationSearchTimer = setTimeout(() => {
+		loadConversations(conversationSearchQuery);
+	}, 250);
+}
+
+async function loadConversations(search) {
+	const q = search === undefined ? conversationSearchQuery : search;
+	conversationSearchQuery = q;
+	const list = document.getElementById("conversation-list");
+	if (list) list.innerHTML = '<p class="muted">Loading…</p>';
+	try {
+		const resp = await fetch(
+			`/api/conversations?search=${encodeURIComponent(q)}&per_page=100`,
+		);
+		if (!resp.ok) throw new Error(`Error ${resp.status}`);
+		const data = await resp.json();
+		conversations = data.conversations || [];
+		renderConversationList();
+	} catch (e) {
+		if (list)
+			list.innerHTML = `<p style="color: var(--danger);">Could not load: ${escapeHtml(e.message)}</p>`;
+	}
+}
+
+function renderConversationList() {
+	const list = document.getElementById("conversation-list");
+	if (!list) return;
+	list.onclick = handleConversationListClick;
+	if (!conversations.length) {
+		list.innerHTML = '<p class="muted">No conversations yet.</p>';
+		return;
+	}
+	list.innerHTML = conversations
+		.map((c) => {
+			const active = c.id === currentConversationId ? "active" : "";
+			return `
+			<div class="conversation-item ${active}" data-id="${escapeAttr(c.id)}">
+				<div class="conversation-title">${escapeHtml(c.title || "Untitled")}</div>
+				<div class="conversation-meta">${escapeHtml(c.model || "")} · ${escapeHtml(formatConversationDate(c.updated_at))}</div>
+				<div class="conversation-actions">
+					<button type="button" data-action="rename" title="Rename">✎</button>
+					<button type="button" data-action="delete" title="Delete">✕</button>
+				</div>
+			</div>`;
+		})
+		.join("");
+}
+
+function handleConversationListClick(e) {
+	const item = e.target.closest(".conversation-item");
+	if (!item) return;
+	const id = item.dataset.id;
+	if (e.target.closest('[data-action="rename"]')) {
+		startRenameConversation(id, item);
+		return;
+	}
+	if (e.target.closest('[data-action="delete"]')) {
+		deleteConversation(id);
+		return;
+	}
+	if (!e.target.closest("input")) {
+		selectConversation(id);
+	}
+}
+
+async function selectConversation(id) {
+	if (isStreaming) return;
+	try {
+		const resp = await fetch(`/api/conversations/${id}`);
+		if (!resp.ok) throw new Error(`Error ${resp.status}`);
+		const data = await resp.json();
+		currentConversationId = id;
+		activeModel = data.model || null;
+		messages = (data.messages || []).map((m) => ({
+			role: m.role,
+			content: m.content,
+		}));
+		const select = document.getElementById("playground-model");
+		if (select && activeModel) select.value = activeModel;
+		renderMessages();
+		renderConversationList();
+	} catch (e) {
+		showToast(`Could not open conversation: ${e.message}`, "error");
+	}
+}
+
+function startRenameConversation(id, item) {
+	const conv = conversations.find((c) => c.id === id);
+	const titleEl = item.querySelector(".conversation-title");
+	if (!titleEl) return;
+	const input = document.createElement("input");
+	input.type = "text";
+	input.value = conv?.title || "";
+	input.className = "conversation-rename-input";
+	titleEl.replaceWith(input);
+	input.focus();
+	input.select();
+
+	let finished = false;
+	const finish = async (save) => {
+		if (finished) return;
+		finished = true;
+		const newTitle = input.value.trim();
+		if (save && newTitle && newTitle !== (conv?.title || "")) {
+			try {
+				await fetch(`/api/conversations/${id}`, {
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ title: newTitle }),
+				});
+				if (conv) conv.title = newTitle;
+			} catch (e) {
+				showToast(`Rename failed: ${e.message}`, "error");
+			}
+		}
+		loadConversations(conversationSearchQuery);
+	};
+
+	input.addEventListener("keydown", (e) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			finish(true);
+		} else if (e.key === "Escape") {
+			finish(false);
+		}
+	});
+	input.addEventListener("blur", () => finish(true));
+}
+
+async function deleteConversation(id) {
+	if (!confirm("Delete this conversation? This cannot be undone.")) return;
+	try {
+		const resp = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+		if (!resp.ok) throw new Error(`Error ${resp.status}`);
+		if (currentConversationId === id) {
+			newConversation();
+		}
+		loadConversations(conversationSearchQuery);
+	} catch (e) {
+		showToast(`Delete failed: ${e.message}`, "error");
+	}
+}
+
+// ---------- Send flow ----------
+
 async function sendPlaygroundMessage() {
 	const modelSelect = document.getElementById("playground-model");
 	const input = document.getElementById("playground-input");
@@ -186,18 +404,54 @@ async function sendPlaygroundMessage() {
 
 	playgroundAbortController = new AbortController();
 
-	// Close the mic before the model starts talking, whoever sent the message.
-	// Armed and then hitting Enter on the keyboard has to behave exactly like
-	// the audio path, or the mic hears the reply and the model answers itself.
 	if (window.PlaygroundAudio) window.PlaygroundAudio.onSend();
 
+	// Create the conversation lazily on the first send.
+	if (!currentConversationId) {
+		try {
+			const titleSource = text.replace(/\s+/g, " ").trim();
+			const title =
+				titleSource.length > 60
+					? titleSource.slice(0, 57) + "…"
+					: titleSource || "New conversation";
+			const resp = await fetch("/api/conversations", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ title, model }),
+			});
+			if (!resp.ok) {
+				let errMsg = `Request failed (${resp.status})`;
+				try {
+					const err = await resp.json();
+					errMsg = err.detail || errMsg;
+				} catch {}
+				throw new Error(errMsg);
+			}
+			const conv = await resp.json();
+			currentConversationId = conv.id;
+			renderConversationList();
+		} catch (e) {
+			hideStreamingIndicator();
+			addMessageBubble("assistant", `Error: ${e.message}`);
+			isStreaming = false;
+			sendBtn.classList.remove("hidden");
+			stopBtn.classList.add("hidden");
+			playgroundAbortController = null;
+			if (window.PlaygroundAudio) window.PlaygroundAudio.onStreamEnd();
+			return;
+		}
+	}
+
 	try {
-		const resp = await fetch("/api/chat/completions", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ model, messages: getRequestMessages() }),
-			signal: playgroundAbortController.signal,
-		});
+		const resp = await fetch(
+			`/api/conversations/${currentConversationId}/messages`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ model, messages: getRequestMessages() }),
+				signal: playgroundAbortController.signal,
+			},
+		);
 
 		if (!resp.ok) {
 			let errMsg = `Request failed (${resp.status})`;
@@ -278,8 +532,8 @@ async function sendPlaygroundMessage() {
 						reasoning;
 				}
 				messageTextEl.textContent = fullContent;
-				// Cumulative, and content-only — reasoning deltas are not spoken.
-				if (window.PlaygroundAudio) window.PlaygroundAudio.onDelta(fullContent);
+				if (window.PlaygroundAudio)
+					window.PlaygroundAudio.onDelta(fullContent);
 				const container = document.getElementById("playground-messages");
 				if (container) container.scrollTop = container.scrollHeight;
 			}
@@ -299,12 +553,8 @@ async function sendPlaygroundMessage() {
 			addMessageBubble("assistant", "(empty response)");
 		} else if (fullContent) {
 			commitAssistantMessage(fullContent);
-			// reasoning intentionally excluded from messages[] — streaming metadata only
 		}
 
-		// Last of the text, so anything still queued for speech can be handed
-		// over. onDelta only takes one sentence per call, which keeps speech in
-		// step with the stream but would otherwise leave the tail unspoken.
 		if (window.PlaygroundAudio)
 			window.PlaygroundAudio.onStreamComplete(fullContent);
 	} catch (e) {
@@ -323,10 +573,8 @@ async function sendPlaygroundMessage() {
 		isStreaming = false;
 		sendBtn.classList.remove("hidden");
 		stopBtn.classList.add("hidden");
-		// Every exit path lands here: success, HTTP error, abort, parse failure.
-		// Speech outlives the stream, so this only records that the stream is
-		// done — the adapter holds the mic shut until the last sentence ends.
 		if (window.PlaygroundAudio) window.PlaygroundAudio.onStreamEnd();
+		loadConversations(conversationSearchQuery);
 	}
 }
 
@@ -335,7 +583,10 @@ function stopPlaygroundStream() {
 		playgroundAbortController.abort();
 		playgroundAbortController = null;
 	}
-	// Stop ends the turn, it does not disarm. A hands-free session stays armed
-	// so the next turn does not need a click.
 	if (window.PlaygroundAudio) window.PlaygroundAudio.cancelSpeech();
 }
+
+// Init sidebar on load.
+setTimeout(() => {
+	loadConversations();
+}, 0);

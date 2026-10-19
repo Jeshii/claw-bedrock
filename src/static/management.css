@@ -1456,11 +1456,122 @@ dialog::backdrop {
 /* Playground styles */
 .playground-layout {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
 	height: calc(100vh - 140px);
 	border: 1px solid var(--border);
 	border-radius: 8px;
 	overflow: hidden;
+}
+
+.playground-sidebar {
+	width: 260px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	border-right: 1px solid var(--border);
+	background: var(--bg-raised);
+}
+
+.playground-sidebar-header {
+	display: flex;
+	gap: 6px;
+	padding: 10px;
+	border-bottom: 1px solid var(--border);
+}
+
+.conversation-search {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 8px;
+	font-size: 13px;
+	margin: 0;
+}
+
+.playground-sidebar-header .btn-primary {
+	padding: 6px 10px;
+	font-size: 12px;
+	margin: 0;
+	white-space: nowrap;
+}
+
+.conversation-list {
+	flex: 1;
+	overflow-y: auto;
+	padding: 6px;
+}
+
+.conversation-item {
+	position: relative;
+	padding: 8px 10px;
+	border-radius: 6px;
+	cursor: pointer;
+	margin-bottom: 4px;
+	border: 1px solid transparent;
+}
+
+.conversation-item:hover {
+	background: var(--bg-hover);
+}
+
+.conversation-item.active {
+	background: var(--accent-subtle);
+	border-color: var(--accent);
+}
+
+.conversation-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.conversation-meta {
+	font-size: 11px;
+	color: var(--text-muted);
+	margin-top: 2px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.conversation-actions {
+	display: none;
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	gap: 2px;
+}
+
+.conversation-item:hover .conversation-actions {
+	display: flex;
+}
+
+.conversation-actions button {
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 0 6px;
+	font-size: 11px;
+	cursor: pointer;
+	margin: 0;
+	line-height: 1.4;
+}
+
+.conversation-rename-input {
+	width: 100%;
+	padding: 2px 4px;
+	font-size: 13px;
+	margin: 0;
+	box-sizing: border-box;
+}
+
+.playground-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
 }
 .playground-toolbar {
 	display: flex;

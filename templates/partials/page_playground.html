@@ -1,67 +1,85 @@
 <div id="page-playground" class="page">
     <h1>Playground</h1>
     <p class="muted" style="font-size: 13px; margin-bottom: 12px;">
-        Session-scoped chat — multi-turn with in-memory context. Responses stream in real time.
+        Persistent conversations — multi-turn chat saved to SQLite. Responses stream in real time.
     </p>
     <div class="playground-layout">
-        <div class="playground-toolbar">
-            <select id="playground-model" class="playground-model-selector">
-                <option value="">— Select a model —</option>
-            </select>
-            <button type="button"
-                    onclick="loadPlayground()"
-                    title="Refresh model list"
-                    class="btn-secondary">↻</button>
-            <div class="playground-toolbar-actions">
+        <aside class="playground-sidebar">
+            <div class="playground-sidebar-header">
+                <input type="search"
+                       id="conversation-search"
+                       class="conversation-search"
+                       placeholder="Search conversations…"
+                       oninput="handleConversationSearchInput()" />
                 <button type="button"
-                        onclick="toggleSystemPrompt()"
+                        class="btn-primary"
+                        onclick="newConversation()"
+                        title="Start a new conversation">+ New</button>
+            </div>
+            <div id="conversation-list" class="conversation-list">
+                <p class="muted">Loading…</p>
+            </div>
+        </aside>
+        <div class="playground-main">
+            <div class="playground-toolbar">
+                <select id="playground-model" class="playground-model-selector">
+                    <option value="">— Select a model —</option>
+                </select>
+                <button type="button"
+                        onclick="loadPlayground()"
+                        title="Refresh model list"
+                        class="btn-secondary">↻</button>
+                <div class="playground-toolbar-actions">
+                    <button type="button"
+                            onclick="toggleSystemPrompt()"
+                            class="btn-secondary"
+                            id="sysprompt-toggle"
+                            title="Add a system prompt">System</button>
+                    <button type="button" onclick="resetConversation()" class="btn-secondary">New Chat</button>
+                </div>
+            </div>
+            <div id="playground-system-section"
+                 class="playground-system-section hidden">
+                <textarea id="playground-system-prompt"
+                          placeholder="System prompt (optional)…"
+                          rows="2"></textarea>
+            </div>
+            <div id="playground-messages" class="playground-messages">
+                <div class="playground-placeholder">
+                    <p>Select a model and send a message to start.</p>
+                </div>
+            </div>
+            <div id="playground-audio-bar" class="playground-audio-bar hidden">
+                <span id="playground-audio-status"
+                      class="status-chip audio-off"
+                      role="status">
+                    <span id="playground-audio-dot" class="audio-dot" aria-hidden="true"></span>
+                    <span id="playground-audio-status-text">Mic off</span>
+                </span>
+                <span id="playground-audio-transcript"
+                      class="playground-audio-transcript"
+                      aria-live="polite"></span>
+            </div>
+            <div class="playground-input-area">
+                <textarea id="playground-input"
+                          placeholder="Type a message…"
+                          rows="3"
+                          onkeydown="handlePlaygroundKeydown(event)"></textarea>
+                <button type="button"
+                        id="playground-mic-btn"
                         class="btn-secondary"
-                        id="sysprompt-toggle"
-                        title="Add a system prompt">System</button>
-                <button type="button" onclick="resetConversation()" class="btn-secondary">New Chat</button>
+                        aria-pressed="false"
+                        aria-label="Toggle hands-free audio mode"
+                        title="Hands-free: listen, then read the reply aloud">🎤</button>
+                <button type="button"
+                        id="playground-send-btn"
+                        onclick="sendPlaygroundMessage()"
+                        class="btn-primary">Send</button>
+                <button type="button"
+                        id="playground-stop-btn"
+                        onclick="stopPlaygroundStream()"
+                        class="btn-danger hidden">Stop</button>
             </div>
-        </div>
-        <div id="playground-system-section"
-             class="playground-system-section hidden">
-            <textarea id="playground-system-prompt"
-                      placeholder="System prompt (optional)…"
-                      rows="2"></textarea>
-        </div>
-        <div id="playground-messages" class="playground-messages">
-            <div class="playground-placeholder">
-                <p>Select a model and send a message to start.</p>
-            </div>
-        </div>
-        <div id="playground-audio-bar" class="playground-audio-bar hidden">
-            <span id="playground-audio-status"
-                  class="status-chip audio-off"
-                  role="status">
-                <span id="playground-audio-dot" class="audio-dot" aria-hidden="true"></span>
-                <span id="playground-audio-status-text">Mic off</span>
-            </span>
-            <span id="playground-audio-transcript"
-                  class="playground-audio-transcript"
-                  aria-live="polite"></span>
-        </div>
-        <div class="playground-input-area">
-            <textarea id="playground-input"
-                      placeholder="Type a message…"
-                      rows="3"
-                      onkeydown="handlePlaygroundKeydown(event)"></textarea>
-            <button type="button"
-                    id="playground-mic-btn"
-                    class="btn-secondary"
-                    aria-pressed="false"
-                    aria-label="Toggle hands-free audio mode"
-                    title="Hands-free: listen, then read the reply aloud">🎤</button>
-            <button type="button"
-                    id="playground-send-btn"
-                    onclick="sendPlaygroundMessage()"
-                    class="btn-primary">Send</button>
-            <button type="button"
-                    id="playground-stop-btn"
-                    onclick="stopPlaygroundStream()"
-                    class="btn-danger hidden">Stop</button>
         </div>
     </div>
 </div>
