@@ -847,12 +847,67 @@ def init_db():
 
 ```
 GET    /api/conversations?search=&page=&per_page=
-POST   /api/conversations               — body: { title, model, first_message }
+POST   /api/conversations               — body: { title, model, first_message? }
 GET    /api/conversations/{id}
 PUT    /api/conversations/{id}           — rename or change model
 DELETE /api/conversations/{id}
 POST   /api/conversations/{id}/messages  — saves message, streams response, saves reply
 ```
+
+### Implementation phases
+
+Picked up as separate commits/sessions. SQLite layer first so the API and UI
+never have to be debugged against a moving data model.
+
+**Phase 1 — SQLite data layer (`src/conversations_db.py`).** Per-call
+connections (no shared connection across threads), WAL mode, `busy_timeout`,
+`foreign_keys=ON`. Schema exactly as above plus `ON DELETE CASCADE`. Functions:
+`init_db`, `close_db`, `create_conversation`, `get_conversation`,
+`list_conversations`, `update_conversation`, `delete_conversation`,
+`add_message`, `get_messages`, `touch_conversation`. Search is case-insensitive
+`LIKE` over titles and message bodies, paginated. Tests:
+`tests/test_conversations_db.py`.
+
+**Phase 2 — Backend API (`src/management_app.py`).** `init_db()` in
+`startup_event()`, `close_db()` in `shutdown_event()`. Endpoints per the table
+above. `POST /api/conversations` with `first_message` saves the user message,
+streams the assistant reply, saves it, and returns SSE with an
+`X-Conversation-ID` header; without `first_message` it creates an empty
+conversation and returns JSON. `POST .../messages` streams and persists the
+reply. Streaming persistence uses an SSE tee so the client sees the real stream
+while the server accumulates `delta.content`; the assistant row is written in a
+`finally`. Tests: `tests/test_conversations_api.py`.
+
+**Phase 3 — Frontend sidebar + state (`page_playground.html`, `playground.js`).**
+Sidebar with search, "New Chat", conversation list with active highlight.
+Selecting a conversation loads and renders its messages. Send flow creates an
+empty conversation on the first send, then uses `.../messages` for every reply.
+Rename/delete inline; model change keeps the current confirm-and-reset behavior.
+Audio hooks stay untouched — a spoken message is an ordinary row.
+
+**Phase 4 — Styling (`management.css`).** Conversation list, search box, active
+item, empty state, sidebar layout on the design-token layer (light/dark).
+
+**Phase 5 — Tests, docs, verification.** Add the two test files above, update
+this roadmap and `docs/FILE_STRUCTURE.md`, run `./scripts/lint.sh`, the full
+pytest suite, and `./scripts/smoke.sh`.
+
+### Commit breakdown
+
+1. `conversations_db.py` + DB tests.
+2. API endpoints + startup/shutdown wiring + API tests.
+3. Sidebar HTML + list/select/rename/delete/search.
+4. Send-flow persistence integration.
+5. CSS + docs + roadmap status.
+
+### Decisions
+
+- Storage is a separate `conversations.db` (SQLite, WAL), **not** part of the
+  TinyDB backup/export. Conversation export/import is Polish.
+- V2 search is `LIKE`; FTS5 stays in Polish as listed below.
+- `tool_calls` is persisted as JSON text now so Skills V2 needs no schema change.
+- Create is dual-mode (stream with `first_message`, JSON otherwise) so the
+  frontend can keep a single streaming code path.
 
 ---
 
