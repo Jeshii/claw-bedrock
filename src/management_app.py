@@ -1,8 +1,8 @@
 import base64
 import contextlib
 import datetime
-import json
 import hmac
+import json
 import math
 import os
 import re
@@ -26,11 +26,11 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+import conversations_db
 import db
 import encryption_utils
 import password_utils
 import settings_resolver
-import conversations_db
 import token_refresher
 
 
@@ -2060,7 +2060,7 @@ def _sse_tee(resp, conv_id: str):
                     delta = obj["choices"][0].get("delta", {}).get("content")
                     if delta:
                         parts.append(delta)
-                except (ValueError, KeyError, IndexError, TypeError):
+                except (ValueError, KeyError, IndexError, TypeError):  # fmt: skip
                     pass
         # Flush any trailing partial line.
         line = buffer.strip()
@@ -2072,7 +2072,7 @@ def _sse_tee(resp, conv_id: str):
                     delta = obj["choices"][0].get("delta", {}).get("content")
                     if delta:
                         parts.append(delta)
-                except (ValueError, KeyError, IndexError, TypeError):
+                except (ValueError, KeyError, IndexError, TypeError):  # fmt: skip
                     pass
     finally:
         if parts:
@@ -2087,8 +2087,7 @@ def list_conversations(search: str = "", page: int = 1, per_page: int = 50):
     """List conversations, newest first, with optional search and pagination."""
     if per_page < 1:
         per_page = 50
-    if page < 1:
-        page = 1
+    page = max(page, 1)
     items = conversations_db.list_conversations(
         search=search, page=page, per_page=per_page
     )

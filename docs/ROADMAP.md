@@ -19,7 +19,7 @@ been dishonest. This list is the ordering.
 | 4 | Cost Awareness | Complete | Core Model Grouping |
 | 5 | **Bedrock Auth Configuration** | **Complete** (all three steps shipped) | — |
 | 6 | Skills Library V1 (Browse / Manage) | **Complete** | — |
-| 7 | Playground V2 (Persistent Conversations) | Planned | Playground V1 |
+| 7 | Playground V2 (Persistent Conversations) | Complete | Playground V1 |
 | 8 | Skills Library V2 (MCP Integration) | Planned | Skills Library V1 |
 | 9 | Polish & Everything Else | Planned | varies — see table |
 | 10 | Playground Audio Mode (Hands-Free) | **Phase A complete and browser-verified** — Phase B not started | Playground V1 |
@@ -38,11 +38,10 @@ Phase B is unstarted and is the reason the workstream is not marked complete.
 (Mantle Model Discovery). Step 2's own GUI surface still has no host
 verification — see "What Step 2 still needs from the host".
 
-**Current frontier.** With Skills Library V1 also shipped, the next unstarted
-workstream in implementation order is **Playground V2 (Persistent
-Conversations)**, followed by Skills Library V2 (MCP Integration), then
-Playground Audio Mode Phase B (blocked on region availability), and finally
-Polish. Bedrock Auth is no longer the next item — its "paused at Step 3"
+**Current frontier.** With Playground V2 now shipped, the next unstarted
+workstream in implementation order is **Skills Library V2 (MCP Integration)**,
+then Playground Audio Mode Phase B (blocked on region availability), and
+finally Polish. Bedrock Auth is no longer the next item — its "paused at Step 3"
 status was stale.
 
 ---
@@ -798,7 +797,9 @@ family, so `BEDROCK_MANTLE_API_BASE` should stay unset.
 
 ---
 
-## Playground V2 (Persistent Conversations)
+## Playground V2 (Persistent Conversations) ✅
+
+**Status:** Complete. Phases 1–5 shipped (SQLite data layer, backend API, frontend sidebar, styling, tests/docs/verification).
 
 **Goal:** Conversations persist to SQLite. Users can create, rename, search, and delete conversations. Messages auto-save during chat. Full-text search across all messages.
 
@@ -1019,7 +1020,7 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Groups Dashboard | done | `page_groups.html`, `groups.js` |
 | Bedrock Auth Configuration | done | `settings_resolver.py` |
 | Skills Library V1 | done | `page_skills.html`, `skills.js` |
-| Playground V2 | planned | `conversations_db.py` |
+| Playground V2 | done | `conversations_db.py` |
 | Skills Library V2 | planned | `mcp_skills_server.py` |
 | Playground Audio Mode | Phase A done | `playground_audio.js`, `tests/playground_audio.test.mjs`, `tests/test_security_headers.py` |
 
@@ -1067,7 +1068,7 @@ Bedrock Auth Configuration — standalone; depends on nothing and nothing on it.
 | Bedrock Auth Configuration — Step 2 | TinyDB (encrypted settings) | — | 1-2 days | done |
 | Bedrock Auth Configuration — Step 3 | — | — | 0.5-1 day | done |
 | Skills Library V1 (Browse / Manage) | TinyDB (skills table) | 2 | 2-3 days | done |
-| Playground V2 (Persistent Conversations) | SQLite (conversations.db) | — | 3-4 days | planned |
+| Playground V2 (Persistent Conversations) | SQLite (conversations.db) | — | 3-4 days | done |
 | Skills Library V2 (MCP Integration) | — | — | 3-4 days | planned |
 | Playground Audio Mode — Phase A (browser Web Speech) | — | 1 | 1-2 days | done |
 | Playground Audio Mode — Phase B (Bedrock-native) | — | — | 2-3 days | planned — blocked on region availability |
