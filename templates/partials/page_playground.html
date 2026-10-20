@@ -6,11 +6,21 @@
     <div class="playground-layout">
         <aside class="playground-sidebar">
             <div class="playground-sidebar-header">
-                <input type="search"
-                       id="conversation-search"
-                       class="conversation-search"
-                       placeholder="Search conversations…"
-                       oninput="handleConversationSearchInput()" />
+                <div class="conversation-search-wrap">
+                    <span class="conversation-search-icon" aria-hidden="true">⌕</span>
+                    <input type="search"
+                           id="conversation-search"
+                           class="conversation-search"
+                           placeholder="Search conversations…"
+                           oninput="handleConversationSearchInput()"
+                           onsearch="handleConversationSearchInput()" />
+                    <button type="button"
+                            class="conversation-search-clear"
+                            id="conversation-search-clear"
+                            onclick="clearConversationSearch()"
+                            aria-label="Clear search"
+                            title="Clear search">✕</button>
+                </div>
                 <button type="button"
                         class="btn-primary"
                         onclick="newConversation()"

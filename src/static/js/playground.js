@@ -229,10 +229,31 @@ function hideStreamingIndicator() {
 function handleConversationSearchInput() {
 	const input = document.getElementById("conversation-search");
 	conversationSearchQuery = input?.value || "";
+	syncConversationSearchClear();
 	if (conversationSearchTimer) clearTimeout(conversationSearchTimer);
 	conversationSearchTimer = setTimeout(() => {
 		loadConversations(conversationSearchQuery);
 	}, 250);
+}
+
+function clearConversationSearch() {
+	const input = document.getElementById("conversation-search");
+	if (input) {
+		input.value = "";
+		input.focus();
+	}
+	conversationSearchQuery = "";
+	syncConversationSearchClear();
+	if (conversationSearchTimer) clearTimeout(conversationSearchTimer);
+	loadConversations("");
+}
+
+function syncConversationSearchClear() {
+	const input = document.getElementById("conversation-search");
+	const btn = document.getElementById("conversation-search-clear");
+	if (!btn) return;
+	const hasText = !!input?.value?.trim();
+	btn.classList.toggle("hidden", !hasText);
 }
 
 async function loadConversations(search) {
@@ -250,7 +271,11 @@ async function loadConversations(search) {
 		renderConversationList();
 	} catch (e) {
 		if (list)
-			list.innerHTML = `<p style="color: var(--danger);">Could not load: ${escapeHtml(e.message)}</p>`;
+			list.innerHTML = `
+			<div class="conversation-list-error">
+				<div class="conversation-list-empty-title">Could not load conversations</div>
+				<div class="conversation-list-empty-hint">${escapeHtml(e.message)}</div>
+			</div>`;
 	}
 }
 
@@ -259,7 +284,17 @@ function renderConversationList() {
 	if (!list) return;
 	list.onclick = handleConversationListClick;
 	if (!conversations.length) {
-		list.innerHTML = '<p class="muted">No conversations yet.</p>';
+		const emptyMsg = conversationSearchQuery.trim()
+			? "No conversations match your search."
+			: "No conversations yet.";
+		const hint = conversationSearchQuery.trim()
+			? "Try a different search term."
+			: "Start one with “+ New”.";
+		list.innerHTML = `
+			<div class="conversation-list-empty">
+				<div class="conversation-list-empty-title">${escapeHtml(emptyMsg)}</div>
+				<div class="conversation-list-empty-hint">${escapeHtml(hint)}</div>
+			</div>`;
 		return;
 	}
 	list.innerHTML = conversations
@@ -532,8 +567,7 @@ async function sendPlaygroundMessage() {
 						reasoning;
 				}
 				messageTextEl.textContent = fullContent;
-				if (window.PlaygroundAudio)
-					window.PlaygroundAudio.onDelta(fullContent);
+				if (window.PlaygroundAudio) window.PlaygroundAudio.onDelta(fullContent);
 				const container = document.getElementById("playground-messages");
 				if (container) container.scrollTop = container.scrollHeight;
 			}
@@ -588,5 +622,6 @@ function stopPlaygroundStream() {
 
 // Init sidebar on load.
 setTimeout(() => {
+	syncConversationSearchClear();
 	loadConversations();
 }, 0);
