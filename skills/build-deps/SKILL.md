@@ -32,10 +32,15 @@ The header of `requirements.lock` records the version used — check it says
 
 `litellm` declares `requires-python = ">=3.10,<3.15"`, so **3.14 is the
 newest Python this project can run**, even though newer CPython releases
-exist. The `litellm[proxy]>=1.93.0` floor in `requirements.txt` exists for
-the same reason: 1.93.0 is the first release that lifted its ceiling from
-`<3.14` to `<3.15`. Raising that floor is what unblocks a new Python; check
-litellm's `requires_python` before attempting a bump.
+exist. 1.93.0 was the first release that lifted that ceiling from `<3.14`
+to `<3.15`, which is why it used to be the floor.
+
+`requirements.txt` now pins `litellm[proxy]==1.102.1` exactly, not a floor:
+after the 2026-10-21 supply-chain incident (compromised releases 1.82.7,
+1.82.8 and 1.107.0) the pin was tightened to the last known-good release
+on the 3.14-compatible line. Do not widen it without checking the release
+against the advisory and litellm's `requires_python`. A newer release
+unblocks a new Python only if its `requires_python` still allows 3.14.
 
 Note that `litellm[proxy]` also pins `fastapi`, `starlette`, `aiohttp`,
 `uvloop`, and `orjson` transitively, so a litellm bump can force a FastAPI
@@ -67,7 +72,7 @@ loosen or remove version pins there, then re-run.
 
 pip-compile reads the existing `requirements.lock` and treats those pins as
 constraints, preferring them over newer releases. So after raising a floor in
-`requirements.txt` (e.g. `litellm[proxy]>=1.93.0`), it can fail because a
+`requirements.txt` (e.g. `litellm[proxy]==1.102.1`), it can fail because a
 package the new version needs is still pinned below that floor:
 
 ```
