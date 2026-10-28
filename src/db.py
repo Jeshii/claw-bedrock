@@ -421,6 +421,16 @@ def get_models_for_litellm():
 
     config["litellm_settings"] = get_litellm_settings()
 
+    exposed_skills = [s for s in skills_table.all() if s.get("expose_as_tool", True)]
+    if exposed_skills:
+        config["mcp_servers"] = {
+            "claw-skills": {
+                "transport": "stdio",
+                "command": "python",
+                "args": ["/app/mcp_skills_server.py"],
+            }
+        }
+
     return config
 
 

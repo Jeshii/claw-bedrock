@@ -447,7 +447,7 @@ async function sendPlaygroundMessage() {
 			const titleSource = text.replace(/\s+/g, " ").trim();
 			const title =
 				titleSource.length > 60
-					? titleSource.slice(0, 57) + "…"
+					? `${titleSource.slice(0, 57)}…`
 					: titleSource || "New conversation";
 			const resp = await fetch("/api/conversations", {
 				method: "POST",
@@ -537,7 +537,28 @@ async function sendPlaygroundMessage() {
 				const content = delta.content ?? "";
 				const reasoningDelta = delta.reasoning_content ?? "";
 
-				if (!content && !reasoningDelta) continue;
+				// Render streamed tool calls inline, if any.
+				if (delta.tool_calls?.length) {
+					if (!messageTextEl) {
+						hideStreamingIndicator();
+						messageTextEl = addMessageBubble("assistant", "");
+					}
+					const bubble = messageTextEl.parentNode;
+					for (const tc of delta.tool_calls) {
+						const name = tc.function?.name || tc.function_name || "tool";
+						const args = tc.function?.arguments || "";
+						let div = bubble.querySelector(".tool-call:last-of-type");
+						if (!div || div.dataset.done === "1") {
+							div = document.createElement("div");
+							div.className = "tool-call";
+							bubble.appendChild(div);
+						}
+						div.textContent = `🔧 ${name}(${args})`;
+						div.dataset.done = "0";
+					}
+				}
+
+				if (!content && !reasoningDelta && !delta.tool_calls?.length) continue;
 
 				fullContent += content;
 				reasoning += reasoningDelta;

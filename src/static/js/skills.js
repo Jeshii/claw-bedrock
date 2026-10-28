@@ -70,6 +70,7 @@ function renderSkillForm(skill) {
 		content: "",
 		type: "prompt",
 		tags: [],
+		expose_as_tool: true,
 		created_at: "",
 		updated_at: "",
 	};
@@ -102,6 +103,10 @@ function renderSkillForm(skill) {
 				<input id="skill-tags" style="width: 320px;" placeholder="comma-separated"
 				       value="${escapeAttr((s.tags || []).join(", "))}" />
 			</div>
+			<div class="inline-row" style="margin-bottom: 8px; gap: 8px;">
+				<label style="min-width: 90px;">Expose as MCP tool</label>
+				<input type="checkbox" id="skill-expose" ${s.expose_as_tool !== false ? "checked" : ""} />
+			</div>
 			<div style="margin-bottom: 8px;">
 				<label style="display: block; margin-bottom: 4px;">Content</label>
 				<textarea id="skill-content" class="skill-editor" rows="16" placeholder="Skill content...">${escapeHtml(s.content || "")}</textarea>
@@ -109,8 +114,10 @@ function renderSkillForm(skill) {
 			<div id="skill-meta" class="muted" style="font-size: 12px; margin-bottom: 8px;">${meta}</div>
 			<div class="inline-row" style="gap: 8px;">
 				<button type="button" onclick="saveSkill()" id="skill-save-btn">Save</button>
+				<button type="button" onclick="testSkill()" id="skill-test-btn" ${skill ? "" : "disabled"}>Test</button>
 				<button type="button" onclick="deleteSkill()" id="skill-delete-btn" class="danger-btn" ${skill ? "" : "disabled"}>Delete</button>
 			</div>
+			<div id="skill-test-output" class="muted" style="margin-top: 8px; white-space: pre-wrap; font-family: monospace; font-size: 12px;"></div>
 		</div>`;
 	setTimeout(() => {
 		const t = document.getElementById("skill-type");
@@ -152,6 +159,7 @@ async function saveSkill() {
 		content: document.getElementById("skill-content")?.value || "",
 		type: skillType,
 		tags,
+		expose_as_tool: document.getElementById("skill-expose")?.checked ?? true,
 	};
 	const url = _skillCreateMode
 		? "/api/skills"
@@ -176,6 +184,30 @@ async function saveSkill() {
 			showToast(`Error: ${err.detail || "Failed to save"}`, "error");
 		}
 	} catch (e) {
+		showToast(`Error: ${e.message}`, "error");
+	}
+}
+
+async function testSkill() {
+	const name = _skillCreateMode ? null : _selectedSkillName;
+	if (!name) return showToast("Save the skill first", "error");
+	const out = document.getElementById("skill-test-output");
+	if (out) out.textContent = "Running…";
+	try {
+		const res = await fetch(`/api/skills/${encodeURIComponent(name)}/test`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({}),
+		});
+		const data = await res.json().catch(() => ({}));
+		if (!res.ok) {
+			if (out) out.textContent = data.detail || "Failed";
+			showToast(`Error: ${data.detail || "Failed"}`, "error");
+			return;
+		}
+		if (out) out.textContent = data.output || "(no output)";
+	} catch (e) {
+		if (out) out.textContent = e.message;
 		showToast(`Error: ${e.message}`, "error");
 	}
 }

@@ -52,6 +52,10 @@
             <label style="min-width: 90px;">Tags</label>
             <input id="skill-tags" style="width: 320px;" placeholder="comma-separated" />
         </div>
+        <div class="inline-row" style="margin-bottom: 8px; gap: 8px;">
+            <label style="min-width: 90px;">Expose as MCP tool</label>
+            <input type="checkbox" id="skill-expose" />
+        </div>
         <div style="margin-bottom: 8px;">
             <label style="display: block; margin-bottom: 4px;">Content</label>
             <textarea id="skill-content"
@@ -65,10 +69,17 @@
                     margin-bottom: 8px"></div>
         <div class="inline-row" style="gap: 8px;">
             <button type="button" onclick="saveSkill()" id="skill-save-btn">Save</button>
+            <button type="button" onclick="testSkill()" id="skill-test-btn">Test</button>
             <button type="button"
                     onclick="deleteSkill()"
                     id="skill-delete-btn"
                     class="danger-btn">Delete</button>
         </div>
+        <div id="skill-test-output"
+             class="muted"
+             style="margin-top: 8px;
+                    white-space: pre-wrap;
+                    font-family: monospace;
+                    font-size: 12px"></div>
     </div>
 </template>

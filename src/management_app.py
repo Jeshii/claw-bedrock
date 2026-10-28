@@ -1397,6 +1397,7 @@ def create_skill(body: dict):
         "content": body.get("content") or "",
         "type": skill_type,
         "tags": [t.strip() for t in (body.get("tags") or []) if str(t).strip()],
+        "expose_as_tool": bool(body.get("expose_as_tool", True)),
         "created_at": now,
         "updated_at": now,
     }
@@ -1432,6 +1433,8 @@ def update_skill(skill_name: str, body: dict):
         updates["tags"] = [
             t.strip() for t in (body.get("tags") or []) if str(t).strip()
         ]
+    if "expose_as_tool" in body:
+        updates["expose_as_tool"] = bool(body.get("expose_as_tool"))
     new_name = (body.get("name") or skill_name).strip()
     if new_name and new_name != skill_name:
         if db.skill_name_exists(new_name):
@@ -1452,6 +1455,18 @@ def delete_skill(skill_name: str):
         raise HTTPException(404, f"Skill '{skill_name}' not found")
     db.delete_skill(skill_name)
     return {"deleted": skill_name}
+
+
+@app.post("/api/skills/{skill_name:path}/test")
+def test_skill(skill_name: str, body: dict | None = None):
+    """Run a skill and return its output."""
+    skill = db.get_skill(skill_name)
+    if not skill:
+        raise HTTPException(404, f"Skill '{skill_name}' not found")
+    import mcp_skills_server
+
+    output = mcp_skills_server.execute_skill(skill, (body or {}).get("arguments"))
+    return {"output": output}
 
 
 @app.post("/api/models/{encoded_name:path}/tags")
