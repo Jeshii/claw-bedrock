@@ -284,12 +284,16 @@ def litellm_watchdog():
     pid_file = "/tmp/litellm.pid"
     while True:
         try:
-            if os.path.exists(pid_file):
-                with open(pid_file) as f:
-                    pid = int(f.read().strip())
-                if not psutil.pid_exists(pid):
-                    print(f"[Watchdog] LiteLLM (PID {pid}) crashed, restarting...")
-                    reload_litellm()
+            with _reload_rlock:
+                if os.path.exists(pid_file) and not _reload_in_progress:
+                    try:
+                        with open(pid_file) as f:
+                            pid = int(f.read().strip())
+                    except OSError, ValueError:
+                        pid = None
+                    if pid is not None and not psutil.pid_exists(pid):
+                        print(f"[Watchdog] LiteLLM (PID {pid}) crashed, restarting...")
+                        reload_litellm()
         except Exception as e:  # noqa: BLE001 - watchdog thread must never exit
             print(f"[Watchdog] Error: {e}", file=sys.stderr)
         time.sleep(10)
@@ -1838,137 +1842,168 @@ def validate_config() -> tuple[bool, str]:
         return False, str(e)
 
 
+_reload_rlock = threading.RLock()
+_reload_in_progress = False
+_last_reload_ts = 0.0
+
+
 def reload_litellm() -> dict:
     """Reload LiteLLM by restarting the process. Returns dict with status info."""
+    global _reload_in_progress, _last_reload_ts
     pid_file = "/tmp/litellm.pid"
     config_path = CONFIG_PATH  # Use module-level correct config path
     config_dir = CONFIG_DIR  # Use module-level correct config directory
 
-    # Validate config before restarting
-    is_valid, error = validate_config()
-    if not is_valid:
-        return {"success": False, "error": f"Invalid config: {error}"}
+    # Serialize reloads (watchdog vs. manual) and debounce rapid repeats so a
+    # second trigger cannot SIGTERM the process we just started.
+    with _reload_rlock:
+        if _reload_in_progress:
+            return {"success": False, "error": "LiteLLM reload already in progress"}
+        if time.time() - _last_reload_ts < 15:
+            return {
+                "success": True,
+                "message": "LiteLLM was reloaded recently; skipping",
+            }
+        _reload_in_progress = True
 
-    # Step 1: Find and stop the existing LiteLLM process
-    pid = None
-    if os.path.exists(pid_file):
-        try:
-            with open(pid_file, "r") as f:
-                pid = int(f.read().strip())
-        except (OSError, ValueError) as e:
-            print(f"[Reload] Error reading PID file: {e}", file=sys.stderr)
-            pid = None
-
-    if pid is not None:
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            print(f"[Reload] PID {pid} is stale, will search for process...")
-            pid = None
-
-    if pid is None:
-        try:
-            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
-                cmdline = proc.info["cmdline"]
-                if cmdline and any("litellm" in arg.lower() for arg in cmdline):
-                    pid = proc.info["pid"]
-                    print(f"[Reload] Found LiteLLM process: PID {pid}")
-                    break
-        except Exception as e:  # noqa: BLE001 - process lookup failure is logged
-            print(f"[Reload] Error searching for LiteLLM process: {e}", file=sys.stderr)
-
-    # Step 2: Stop the existing process
-    if pid is not None:
-        try:
-            os.kill(pid, 15)  # SIGTERM
-            print(f"[Reload] Sent SIGTERM to LiteLLM (PID {pid})")
-            for _ in range(10):
-                try:
-                    os.kill(pid, 0)
-                    time.sleep(0.5)
-                except OSError:
-                    print("[Reload] LiteLLM process terminated")
-                    break
-            else:
-                print("[Reload] Process did not terminate, sending SIGKILL")
-                os.kill(pid, 9)
-                time.sleep(1)
-        except OSError as e:
-            print(f"[Reload] Error stopping LiteLLM: {e}", file=sys.stderr)
-
-    # Step 3: Start new LiteLLM process
     try:
-        log_path = os.path.join(config_dir, "litellm.log")
-        cmd = [
-            "litellm",
-            "--config",
-            config_path,
-            "--port",
-            "4000",
-            "--host",
-            "0.0.0.0",
-        ]
-        print(f"[Reload] Starting LiteLLM: {' '.join(cmd)}")
+        # Validate config before restarting
+        is_valid, error = validate_config()
+        if not is_valid:
+            return {"success": False, "error": f"Invalid config: {error}"}
 
-        # Add CONFIG_DIR to PYTHONPATH so token_refresher can be imported
-        env = os.environ.copy()
-        python_path = env.get("PYTHONPATH", "")
-        if config_dir not in python_path.split(":"):
-            env["PYTHONPATH"] = (
-                f"{config_dir}:{python_path}" if python_path else config_dir
-            )
+        # Step 1: Find and stop the existing LiteLLM process
+        pid = None
+        if os.path.exists(pid_file):
+            try:
+                with open(pid_file, "r") as f:
+                    pid = int(f.read().strip())
+            except (OSError, ValueError) as e:
+                print(f"[Reload] Error reading PID file: {e}", file=sys.stderr)
+                pid = None
 
-        with open(log_path, "a") as log_file:
-            process = subprocess.Popen(
-                cmd,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                cwd=config_dir,
-                env=env,
-            )
-        new_pid = process.pid
-        with open(pid_file, "w") as f:
-            f.write(str(new_pid))
-        print(f"[Reload] LiteLLM started with PID {new_pid}")
+        if pid is not None:
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                print(f"[Reload] PID {pid} is stale, will search for process...")
+                pid = None
 
-        # Step 4: Verify process is running
-        time.sleep(2)
+        if pid is None:
+            try:
+                for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                    cmdline = proc.info["cmdline"]
+                    if cmdline and any("litellm" in arg.lower() for arg in cmdline):
+                        pid = proc.info["pid"]
+                        print(f"[Reload] Found LiteLLM process: PID {pid}")
+                        break
+            except Exception as e:  # noqa: BLE001 - process lookup failure is logged
+                print(
+                    f"[Reload] Error searching for LiteLLM process: {e}",
+                    file=sys.stderr,
+                )
+
+        # Step 2: Stop the existing process
+        if pid is not None:
+            try:
+                os.kill(pid, 15)  # SIGTERM
+                print(f"[Reload] Sent SIGTERM to LiteLLM (PID {pid})")
+                for _ in range(30):
+                    try:
+                        os.kill(pid, 0)
+                        time.sleep(0.5)
+                    except OSError:
+                        print("[Reload] LiteLLM process terminated")
+                        break
+                else:
+                    print("[Reload] Process did not terminate, sending SIGKILL")
+                    os.kill(pid, 9)
+                    time.sleep(2)
+            except OSError as e:
+                print(f"[Reload] Error stopping LiteLLM: {e}", file=sys.stderr)
+
+        # Step 3: Start new LiteLLM process
         try:
-            if not psutil.Process(new_pid).is_running():
+            log_path = os.path.join(config_dir, "litellm.log")
+            cmd = [
+                "litellm",
+                "--config",
+                config_path,
+                "--port",
+                "4000",
+                "--host",
+                "0.0.0.0",
+            ]
+            print(f"[Reload] Starting LiteLLM: {' '.join(cmd)}")
+
+            # Add CONFIG_DIR to PYTHONPATH so token_refresher can be imported
+            env = os.environ.copy()
+            python_path = env.get("PYTHONPATH", "")
+            if config_dir not in python_path.split(":"):
+                env["PYTHONPATH"] = (
+                    f"{config_dir}:{python_path}" if python_path else config_dir
+                )
+
+            with open(log_path, "a") as log_file:
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    cwd=config_dir,
+                    env=env,
+                )
+            new_pid = process.pid
+            with open(pid_file, "w") as f:
+                f.write(str(new_pid))
+            print(f"[Reload] LiteLLM started with PID {new_pid}")
+
+            # Step 4: Verify process is running
+            time.sleep(2)
+            try:
+                if not psutil.Process(new_pid).is_running():
+                    return {
+                        "success": False,
+                        "error": f"LiteLLM process died shortly after starting (PID {new_pid})",
+                    }
+            except psutil.NoSuchProcess:
                 return {
                     "success": False,
-                    "error": f"LiteLLM process died shortly after starting (PID {new_pid})",
+                    "error": f"LiteLLM process not found after starting (PID {new_pid})",
                 }
-        except psutil.NoSuchProcess:
+
+            # Step 5: Health check (wait up to 90s for slow LiteLLM startup)
+            for i in range(90):
+                if not psutil.pid_exists(new_pid):
+                    return {
+                        "success": False,
+                        "error": f"LiteLLM process exited during startup (PID {new_pid})",
+                    }
+                try:
+                    resp = requests.get("http://localhost:4000/health", timeout=2)
+                    if resp.status_code < 500:
+                        print(f"[Reload] LiteLLM health check passed (PID {new_pid})")
+                        _last_reload_ts = time.time()
+                        return {
+                            "success": True,
+                            "pid": new_pid,
+                            "message": f"LiteLLM restarted (PID {new_pid})",
+                        }
+                except Exception as e:  # noqa: BLE001 - health probe retries; failure is expected
+                    if i == 5:  # Print error once for debugging
+                        print(f"[Reload] Health check attempt {i}: {e}")
+                time.sleep(1)
+
             return {
                 "success": False,
-                "error": f"LiteLLM process not found after starting (PID {new_pid})",
+                "error": "LiteLLM started but health check timed out",
+                "pid": new_pid,
             }
-
-        # Step 5: Health check (wait up to 60s for slow LiteLLM startup)
-        for i in range(60):
-            try:
-                resp = requests.get("http://localhost:4000/health", timeout=2)
-                if resp.status_code < 500:
-                    print(f"[Reload] LiteLLM health check passed (PID {new_pid})")
-                    return {
-                        "success": True,
-                        "pid": new_pid,
-                        "message": f"LiteLLM restarted (PID {new_pid})",
-                    }
-            except Exception as e:  # noqa: BLE001 - health probe retries; failure is expected
-                if i == 5:  # Print error once for debugging
-                    print(f"[Reload] Health check attempt {i}: {e}")
-            time.sleep(1)
-
-        return {
-            "success": True,
-            "pid": new_pid,
-            "warning": "LiteLLM started but health check timed out",
-        }
-    except Exception as e:  # noqa: BLE001 - start failure is returned to the caller
-        print(f"[Reload] Error starting LiteLLM: {e}", file=sys.stderr)
-        return {"success": False, "error": str(e)}
+        except Exception as e:  # noqa: BLE001 - start failure is returned to the caller
+            print(f"[Reload] Error starting LiteLLM: {e}", file=sys.stderr)
+            return {"success": False, "error": str(e)}
+    finally:
+        with _reload_rlock:
+            _reload_in_progress = False
 
 
 @app.get("/api/health/litellm")

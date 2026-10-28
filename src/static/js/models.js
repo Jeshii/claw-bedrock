@@ -1083,6 +1083,14 @@ async function reloadLiteLLM() {
 			const reloadBtn = document.getElementById("reload-litellm-btn");
 			if (reloadBtn) reloadBtn.classList.remove("needs-reload");
 			needsReload = false;
+			// Repopulate playground/models against the freshly started process.
+			if (typeof loadPlayground === "function") loadPlayground();
+			if (
+				typeof loadModels === "function" &&
+				document.getElementById("models-list")
+			) {
+				loadModels();
+			}
 		} else {
 			updateToast(toast, data.message || "LiteLLM reload failed", "warning");
 		}
