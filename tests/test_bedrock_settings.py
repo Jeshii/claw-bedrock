@@ -196,7 +196,7 @@ class TestHealthEndpoints:
 
         data = client.get("/api/health/litellm/liveliness").json()
         assert data == {"status": "ok", "litellm_status": 200}
-        assert urls == ["http://localhost:4000/health/liveliness"]
+        assert urls == ["http://127.0.0.1:4000/health/liveliness"]
 
     def test_health_still_hits_the_active_check(self, test_env, monkeypatch):
         """Deliberately unchanged: it is what goes red when Bedrock auth fails."""
@@ -207,7 +207,7 @@ class TestHealthEndpoints:
 
         data = client.get("/api/health/litellm").json()
         assert data == {"status": "ok", "litellm_status": 200}
-        assert urls == ["http://localhost:4000/health"]
+        assert urls == ["http://127.0.0.1:4000/health"]
 
     def test_probe_failure_reports_error_not_ok(self, test_env, monkeypatch):
         """Never report ok unless it actually was — the original sin here."""

@@ -52,7 +52,9 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "config.yaml")
 LOG_PATH = os.path.join(CONFIG_DIR, "litellm.log")
 VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
 
-LITELLM_BASE_URL = os.environ.get("LITELLM_URL", "http://localhost:4000")
+LITELLM_BASE_URL = os.environ.get("LITELLM_URL", "http://127.0.0.1:4000").replace(
+    "://localhost", "://127.0.0.1"
+)
 
 # Config-store keys for Bedrock auth. Kept distinct from the env var names so a
 # restored backup cannot collide with them — config import writes keys verbatim.
@@ -1979,7 +1981,7 @@ def reload_litellm() -> dict:
                         "error": f"LiteLLM process exited during startup (PID {new_pid})",
                     }
                 try:
-                    resp = requests.get("http://localhost:4000/health", timeout=2)
+                    resp = requests.get("http://127.0.0.1:4000/health", timeout=2)
                     if resp.status_code < 500:
                         print(f"[Reload] LiteLLM health check passed (PID {new_pid})")
                         _last_reload_ts = time.time()
@@ -2020,7 +2022,7 @@ def health_litellm():
     use /api/health/litellm/liveliness, which touches no provider.
     """
     try:
-        resp = requests.get("http://localhost:4000/health", timeout=5)
+        resp = requests.get("http://127.0.0.1:4000/health", timeout=5)
         return {"status": "ok", "litellm_status": resp.status_code}
     except Exception as e:  # noqa: BLE001 - health probe failure is returned as status
         return {"status": "error", "detail": str(e)}
@@ -2037,7 +2039,7 @@ def health_litellm_liveliness():
     red when provider credentials are missing.
     """
     try:
-        resp = requests.get("http://localhost:4000/health/liveliness", timeout=5)
+        resp = requests.get("http://127.0.0.1:4000/health/liveliness", timeout=5)
         return {"status": "ok", "litellm_status": resp.status_code}
     except Exception as e:  # noqa: BLE001 - probe failure is returned as status
         return {"status": "error", "detail": str(e)}
